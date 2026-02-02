@@ -861,14 +861,7 @@ async def generate_report(request: Request, report_type: str, period: str, sessi
     }
     
     try:
-        llm_key = os.getenv("EMERGENT_LLM_KEY", "")
-        chat = LlmChat(
-            api_key=llm_key,
-            session_id=f"report_{user.user_id}",
-            system_message="Você é um analista de produtividade e finanças."
-        ).with_model("openai", "gpt-5.2")
-        
-        prompt = f"""Gere um relatório {report_type} para o período {period} baseado nos seguintes dados:
+        prompt = f"""Você é um analista de produtividade e finanças. Gere um relatório {report_type} para o período {period} baseado nos seguintes dados:
 
 Tarefas: {data['tasks']} total, {data['tasks_completed']} concluídas
 Hábitos: {data['habits']} total, {data['total_habits_completions']} completações
@@ -878,7 +871,12 @@ Metas: {data['goals']} total, {data['goals_progress']:.1f}% progresso médio
 
 Forneça insights, padrões identificados e sugestões de otimização em português."""
         
-        insights = await chat.send_message(UserMessage(text=prompt))
+        # Use Google Gemini API
+        response_obj = google_ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        insights = response_obj.text
         
         report_id = f"report_{uuid.uuid4().hex[:12]}"
         report_doc = {
