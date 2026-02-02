@@ -61,6 +61,8 @@ class Task(BaseModel):
     date: str
     priority: str = "medium"
     xp_reward: int = 10
+    recurrence: str = "daily"
+    is_template: bool = True
     created_at: datetime
 
 class TaskCreate(BaseModel):
@@ -68,6 +70,7 @@ class TaskCreate(BaseModel):
     description: Optional[str] = None
     date: str
     priority: str = "medium"
+    recurrence: str = "daily"
 
 class Habit(BaseModel):
     model_config = ConfigDict(extra="ignore")
