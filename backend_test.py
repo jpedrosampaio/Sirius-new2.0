@@ -189,6 +189,18 @@ class SiriusBackendTester:
                 installment_projections = [p for p in data if p.get('projection_type') == 'installment']
                 if installment_projections:
                     self.log(f"   Found {len(installment_projections)} installment projections")
+                else:
+                    # Check current month and next few months to see where projections were created
+                    self.log("   No installment projections found for 2025-08, checking other months...")
+                    for month_offset in [0, 1, 2, 3]:
+                        check_date = datetime.now() + timedelta(days=30 * month_offset)
+                        check_month = check_date.strftime("%Y-%m")
+                        check_response = self.session.get(f"{API_BASE}/projections?month={check_month}")
+                        if check_response.status_code == 200:
+                            check_data = check_response.json()
+                            installments = [p for p in check_data if p.get('projection_type') == 'installment']
+                            if installments:
+                                self.log(f"   Found {len(installments)} installment projections in {check_month}")
                 
                 return True
             else:
