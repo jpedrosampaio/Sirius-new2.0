@@ -4,20 +4,23 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+const COLORS = ['#007AFF', '#39FF14', '#FF9500', '#FF3B30', '#00F0FF', '#FFD700', '#FF00FF'];
+
 export default function Finance() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [budgets, setBudgets] = useState([]);
+  const [stats, setStats] = useState(null);
   const [openTransaction, setOpenTransaction] = useState(false);
   const [openBudget, setOpenBudget] = useState(false);
   const [newTransaction, setNewTransaction] = useState({
@@ -30,7 +33,9 @@ export default function Finance() {
   const [newBudget, setNewBudget] = useState({
     category: "alimentação",
     limit: "",
-    month: new Date().toISOString().slice(0, 7)
+    month: new Date().toISOString().slice(0, 7),
+    budget_type: "fixed",
+    percentage: ""
   });
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
@@ -40,6 +45,7 @@ export default function Finance() {
     fetchUser();
     fetchTransactions();
     fetchBudgets();
+    fetchStats();
   }, [selectedMonth]);
 
   const fetchUser = async () => {
@@ -69,6 +75,15 @@ export default function Finance() {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get(`${API}/finance/stats?month=${selectedMonth}`, { withCredentials: true });
+      setStats(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar estatísticas");
+    }
+  };
+
   const handleCreateTransaction = async () => {
     if (!newTransaction.amount || parseFloat(newTransaction.amount) <= 0) {
       toast.error("Valor inválido");
@@ -90,26 +105,37 @@ export default function Finance() {
       setOpenTransaction(false);
       fetchTransactions();
       fetchBudgets();
+      fetchStats();
     } catch (error) {
       toast.error("Erro ao registrar transação");
     }
   };
 
   const handleCreateBudget = async () => {
-    if (!newBudget.limit || parseFloat(newBudget.limit) <= 0) {
+    if (newBudget.budget_type === "fixed" && (!newBudget.limit || parseFloat(newBudget.limit) <= 0)) {
       toast.error("Valor inválido");
       return;
     }
+    if (newBudget.budget_type === "percentage" && (!newBudget.percentage || parseFloat(newBudget.percentage) <= 0)) {
+      toast.error("Percentual inválido");
+      return;
+    }
     try {
-      await axios.post(`${API}/budgets`, {
-        ...newBudget,
-        limit: parseFloat(newBudget.limit)
-      }, { withCredentials: true });
+      const budgetData = {
+        category: newBudget.category,
+        month: newBudget.month,
+        budget_type: newBudget.budget_type,
+        limit: newBudget.budget_type === "fixed" ? parseFloat(newBudget.limit) : 0,
+        percentage: newBudget.budget_type === "percentage" ? parseFloat(newBudget.percentage) : null
+      };
+      await axios.post(`${API}/budgets`, budgetData, { withCredentials: true });
       toast.success("Orçamento criado!");
       setNewBudget({
         category: "alimentação",
         limit: "",
-        month: new Date().toISOString().slice(0, 7)
+        month: new Date().toISOString().slice(0, 7),
+        budget_type: "fixed",
+        percentage: ""
       });
       setOpenBudget(false);
       fetchBudgets();
@@ -123,6 +149,7 @@ export default function Finance() {
       await axios.delete(`${API}/transactions/${id}`, { withCredentials: true });
       toast.success("Transação deletada");
       fetchTransactions();
+      fetchStats();
     } catch (error) {
       toast.error("Erro ao deletar transação");
     }
@@ -132,14 +159,24 @@ export default function Finance() {
   const expenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const balance = income - expenses;
 
+  const expenseChartData = stats ? Object.entries(stats.expense_by_category).map(([name, value]) => ({
+    name: name.charAt(0).toUpperCase() + name.slice(1),
+    value: value
+  })) : [];
+
+  const barChartData = stats ? Object.entries(stats.expense_by_category).map(([name, value]) => ({
+    category: name.charAt(0).toUpperCase() + name.slice(1),
+    gasto: value
+  })) : [];
+
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-64 p-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="font-heading text-4xl mb-2" data-testid="finance-title">FINANÇAS</h1>
+              <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="finance-title">FINANÇAS</h1>
               <p className="text-[#A1A1AA]">Controle total do seu dinheiro</p>
             </div>
           </div>
@@ -150,7 +187,7 @@ export default function Finance() {
                 <span className="text-[#A1A1AA] uppercase text-xs tracking-wider">Receitas</span>
                 <TrendingUp className="w-5 h-5 text-[#39FF14]" />
               </div>
-              <p className="font-data text-3xl text-[#39FF14]">R$ {income.toFixed(2)}</p>
+              <p className="font-data text-2xl md:text-3xl text-[#39FF14]">R$ {income.toFixed(2)}</p>
             </Card>
 
             <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
@@ -158,7 +195,7 @@ export default function Finance() {
                 <span className="text-[#A1A1AA] uppercase text-xs tracking-wider">Despesas</span>
                 <TrendingDown className="w-5 h-5 text-[#FF3B30]" />
               </div>
-              <p className="font-data text-3xl text-[#FF3B30]">R$ {expenses.toFixed(2)}</p>
+              <p className="font-data text-2xl md:text-3xl text-[#FF3B30]">R$ {expenses.toFixed(2)}</p>
             </Card>
 
             <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
@@ -166,11 +203,53 @@ export default function Finance() {
                 <span className="text-[#A1A1AA] uppercase text-xs tracking-wider">Saldo</span>
                 <DollarSign className="w-5 h-5 text-[#007AFF]" />
               </div>
-              <p className={`font-data text-3xl ${balance >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+              <p className={`font-data text-2xl md:text-3xl ${balance >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
                 R$ {balance.toFixed(2)}
               </p>
             </Card>
           </div>
+
+          {expenseChartData.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                <h3 className="font-heading text-xl mb-4 uppercase">Gastos por Categoria (Pizza)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={expenseChartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      label={(entry) => `${entry.name}: R$ ${entry.value.toFixed(0)}`}
+                    >
+                      {expenseChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Card>
+
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                <h3 className="font-heading text-xl mb-4 uppercase">Gastos por Categoria (Barras)</h3>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={barChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                    <XAxis dataKey="category" stroke="#A1A1AA" angle={-45} textAnchor="end" height={80} />
+                    <YAxis stroke="#A1A1AA" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A' }}
+                      formatter={(value) => `R$ ${value.toFixed(2)}`}
+                    />
+                    <Bar dataKey="gasto" fill="#007AFF" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Card>
+            </div>
+          )}
 
           <div className="mb-6 flex items-center space-x-4">
             <Input
@@ -203,15 +282,21 @@ export default function Finance() {
                     <div className="space-y-4 mt-4">
                       <div>
                         <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Tipo</Label>
-                        <Select value={newTransaction.type} onValueChange={(value) => setNewTransaction({...newTransaction, type: value})}>
-                          <SelectTrigger className="bg-[#121212] border-[#27272A] text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-[#121212] border-[#27272A] text-white">
-                            <SelectItem value="income">Receita</SelectItem>
-                            <SelectItem value="expense">Despesa</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <div className="flex gap-2">
+                          {[{value: 'income', label: 'Receita'}, {value: 'expense', label: 'Despesa'}].map((type) => (
+                            <button
+                              key={type.value}
+                              onClick={() => setNewTransaction({...newTransaction, type: type.value})}
+                              className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
+                                newTransaction.type === type.value
+                                  ? 'bg-[#007AFF] text-white'
+                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              }`}
+                            >
+                              {type.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div>
                         <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Valor</Label>
@@ -225,16 +310,21 @@ export default function Finance() {
                       </div>
                       <div>
                         <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Categoria</Label>
-                        <Select value={newTransaction.category} onValueChange={(value) => setNewTransaction({...newTransaction, category: value})}>
-                          <SelectTrigger className="bg-[#121212] border-[#27272A] text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-[#121212] border-[#27272A] text-white">
-                            {categories.map(cat => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="grid grid-cols-2 gap-2">
+                          {categories.map(cat => (
+                            <button
+                              key={cat}
+                              onClick={() => setNewTransaction({...newTransaction, category: cat})}
+                              className={`py-2 px-3 rounded-sm text-xs uppercase tracking-wider transition-colors ${
+                                newTransaction.category === cat
+                                  ? 'bg-[#007AFF] text-white'
+                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              }`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div>
                         <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Descrição</Label>
@@ -326,27 +416,63 @@ export default function Finance() {
                     <div className="space-y-4 mt-4">
                       <div>
                         <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Categoria</Label>
-                        <Select value={newBudget.category} onValueChange={(value) => setNewBudget({...newBudget, category: value})}>
-                          <SelectTrigger className="bg-[#121212] border-[#27272A] text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-[#121212] border-[#27272A] text-white">
-                            {categories.map(cat => (
-                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="grid grid-cols-2 gap-2">
+                          {categories.map(cat => (
+                            <button
+                              key={cat}
+                              onClick={() => setNewBudget({...newBudget, category: cat})}
+                              className={`py-2 px-3 rounded-sm text-xs uppercase tracking-wider transition-colors ${
+                                newBudget.category === cat
+                                  ? 'bg-[#007AFF] text-white'
+                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              }`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Limite</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={newBudget.limit}
-                          onChange={(e) => setNewBudget({...newBudget, limit: e.target.value})}
-                          className="bg-[#121212] border-[#27272A] text-white font-mono"
-                        />
+                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Tipo</Label>
+                        <div className="flex gap-2">
+                          {[{value: 'fixed', label: 'Valor Fixo'}, {value: 'percentage', label: 'Percentual'}].map((type) => (
+                            <button
+                              key={type.value}
+                              onClick={() => setNewBudget({...newBudget, budget_type: type.value})}
+                              className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
+                                newBudget.budget_type === type.value
+                                  ? 'bg-[#007AFF] text-white'
+                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              }`}
+                            >
+                              {type.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                      {newBudget.budget_type === 'fixed' ? (
+                        <div>
+                          <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Limite (R$)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={newBudget.limit}
+                            onChange={(e) => setNewBudget({...newBudget, limit: e.target.value})}
+                            className="bg-[#121212] border-[#27272A] text-white font-mono"
+                          />
+                        </div>
+                      ) : (
+                        <div>
+                          <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Percentual da Renda (%)</Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            value={newBudget.percentage}
+                            onChange={(e) => setNewBudget({...newBudget, percentage: e.target.value})}
+                            className="bg-[#121212] border-[#27272A] text-white font-mono"
+                          />
+                        </div>
+                      )}
                       <div>
                         <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Mês</Label>
                         <Input
@@ -389,7 +515,7 @@ export default function Finance() {
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-[#A1A1AA]">Limite</span>
-                            <span className="font-data">R$ {budget.limit.toFixed(2)}</span>
+                            <span className="font-data">R$ {budget.limit.toFixed(2)} {budget.budget_type === 'percentage' && `(${budget.percentage}%)`}</span>
                           </div>
                         </div>
                         <div className="space-y-2">
