@@ -6,8 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, Edit2 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -27,6 +27,20 @@ export default function Finance() {
   const [openCard, setOpenCard] = useState(false);
   const [openCharge, setOpenCharge] = useState(false);
   const [selectedCard, setSelectedCard] = useState(null);
+  
+  // Projection states
+  const [projections, setProjections] = useState([]);
+  const [projectionSummary, setProjectionSummary] = useState(null);
+  const [projectionInsights, setProjectionInsights] = useState(null);
+  const [openProjection, setOpenProjection] = useState(false);
+  const [openEditProjection, setOpenEditProjection] = useState(false);
+  const [selectedProjection, setSelectedProjection] = useState(null);
+  const [loadingInsights, setLoadingInsights] = useState(false);
+  const [projectionMonth, setProjectionMonth] = useState(() => {
+    const next = new Date();
+    next.setMonth(next.getMonth() + 1);
+    return next.toISOString().slice(0, 7);
+  });
   
   const [newTransaction, setNewTransaction] = useState({
     type: "expense",
@@ -54,7 +68,23 @@ export default function Finance() {
   const [newCharge, setNewCharge] = useState({
     amount: "",
     description: "",
-    category: "alimentação"
+    category: "alimentação",
+    payment_type: "vista",
+    installments: 2
+  });
+  
+  const [newProjection, setNewProjection] = useState({
+    description: "",
+    amount: "",
+    category: "alimentação",
+    month: "",
+    is_fixed: false,
+    repeat_count: 1
+  });
+  
+  const [editProjectionData, setEditProjectionData] = useState({
+    amount: "",
+    description: ""
   });
   
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -68,6 +98,11 @@ export default function Finance() {
     fetchStats();
     fetchCreditCards();
   }, [selectedMonth]);
+
+  useEffect(() => {
+    fetchProjections();
+    fetchProjectionSummary();
+  }, [projectionMonth]);
 
   const fetchUser = async () => {
     try {
@@ -111,6 +146,36 @@ export default function Finance() {
       setCreditCards(res.data);
     } catch (error) {
       console.error("Erro ao carregar cartões");
+    }
+  };
+
+  const fetchProjections = async () => {
+    try {
+      const res = await axios.get(`${API}/projections?month=${projectionMonth}`, { withCredentials: true });
+      setProjections(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar projeções");
+    }
+  };
+
+  const fetchProjectionSummary = async () => {
+    try {
+      const res = await axios.get(`${API}/projections/summary?month=${projectionMonth}`, { withCredentials: true });
+      setProjectionSummary(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar resumo");
+    }
+  };
+
+  const fetchProjectionInsights = async () => {
+    setLoadingInsights(true);
+    try {
+      const res = await axios.post(`${API}/projections/insights?month=${projectionMonth}`, {}, { withCredentials: true });
+      setProjectionInsights(res.data);
+    } catch (error) {
+      toast.error("Erro ao gerar insights");
+    } finally {
+      setLoadingInsights(false);
     }
   };
 
@@ -201,14 +266,94 @@ export default function Finance() {
       return;
     }
     try {
-      await axios.post(`${API}/credit-cards/${selectedCard}/charge?amount=${parseFloat(newCharge.amount)}&description=${encodeURIComponent(newCharge.description)}&category=${newCharge.category}`, {}, { withCredentials: true });
-      toast.success("Compra lançada no cartão!");
-      setNewCharge({ amount: "", description: "", category: "alimentação" });
+      const chargeData = {
+        amount: parseFloat(newCharge.amount),
+        description: newCharge.description,
+        category: newCharge.category,
+        payment_type: newCharge.payment_type,
+        installments: newCharge.payment_type === "parcelado" ? parseInt(newCharge.installments) : 1
+      };
+      
+      const res = await axios.post(`${API}/credit-cards/${selectedCard}/charge`, chargeData, { withCredentials: true });
+      
+      if (newCharge.payment_type === "parcelado") {
+        toast.success(`Compra parcelada em ${chargeData.installments}x de R$ ${res.data.installment_amount.toFixed(2)} lançada!`);
+      } else {
+        toast.success("Compra à vista lançada no cartão!");
+      }
+      
+      setNewCharge({ amount: "", description: "", category: "alimentação", payment_type: "vista", installments: 2 });
       setOpenCharge(false);
       fetchTransactions();
       fetchStats();
+      fetchProjections();
+      fetchProjectionSummary();
     } catch (error) {
       toast.error("Erro ao lançar compra");
+    }
+  };
+
+  const handleCreateProjection = async () => {
+    if (!newProjection.amount || parseFloat(newProjection.amount) <= 0) {
+      toast.error("Valor inválido");
+      return;
+    }
+    if (!newProjection.description) {
+      toast.error("Descrição obrigatória");
+      return;
+    }
+    try {
+      await axios.post(`${API}/projections`, {
+        ...newProjection,
+        amount: parseFloat(newProjection.amount),
+        month: newProjection.month || projectionMonth,
+        repeat_count: newProjection.is_fixed ? null : parseInt(newProjection.repeat_count) || 1
+      }, { withCredentials: true });
+      
+      toast.success("Projeção criada!");
+      setNewProjection({
+        description: "",
+        amount: "",
+        category: "alimentação",
+        month: "",
+        is_fixed: false,
+        repeat_count: 1
+      });
+      setOpenProjection(false);
+      fetchProjections();
+      fetchProjectionSummary();
+    } catch (error) {
+      toast.error("Erro ao criar projeção");
+    }
+  };
+
+  const handleUpdateProjection = async () => {
+    if (!selectedProjection) return;
+    
+    try {
+      const params = new URLSearchParams();
+      if (editProjectionData.amount) params.append('amount', editProjectionData.amount);
+      if (editProjectionData.description) params.append('description', editProjectionData.description);
+      
+      await axios.patch(`${API}/projections/${selectedProjection.projection_id}?${params.toString()}`, {}, { withCredentials: true });
+      toast.success("Projeção atualizada!");
+      setOpenEditProjection(false);
+      setSelectedProjection(null);
+      fetchProjections();
+      fetchProjectionSummary();
+    } catch (error) {
+      toast.error("Erro ao atualizar projeção");
+    }
+  };
+
+  const handleDeleteProjection = async (projectionId) => {
+    try {
+      await axios.delete(`${API}/projections/${projectionId}`, { withCredentials: true });
+      toast.success("Projeção removida");
+      fetchProjections();
+      fetchProjectionSummary();
+    } catch (error) {
+      toast.error("Erro ao remover projeção");
     }
   };
 
@@ -231,6 +376,26 @@ export default function Finance() {
     name: name.charAt(0).toUpperCase() + name.slice(1),
     value: value
   })) : [];
+
+  const projectionChartData = projectionSummary?.categories_totals ? 
+    Object.entries(projectionSummary.categories_totals).map(([name, value]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      value: value
+    })) : [];
+
+  // Generate future months for selection
+  const futureMonths = [];
+  for (let i = 1; i <= 12; i++) {
+    const date = new Date();
+    date.setMonth(date.getMonth() + i);
+    futureMonths.push(date.toISOString().slice(0, 7));
+  }
+
+  const getMonthLabel = (monthStr) => {
+    const [year, month] = monthStr.split('-');
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    return `${months[parseInt(month) - 1]} ${year}`;
+  };
 
   return (
     <div className="flex min-h-screen bg-[#050505]">
@@ -309,6 +474,7 @@ export default function Finance() {
               <TabsTrigger value="transactions">Transações</TabsTrigger>
               <TabsTrigger value="budgets">Orçamentos</TabsTrigger>
               <TabsTrigger value="cards">Cartões</TabsTrigger>
+              <TabsTrigger value="projections">Projeção</TabsTrigger>
             </TabsList>
 
             <TabsContent value="transactions" className="mt-6">
@@ -651,7 +817,7 @@ export default function Finance() {
                           </DialogHeader>
                           <div className="space-y-4 mt-4">
                             <div>
-                              <Label>Valor</Label>
+                              <Label>Valor Total</Label>
                               <Input
                                 type="number"
                                 step="0.01"
@@ -684,6 +850,45 @@ export default function Finance() {
                                 ))}
                               </div>
                             </div>
+                            
+                            {/* Payment Type Selection */}
+                            <div>
+                              <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Forma de Pagamento</Label>
+                              <div className="flex gap-2">
+                                {[{value: 'vista', label: 'À Vista'}, {value: 'parcelado', label: 'Parcelado'}].map((type) => (
+                                  <button
+                                    key={type.value}
+                                    onClick={() => setNewCharge({...newCharge, payment_type: type.value})}
+                                    className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors ${
+                                      newCharge.payment_type === type.value ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                                    }`}
+                                  >
+                                    {type.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            {/* Installments (only show when parcelado) */}
+                            {newCharge.payment_type === 'parcelado' && (
+                              <div>
+                                <Label>Número de Parcelas</Label>
+                                <Input
+                                  type="number"
+                                  min="2"
+                                  max="24"
+                                  value={newCharge.installments}
+                                  onChange={(e) => setNewCharge({...newCharge, installments: e.target.value})}
+                                  className="bg-[#121212] border-[#27272A] text-white"
+                                />
+                                {newCharge.amount && newCharge.installments >= 2 && (
+                                  <p className="text-sm text-[#A1A1AA] mt-2">
+                                    {newCharge.installments}x de R$ {(parseFloat(newCharge.amount) / parseInt(newCharge.installments)).toFixed(2)}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            
                             <Button onClick={handleChargeCard} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
                               Lançar
                             </Button>
@@ -694,6 +899,318 @@ export default function Finance() {
                   ))
                 )}
               </div>
+            </TabsContent>
+
+            {/* PROJECTIONS TAB */}
+            <TabsContent value="projections" className="mt-6">
+              {/* Month Selector */}
+              <div className="flex flex-wrap items-center gap-4 mb-6">
+                <div className="flex items-center space-x-2">
+                  <Calendar className="w-5 h-5 text-[#007AFF]" />
+                  <span className="text-[#A1A1AA] uppercase text-xs">Projeção para:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {futureMonths.slice(0, 6).map((month) => (
+                    <button
+                      key={month}
+                      onClick={() => setProjectionMonth(month)}
+                      className={`py-2 px-4 rounded-sm text-xs uppercase transition-colors ${
+                        projectionMonth === month ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1a1a1a]'
+                      }`}
+                    >
+                      {getMonthLabel(month)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary Cards */}
+              {projectionSummary && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[#A1A1AA] uppercase text-xs">Receita Estimada</span>
+                      <TrendingUp className="w-4 h-4 text-[#39FF14]" />
+                    </div>
+                    <p className="font-data text-xl text-[#39FF14]">R$ {projectionSummary.estimated_income.toFixed(2)}</p>
+                  </Card>
+                  
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[#A1A1AA] uppercase text-xs">Despesas Projetadas</span>
+                      <TrendingDown className="w-4 h-4 text-[#FF9500]" />
+                    </div>
+                    <p className="font-data text-xl text-[#FF9500]">R$ {projectionSummary.total_projected_expenses.toFixed(2)}</p>
+                  </Card>
+                  
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[#A1A1AA] uppercase text-xs">Saldo Estimado</span>
+                      <DollarSign className="w-4 h-4 text-[#007AFF]" />
+                    </div>
+                    <p className={`font-data text-xl ${projectionSummary.estimated_balance >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                      R$ {projectionSummary.estimated_balance.toFixed(2)}
+                    </p>
+                  </Card>
+                  
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[#A1A1AA] uppercase text-xs">Parcelas</span>
+                      <CreditCardIcon className="w-4 h-4 text-[#00F0FF]" />
+                    </div>
+                    <p className="font-data text-xl text-[#00F0FF]">R$ {projectionSummary.installment_expenses.toFixed(2)}</p>
+                  </Card>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex flex-wrap justify-between items-center mb-4 gap-2">
+                <Button 
+                  onClick={fetchProjectionInsights}
+                  disabled={loadingInsights}
+                  className="bg-[#FFD700] hover:bg-[#e6c200] text-black uppercase text-xs tracking-widest"
+                >
+                  <Lightbulb className="w-4 h-4 mr-2" />
+                  {loadingInsights ? 'Gerando...' : 'Gerar Insights com IA'}
+                </Button>
+                
+                <Dialog open={openProjection} onOpenChange={setOpenProjection}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Nova Projeção
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="font-heading text-2xl">NOVA PROJEÇÃO</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                      <div>
+                        <Label>Descrição</Label>
+                        <Input
+                          value={newProjection.description}
+                          onChange={(e) => setNewProjection({...newProjection, description: e.target.value})}
+                          placeholder="Ex: Aluguel, Netflix, etc."
+                          className="bg-[#121212] border-[#27272A] text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label>Valor (R$)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={newProjection.amount}
+                          onChange={(e) => setNewProjection({...newProjection, amount: e.target.value})}
+                          className="bg-[#121212] border-[#27272A] text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label>Categoria</Label>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {categories.map(cat => (
+                            <button
+                              key={cat}
+                              onClick={() => setNewProjection({...newProjection, category: cat})}
+                              className={`py-2 px-3 rounded-sm text-xs uppercase transition-colors ${
+                                newProjection.category === cat ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                              }`}
+                            >
+                              {cat}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Mês Inicial</Label>
+                        <Input
+                          type="month"
+                          value={newProjection.month || projectionMonth}
+                          onChange={(e) => setNewProjection({...newProjection, month: e.target.value})}
+                          className="bg-[#121212] border-[#27272A] text-white"
+                        />
+                      </div>
+                      
+                      {/* Fixed or Repeat */}
+                      <div>
+                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Recorrência</Label>
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={() => setNewProjection({...newProjection, is_fixed: true, repeat_count: 1})}
+                            className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors flex items-center justify-center gap-2 ${
+                              newProjection.is_fixed ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                            }`}
+                          >
+                            <Repeat className="w-4 h-4" />
+                            Despesa Fixa
+                          </button>
+                          <button
+                            onClick={() => setNewProjection({...newProjection, is_fixed: false})}
+                            className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors ${
+                              !newProjection.is_fixed ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                            }`}
+                          >
+                            Temporária
+                          </button>
+                        </div>
+                        
+                        {!newProjection.is_fixed && (
+                          <div>
+                            <Label>Repetir por quantos meses?</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              max="24"
+                              value={newProjection.repeat_count}
+                              onChange={(e) => setNewProjection({...newProjection, repeat_count: e.target.value})}
+                              className="bg-[#121212] border-[#27272A] text-white"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <Button onClick={handleCreateProjection} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
+                        Criar Projeção
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {/* AI Insights */}
+              {projectionInsights && (
+                <Card className="bg-[#0A0A0A] border-[#FFD700]/30 p-6 mb-6">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Lightbulb className="w-5 h-5 text-[#FFD700]" />
+                    <h3 className="font-heading text-lg text-[#FFD700]">INSIGHTS DA IA</h3>
+                  </div>
+                  <div className="prose prose-invert max-w-none">
+                    <p className="text-[#E4E4E7] whitespace-pre-wrap text-sm leading-relaxed">{projectionInsights.insights}</p>
+                  </div>
+                </Card>
+              )}
+
+              {/* Projection Chart */}
+              {projectionChartData.length > 0 && (
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6 mb-6">
+                  <h3 className="font-heading text-lg mb-4 uppercase">Projeção por Categoria</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={projectionChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                      <XAxis dataKey="name" tick={{ fill: '#A1A1AA', fontSize: 12 }} />
+                      <YAxis tick={{ fill: '#A1A1AA', fontSize: 12 }} />
+                      <Tooltip 
+                        formatter={(value) => `R$ ${value.toFixed(2)}`}
+                        contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A' }}
+                      />
+                      <Bar dataKey="value" fill="#007AFF" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              )}
+
+              {/* Projections List */}
+              <div className="space-y-3">
+                {projections.length === 0 ? (
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
+                    <Calendar className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
+                    <p className="text-[#A1A1AA]">Nenhuma projeção para {getMonthLabel(projectionMonth)}</p>
+                    <p className="text-xs text-[#52525B] mt-2">Adicione compras parceladas ou crie projeções manuais</p>
+                  </Card>
+                ) : (
+                  projections.map((proj) => (
+                    <Card key={proj.projection_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4 flex-1">
+                          <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${
+                            proj.projection_type === 'installment' ? 'bg-[#00F0FF]/20' : 
+                            proj.is_fixed ? 'bg-[#FFD700]/20' : 'bg-[#007AFF]/20'
+                          }`}>
+                            {proj.projection_type === 'installment' ? (
+                              <CreditCardIcon className="w-5 h-5 text-[#00F0FF]" />
+                            ) : proj.is_fixed ? (
+                              <Repeat className="w-5 h-5 text-[#FFD700]" />
+                            ) : (
+                              <Calendar className="w-5 h-5 text-[#007AFF]" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-1">
+                              <span className="font-medium">{proj.description}</span>
+                              {proj.projection_type === 'installment' && (
+                                <span className="text-xs bg-[#00F0FF]/20 text-[#00F0FF] px-2 py-0.5 rounded">
+                                  Parcela {proj.installment_number}/{proj.total_installments}
+                                </span>
+                              )}
+                              {proj.is_fixed && (
+                                <span className="text-xs bg-[#FFD700]/20 text-[#FFD700] px-2 py-0.5 rounded">
+                                  Fixa
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-sm text-[#A1A1AA]">{proj.category}</p>
+                          </div>
+                          <div className="font-data text-xl text-[#FF9500]">
+                            R$ {proj.amount.toFixed(2)}
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={() => {
+                                setSelectedProjection(proj);
+                                setEditProjectionData({ amount: proj.amount.toString(), description: proj.description });
+                                setOpenEditProjection(true);
+                              }}
+                            >
+                              <Edit2 className="w-4 h-4 text-[#52525B] hover:text-[#007AFF]" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => handleDeleteProjection(proj.projection_id)}
+                            >
+                              <Trash2 className="w-4 h-4 text-[#52525B] hover:text-[#FF3B30]" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
+
+              {/* Edit Projection Dialog */}
+              <Dialog open={openEditProjection} onOpenChange={setOpenEditProjection}>
+                <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="font-heading text-2xl">EDITAR PROJEÇÃO</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <Label>Descrição</Label>
+                      <Input
+                        value={editProjectionData.description}
+                        onChange={(e) => setEditProjectionData({...editProjectionData, description: e.target.value})}
+                        className="bg-[#121212] border-[#27272A] text-white"
+                      />
+                    </div>
+                    <div>
+                      <Label>Valor (R$)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={editProjectionData.amount}
+                        onChange={(e) => setEditProjectionData({...editProjectionData, amount: e.target.value})}
+                        className="bg-[#121212] border-[#27272A] text-white"
+                      />
+                    </div>
+                    <Button onClick={handleUpdateProjection} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
+                      Salvar Alterações
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </TabsContent>
           </Tabs>
         </div>
