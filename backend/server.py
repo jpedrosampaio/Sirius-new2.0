@@ -834,7 +834,7 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
     expenses = sum([t['amount'] for t in transactions if t['type'] == 'expense'])
     
     goals = await db.goals.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
-    avg_progress = sum([g['progress'] for g in goals]) / len(goals) if goals else 0
+    avg_progress = sum([len(g.get('daily_checks', [])) for g in goals]) / len(goals) if goals else 0
     
     return {
         "user": {"name": user.name, "xp": user.xp, "rank": user.rank, "picture": user.picture},
@@ -848,6 +848,154 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
         "goals_total": len(goals),
         "goals_avg_progress": avg_progress
     }
+
+@api_router.post("/goals/{goal_id}/check")
+async def check_goal_day(request: Request, goal_id: str, date: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    goal = await db.goals.find_one({"goal_id": goal_id, "user_id": user.user_id}, {"_id": 0})
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+    
+    daily_checks = goal.get('daily_checks', [])
+    if date in daily_checks:
+        daily_checks.remove(date)
+    else:
+        daily_checks.append(date)
+    
+    await db.goals.update_one(
+        {"goal_id": goal_id},
+        {"$set": {"daily_checks": daily_checks}}
+    )
+    
+    new_xp = user.xp + 5
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    return {"message": "Day checked", "xp_earned": 5, "new_xp": new_xp}
+
+@api_router.get("/challenges/current")
+async def get_current_challenges(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now(timezone.utc).date()
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
+    
+    challenges = await db.challenges.find({"week_start": week_start}, {"_id": 0}).to_list(100)
+    
+    if len(challenges) == 0:
+        default_challenges = [
+            {
+                "challenge_id": f"chal_{uuid.uuid4().hex[:12]}",
+                "title": "Mestre das Tarefas",
+                "description": "Complete 10 tarefas esta semana",
+                "xp_reward": 100,
+                "week_start": week_start,
+                "week_end": (today + timedelta(days=7-today.weekday())).isoformat(),
+                "completed_by": [],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            },
+            {
+                "challenge_id": f"chal_{uuid.uuid4().hex[:12]}",
+                "title": "Guardião dos Hábitos",
+                "description": "Mantenha 5 dias de streak em qualquer hábito",
+                "xp_reward": 150,
+                "week_start": week_start,
+                "week_end": (today + timedelta(days=7-today.weekday())).isoformat(),
+                "completed_by": [],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            },
+            {
+                "challenge_id": f"chal_{uuid.uuid4().hex[:12]}",
+                "title": "Controlador Financeiro",
+                "description": "Registre todas as transações diárias por 5 dias",
+                "xp_reward": 200,
+                "week_start": week_start,
+                "week_end": (today + timedelta(days=7-today.weekday())).isoformat(),
+                "completed_by": [],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+        ]
+        await db.challenges.insert_many(default_challenges)
+        challenges = default_challenges
+    
+    for challenge in challenges:
+        if isinstance(challenge['created_at'], str):
+            challenge['created_at'] = datetime.fromisoformat(challenge['created_at'])
+        challenge['completed'] = user.user_id in challenge.get('completed_by', [])
+    
+    return challenges
+
+@api_router.post("/challenges/{challenge_id}/complete")
+async def complete_challenge(request: Request, challenge_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    challenge = await db.challenges.find_one({"challenge_id": challenge_id}, {"_id": 0})
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+    
+    if user.user_id in challenge.get('completed_by', []):
+        raise HTTPException(status_code=400, detail="Challenge already completed")
+    
+    await db.challenges.update_one(
+        {"challenge_id": challenge_id},
+        {"$push": {"completed_by": user.user_id}}
+    )
+    
+    new_xp = user.xp + challenge['xp_reward']
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    achievement_id = f"ach_{uuid.uuid4().hex[:12]}"
+    achievement_doc = {
+        "achievement_id": achievement_id,
+        "user_id": user.user_id,
+        "title": challenge['title'],
+        "description": challenge['description'],
+        "icon": "trophy",
+        "unlocked_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.achievements.insert_one(achievement_doc)
+    
+    return {"message": "Challenge completed", "xp_earned": challenge['xp_reward'], "new_xp": new_xp, "new_rank": new_rank}
+
+@api_router.get("/notifications")
+async def get_notifications(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notifications = []
+    
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    budgets = await db.budgets.find({"user_id": user.user_id, "month": current_month}, {"_id": 0}).to_list(100)
+    
+    for budget in budgets:
+        percentage = (budget['spent'] / budget['limit']) * 100
+        if percentage >= 90:
+            notifications.append({
+                "type": "budget_alert",
+                "severity": "high" if percentage >= 100 else "warning",
+                "title": "Orçamento Estourado" if percentage >= 100 else "Orçamento Quase Estourado",
+                "message": f"Categoria {budget['category']}: {percentage:.0f}% do orçamento usado",
+                "data": budget
+            })
+    
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    for habit in habits:
+        if today not in habit['completions'] and habit['streak'] > 0:
+            notifications.append({
+                "type": "habit_reminder",
+                "severity": "info",
+                "title": "Hábito Pendente",
+                "message": f"{habit['name']}: Não esqueça de marcar hoje! Streak: {habit['streak']} dias",
+                "data": habit
+            })
+    
+    return notifications
 
 def calculate_rank(xp: int) -> str:
     ranks = [
