@@ -1,0 +1,173 @@
+import { useEffect, useState } from "react";
+import Sidebar from "@/components/Sidebar";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { CheckSquare, TrendingUp, DollarSign, Target, Award, Zap } from "lucide-react";
+import axios from "axios";
+import { toast } from "sonner";
+
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
+
+export default function Dashboard() {
+  const [user, setUser] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [userRes, statsRes] = await Promise.all([
+        axios.get(`${API}/auth/me`, { withCredentials: true }),
+        axios.get(`${API}/stats/dashboard`, { withCredentials: true })
+      ]);
+      setUser(userRes.data);
+      setStats(statsRes.data);
+    } catch (error) {
+      toast.error("Erro ao carregar dados");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getNextRank = () => {
+    const ranks = [
+      { name: "Recruta", xp: 0 },
+      { name: "Soldado", xp: 100 },
+      { name: "Cabo", xp: 300 },
+      { name: "Sargento", xp: 600 },
+      { name: "Tenente", xp: 1000 },
+      { name: "Capitão", xp: 1500 },
+      { name: "Major", xp: 2200 },
+      { name: "Coronel", xp: 3000 },
+      { name: "General", xp: 4000 }
+    ];
+    
+    if (!user) return { name: "Soldado", xp: 100, progress: 0 };
+    
+    for (let i = 0; i < ranks.length; i++) {
+      if (user.rank === ranks[i].name) {
+        if (i === ranks.length - 1) return { name: "Máximo", xp: ranks[i].xp, progress: 100 };
+        const next = ranks[i + 1];
+        const current = ranks[i];
+        const progress = ((user.xp - current.xp) / (next.xp - current.xp)) * 100;
+        return { name: next.name, xp: next.xp, progress };
+      }
+    }
+    return { name: "Soldado", xp: 100, progress: 0 };
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#007AFF]"></div>
+      </div>
+    );
+  }
+
+  const nextRank = getNextRank();
+
+  return (
+    <div className="flex min-h-screen bg-[#050505]">
+      <Sidebar user={user} />
+      <div className="flex-1 ml-64 p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <h1 className="font-heading text-4xl mb-2" data-testid="dashboard-title">CENTRO DE COMANDO</h1>
+            <p className="text-[#A1A1AA]">Visão geral das operações</p>
+          </div>
+
+          {stats && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <CheckSquare className="w-8 h-8 text-[#007AFF]" />
+                    <span className="font-data text-2xl">{stats.tasks_completed_today}/{stats.tasks_today}</span>
+                  </div>
+                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Tarefas Hoje</p>
+                </Card>
+
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <TrendingUp className="w-8 h-8 text-[#39FF14]" />
+                    <span className="font-data text-2xl">{stats.habits_completed_today}/{stats.habits_total}</span>
+                  </div>
+                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Hábitos Hoje</p>
+                </Card>
+
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <DollarSign className="w-8 h-8 text-[#FF9500]" />
+                    <span className="font-data text-2xl">R$ {stats.balance.toFixed(0)}</span>
+                  </div>
+                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Saldo Mês</p>
+                </Card>
+
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <Target className="w-8 h-8 text-[#00F0FF]" />
+                    <span className="font-data text-2xl">{stats.goals_avg_progress.toFixed(0)}%</span>
+                  </div>
+                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Progresso Metas</p>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <Award className="w-10 h-10 text-[#FFD700]" />
+                    <div className="flex-1">
+                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Rank Atual</p>
+                      <p className="font-heading text-3xl">{user.rank}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-data text-2xl">{user.xp}</p>
+                      <p className="text-xs text-[#A1A1AA]">XP</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[#A1A1AA]">Próximo: {nextRank.name}</span>
+                      <span className="font-data text-[#A1A1AA]">{nextRank.xp} XP</span>
+                    </div>
+                    <Progress value={nextRank.progress} className="h-2" />
+                  </div>
+                </Card>
+
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <Zap className="w-10 h-10 text-[#007AFF]" />
+                    <div>
+                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Resumo Financeiro</p>
+                      <p className="font-heading text-2xl">Mês Atual</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA]">Receitas</span>
+                      <span className="font-data text-[#39FF14]">+R$ {stats.income.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA]">Despesas</span>
+                      <span className="font-data text-[#FF3B30]">-R$ {stats.expenses.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t border-[#27272A] pt-3 flex justify-between items-center">
+                      <span className="font-medium">Saldo</span>
+                      <span className={`font-data text-lg ${stats.balance >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                        R$ {stats.balance.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
