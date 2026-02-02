@@ -1052,3 +1052,74 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+@api_router.get("/finance/stats")
+async def get_finance_stats(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+    
+    transactions = await db.transactions.find(
+        {"user_id": user.user_id, "date": {"$regex": f"^{month}"}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    categories_expense = {}
+    categories_income = {}
+    
+    for t in transactions:
+        if t['type'] == 'expense':
+            categories_expense[t['category']] = categories_expense.get(t['category'], 0) + t['amount']
+        else:
+            categories_income[t['category']] = categories_income.get(t['category'], 0) + t['amount']
+    
+    return {
+        "expense_by_category": categories_expense,
+        "income_by_category": categories_income,
+        "total_expense": sum(categories_expense.values()),
+        "total_income": sum(categories_income.values())
+    }
+
+@api_router.get("/reports/{report_id}/download")
+async def download_report(report_id: str, request: Request, session_token: Optional[str] = Cookie(None)):
+    from fastapi.responses import StreamingResponse
+    import io
+    
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    report = await db.reports.find_one({"report_id": report_id, "user_id": user.user_id}, {"_id": 0})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    content = f"""SIRIUS - RELATÓRIO {report['type'].upper()}
+Período: {report['period']}
+Gerado em: {report['created_at']}
+
+{'='*60}
+DADOS DO PERÍODO
+{'='*60}
+
+Tarefas: {report['data']['tasks_completed']}/{report['data']['tasks']}
+Hábitos: {report['data']['total_habits_completions']} completações
+Receitas: R$ {report['data']['income']:.2f}
+Despesas: R$ {report['data']['expenses']:.2f}
+Metas: {report['data']['goals']} total
+Progresso Médio: {report['data']['goals_progress']:.1f}%
+
+{'='*60}
+INSIGHTS E SUGESTÕES
+{'='*60}
+
+{report['insights']}
+"""
+    
+    buffer = io.BytesIO(content.encode('utf-8'))
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename=sirius_relatorio_{report_id}.txt"}
+    )
