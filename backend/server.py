@@ -647,10 +647,15 @@ async def get_chat_messages(request: Request, session_token: Optional[str] = Coo
             message['created_at'] = datetime.fromisoformat(message['created_at'])
     return messages
 
+class ChatMessageCreate(BaseModel):
+    content: str
+
 @api_router.post("/chat/send")
-async def send_chat_message(request: Request, content: str = Form(...), image: Optional[UploadFile] = File(None), audio: Optional[UploadFile] = File(None), session_token: Optional[str] = Cookie(None)):
+async def send_chat_message(request: Request, message_data: ChatMessageCreate, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    content = message_data.content
     
     message_id = f"msg_{uuid.uuid4().hex[:12]}"
     user_message = {
