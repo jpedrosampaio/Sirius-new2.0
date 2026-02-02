@@ -1215,3 +1215,131 @@ INSIGHTS E SUGESTÕES
         media_type="text/plain",
         headers={"Content-Disposition": f"attachment; filename=sirius_relatorio_{report_id}.txt"}
     )
+
+class CreditCard(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    card_id: str
+    user_id: str
+    name: str
+    limit: float
+    closing_day: int
+    due_day: int
+    created_at: datetime
+
+class CreditCardCreate(BaseModel):
+    name: str
+    limit: float
+    closing_day: int
+    due_day: int
+
+class Invoice(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    invoice_id: str
+    card_id: str
+    user_id: str
+    month: str
+    amount: float
+    paid: bool = False
+    created_at: datetime
+
+@api_router.get("/credit-cards")
+async def get_credit_cards(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    cards = await db.credit_cards.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    for card in cards:
+        if isinstance(card['created_at'], str):
+            card['created_at'] = datetime.fromisoformat(card['created_at'])
+    return cards
+
+@api_router.post("/credit-cards")
+async def create_credit_card(request: Request, card_data: CreditCardCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    card_id = f"card_{uuid.uuid4().hex[:12]}"
+    card_doc = {
+        "card_id": card_id,
+        "user_id": user.user_id,
+        "name": card_data.name,
+        "limit": card_data.limit,
+        "closing_day": card_data.closing_day,
+        "due_day": card_data.due_day,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.credit_cards.insert_one(card_doc)
+    card_doc['created_at'] = datetime.fromisoformat(card_doc['created_at'])
+    return CreditCard(**card_doc)
+
+@api_router.get("/credit-cards/{card_id}/invoices")
+async def get_card_invoices(request: Request, card_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    invoices = await db.invoices.find({"card_id": card_id, "user_id": user.user_id}, {"_id": 0}).to_list(100)
+    for invoice in invoices:
+        if isinstance(invoice['created_at'], str):
+            invoice['created_at'] = datetime.fromisoformat(invoice['created_at'])
+    return invoices
+
+@api_router.post("/credit-cards/{card_id}/charge")
+async def charge_to_card(request: Request, card_id: str, amount: float, description: str, category: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    card = await db.credit_cards.find_one({"card_id": card_id, "user_id": user.user_id}, {"_id": 0})
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    
+    transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
+    transaction_doc = {
+        "transaction_id": transaction_id,
+        "user_id": user.user_id,
+        "type": "expense",
+        "amount": amount,
+        "category": category,
+        "description": f"{description} (Cartão: {card['name']})",
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "card_id": card_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.transactions.insert_one(transaction_doc)
+    
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    invoice = await db.invoices.find_one({"card_id": card_id, "month": current_month}, {"_id": 0})
+    
+    if not invoice:
+        invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
+        invoice_doc = {
+            "invoice_id": invoice_id,
+            "card_id": card_id,
+            "user_id": user.user_id,
+            "month": current_month,
+            "amount": amount,
+            "paid": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.invoices.insert_one(invoice_doc)
+    else:
+        new_amount = invoice['amount'] + amount
+        await db.invoices.update_one(
+            {"invoice_id": invoice['invoice_id']},
+            {"$set": {"amount": new_amount}}
+        )
+    
+    return {"message": "Charged to card", "transaction_id": transaction_id}
+
+@api_router.patch("/invoices/{invoice_id}/pay")
+async def pay_invoice(request: Request, invoice_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.invoices.update_one(
+        {"invoice_id": invoice_id, "user_id": user.user_id},
+        {"$set": {"paid": True}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"message": "Invoice paid"}
+
