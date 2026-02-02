@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckSquare, Plus, Trash2, Circle, CheckCircle2 } from "lucide-react";
+import { CheckSquare, Plus, Trash2, Circle, CheckCircle2, Calendar } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -17,13 +18,14 @@ export default function Tasks() {
   const [user, setUser] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [activeTab, setActiveTab] = useState("daily");
   const [open, setOpen] = useState(false);
-  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium" });
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", recurrence: "daily" });
 
   useEffect(() => {
     fetchUser();
     fetchTasks();
-  }, [selectedDate]);
+  }, [selectedDate, activeTab]);
 
   const fetchUser = async () => {
     try {
@@ -36,7 +38,7 @@ export default function Tasks() {
 
   const fetchTasks = async () => {
     try {
-      const res = await axios.get(`${API}/tasks?date=${selectedDate}`, { withCredentials: true });
+      const res = await axios.get(`${API}/tasks?date=${selectedDate}&recurrence=${activeTab}`, { withCredentials: true });
       setTasks(res.data);
     } catch (error) {
       toast.error("Erro ao carregar tarefas");
@@ -51,7 +53,7 @@ export default function Tasks() {
     try {
       await axios.post(`${API}/tasks`, { ...newTask, date: selectedDate }, { withCredentials: true });
       toast.success("Tarefa criada!");
-      setNewTask({ title: "", description: "", priority: "medium" });
+      setNewTask({ title: "", description: "", priority: "medium", recurrence: activeTab });
       setOpen(false);
       fetchTasks();
       fetchUser();
@@ -62,7 +64,7 @@ export default function Tasks() {
 
   const handleToggleTask = async (task) => {
     try {
-      const res = await axios.patch(`${API}/tasks/${task.task_id}?completed=${!task.completed}`, {}, { withCredentials: true });
+      const res = await axios.patch(`${API}/tasks/${task.task_id}?completed=${!task.completed}&date=${selectedDate}`, {}, { withCredentials: true });
       if (res.data.xp_earned) {
         toast.success(`+${res.data.xp_earned} XP! ${res.data.new_rank !== user?.rank ? `Novo rank: ${res.data.new_rank}!` : ''}`);
       }
@@ -89,6 +91,12 @@ export default function Tasks() {
     high: "border-l-[#FF3B30]"
   };
 
+  const recurrenceLabels = {
+    daily: "Diárias",
+    weekly: "Semanais",
+    monthly: "Mensais"
+  };
+
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
@@ -96,7 +104,7 @@ export default function Tasks() {
         <div className="max-w-5xl mx-auto">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="tasks-title">TAREFAS DIÁRIAS</h1>
+              <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="tasks-title">TAREFAS</h1>
               <p className="text-[#A1A1AA]">Execute com precisão</p>
             </div>
             <Dialog open={open} onOpenChange={setOpen}>
@@ -130,6 +138,24 @@ export default function Tasks() {
                     />
                   </div>
                   <div>
+                    <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Tipo</Label>
+                    <div className="flex gap-2">
+                      {['daily', 'weekly', 'monthly'].map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setNewTask({...newTask, recurrence: type})}
+                          className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
+                            newTask.recurrence === type
+                              ? 'bg-[#007AFF] text-white'
+                              : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                          }`}
+                        >
+                          {recurrenceLabels[type]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
                     <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Prioridade</Label>
                     <div className="flex gap-2">
                       {['low', 'medium', 'high'].map((p) => (
@@ -155,69 +181,80 @@ export default function Tasks() {
             </Dialog>
           </div>
 
-          <div className="mb-6">
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-[#0A0A0A] border-[#27272A] text-white font-mono max-w-full md:max-w-xs"
-            />
+          <div className="mb-6 flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-5 h-5 text-[#007AFF]" />
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-[#0A0A0A] border-[#27272A] text-white font-mono"
+              />
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {tasks.length === 0 ? (
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
-                <CheckSquare className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
-                <p className="text-[#A1A1AA]">Nenhuma tarefa para este dia</p>
-              </Card>
-            ) : (
-              tasks.map((task) => (
-                <Card
-                  key={task.task_id}
-                  className={`task-item bg-[#0A0A0A] border-[#27272A] border-l-4 ${priorityColors[task.priority]} p-4`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-3 flex-1">
-                      <button
-                        data-testid={`task-toggle-${task.task_id}`}
-                        onClick={() => handleToggleTask(task)}
-                        className="mt-1"
-                      >
-                        {task.completed ? (
-                          <CheckCircle2 className="w-6 h-6 text-[#39FF14]" />
-                        ) : (
-                          <Circle className="w-6 h-6 text-[#52525B]" />
-                        )}
-                      </button>
-                      <div className="flex-1">
-                        <h3 className={`font-medium mb-1 ${task.completed ? 'line-through text-[#52525B]' : ''}`}>
-                          {task.title}
-                        </h3>
-                        {task.description && (
-                          <p className="text-sm text-[#A1A1AA]">{task.description}</p>
-                        )}
-                        <div className="flex items-center space-x-3 mt-2">
-                          <span className="text-xs uppercase text-[#A1A1AA] tracking-wider">
-                            {task.priority === 'low' ? 'Baixa' : task.priority === 'medium' ? 'Média' : 'Alta'}
-                          </span>
-                          <span className="font-data text-xs text-[#007AFF]">+{task.xp_reward} XP</span>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="bg-[#0A0A0A] border-[#27272A] mb-6">
+              <TabsTrigger value="daily" className="data-[state=active]:bg-[#007AFF]">Diárias</TabsTrigger>
+              <TabsTrigger value="weekly" className="data-[state=active]:bg-[#007AFF]">Semanais</TabsTrigger>
+              <TabsTrigger value="monthly" className="data-[state=active]:bg-[#007AFF]">Mensais</TabsTrigger>
+            </TabsList>
+
+            <div className="space-y-3">
+              {tasks.length === 0 ? (
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
+                  <CheckSquare className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
+                  <p className="text-[#A1A1AA]">Nenhuma tarefa {recurrenceLabels[activeTab].toLowerCase()}</p>
+                </Card>
+              ) : (
+                tasks.map((task) => (
+                  <Card
+                    key={task.task_id}
+                    className={`task-item bg-[#0A0A0A] border-[#27272A] border-l-4 ${priorityColors[task.priority]} p-4`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-3 flex-1">
+                        <button
+                          data-testid={`task-toggle-${task.task_id}`}
+                          onClick={() => handleToggleTask(task)}
+                          className="mt-1"
+                        >
+                          {task.completed ? (
+                            <CheckCircle2 className="w-6 h-6 text-[#39FF14]" />
+                          ) : (
+                            <Circle className="w-6 h-6 text-[#52525B]" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <h3 className={`font-medium mb-1 ${task.completed ? 'line-through text-[#52525B]' : ''}`}>
+                            {task.title}
+                          </h3>
+                          {task.description && (
+                            <p className="text-sm text-[#A1A1AA]">{task.description}</p>
+                          )}
+                          <div className="flex items-center space-x-3 mt-2">
+                            <span className="text-xs uppercase text-[#A1A1AA] tracking-wider">
+                              {task.priority === 'low' ? 'Baixa' : task.priority === 'medium' ? 'Média' : 'Alta'}
+                            </span>
+                            <span className="font-data text-xs text-[#007AFF]">+{task.xp_reward} XP</span>
+                          </div>
                         </div>
                       </div>
+                      <Button
+                        data-testid={`task-delete-${task.task_id}`}
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteTask(task.task_id)}
+                        className="text-[#FF3B30] hover:text-[#FF3B30] hover:bg-[#FF3B30]/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button
-                      data-testid={`task-delete-${task.task_id}`}
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteTask(task.task_id)}
-                      className="text-[#FF3B30] hover:text-[#FF3B30] hover:bg-[#FF3B30]/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </Card>
-              ))
-            )}
-          </div>
+                  </Card>
+                ))
+              )}
+            </div>
+          </Tabs>
         </div>
       </div>
     </div>
