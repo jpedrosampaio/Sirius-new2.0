@@ -724,7 +724,7 @@ async def send_chat_message(request: Request, message_data: ChatMessageCreate, s
         "content": content,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.chat_messages.insert_one(user_message)
+    await db.chat_messages.insert_one(user_message.copy())
     
     try:
         llm_key = os.getenv("EMERGENT_LLM_KEY", "")
