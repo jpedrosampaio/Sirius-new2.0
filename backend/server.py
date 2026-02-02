@@ -23,6 +23,9 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
+# Initialize Google Gemini client
+google_ai_client = genai.Client(api_key=os.environ.get('GOOGLE_AI_KEY', ''))
+
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
