@@ -443,6 +443,7 @@ class SiriusBackendTester:
         
         # Projections Tests
         results['projections_get'] = self.test_projections_get()
+        results['installment_projections_verification'] = self.test_installment_projections_verification()
         results['projections_summary'] = self.test_projections_summary()
         results['projections_create'] = self.test_projections_create()
         results['projections_update'] = self.test_projections_update()
