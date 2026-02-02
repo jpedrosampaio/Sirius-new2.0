@@ -1406,6 +1406,252 @@ async def pay_invoice(request: Request, invoice_id: str, session_token: Optional
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"message": "Invoice paid"}
 
+# ========== PROJECTION ENDPOINTS ==========
+
+@api_router.get("/projections")
+async def get_projections(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not month:
+        # Próximo mês por padrão
+        next_month = datetime.now(timezone.utc) + timedelta(days=30)
+        month = next_month.strftime("%Y-%m")
+    
+    projections = await db.projections.find(
+        {"user_id": user.user_id, "month": month},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    for proj in projections:
+        if isinstance(proj['created_at'], str):
+            proj['created_at'] = datetime.fromisoformat(proj['created_at'])
+    
+    return projections
+
+@api_router.post("/projections")
+async def create_projection(request: Request, projection_data: ProjectionCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    projection_id = f"proj_{uuid.uuid4().hex[:12]}"
+    projection_doc = {
+        "projection_id": projection_id,
+        "user_id": user.user_id,
+        "month": projection_data.month,
+        "description": projection_data.description,
+        "amount": projection_data.amount,
+        "category": projection_data.category,
+        "projection_type": "manual",
+        "is_fixed": projection_data.is_fixed,
+        "repeat_count": projection_data.repeat_count if not projection_data.is_fixed else None,
+        "remaining_repeats": projection_data.repeat_count if not projection_data.is_fixed else None,
+        "source_transaction_id": None,
+        "installment_number": None,
+        "total_installments": None,
+        "card_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.projections.insert_one(projection_doc)
+    
+    # Se for despesa fixa ou com repetições, criar projeções para meses futuros
+    if projection_data.is_fixed or (projection_data.repeat_count and projection_data.repeat_count > 1):
+        base_date = datetime.strptime(projection_data.month + "-01", "%Y-%m-%d")
+        repeat_times = 12 if projection_data.is_fixed else (projection_data.repeat_count - 1)
+        
+        for i in range(1, repeat_times + 1):
+            future_date = base_date + timedelta(days=30 * i)
+            future_month = future_date.strftime("%Y-%m")
+            
+            future_proj_id = f"proj_{uuid.uuid4().hex[:12]}"
+            future_proj_doc = {
+                "projection_id": future_proj_id,
+                "user_id": user.user_id,
+                "month": future_month,
+                "description": projection_data.description,
+                "amount": projection_data.amount,
+                "category": projection_data.category,
+                "projection_type": "manual",
+                "is_fixed": projection_data.is_fixed,
+                "repeat_count": projection_data.repeat_count,
+                "remaining_repeats": (projection_data.repeat_count - i - 1) if projection_data.repeat_count else None,
+                "source_transaction_id": None,
+                "installment_number": i + 1 if projection_data.repeat_count else None,
+                "total_installments": projection_data.repeat_count,
+                "card_id": None,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.projections.insert_one(future_proj_doc)
+    
+    projection_doc['created_at'] = datetime.fromisoformat(projection_doc['created_at'])
+    return Projection(**projection_doc)
+
+@api_router.patch("/projections/{projection_id}")
+async def update_projection(request: Request, projection_id: str, amount: Optional[float] = None, description: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_data = {}
+    if amount is not None:
+        update_data["amount"] = amount
+    if description is not None:
+        update_data["description"] = description
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No data to update")
+    
+    result = await db.projections.update_one(
+        {"projection_id": projection_id, "user_id": user.user_id},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Projection not found")
+    
+    return {"message": "Projection updated"}
+
+@api_router.delete("/projections/{projection_id}")
+async def delete_projection(request: Request, projection_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.projections.delete_one({"projection_id": projection_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Projection not found")
+    return {"message": "Projection deleted"}
+
+@api_router.get("/projections/summary")
+async def get_projection_summary(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not month:
+        next_month = datetime.now(timezone.utc) + timedelta(days=30)
+        month = next_month.strftime("%Y-%m")
+    
+    # Buscar projeções do mês
+    projections = await db.projections.find(
+        {"user_id": user.user_id, "month": month},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Calcular totais por categoria
+    categories_totals = {}
+    total_projected = 0
+    fixed_expenses = 0
+    installment_expenses = 0
+    manual_expenses = 0
+    
+    for proj in projections:
+        cat = proj.get('category', 'outros')
+        amount = proj.get('amount', 0)
+        proj_type = proj.get('projection_type', 'manual')
+        
+        categories_totals[cat] = categories_totals.get(cat, 0) + amount
+        total_projected += amount
+        
+        if proj.get('is_fixed'):
+            fixed_expenses += amount
+        elif proj_type == 'installment':
+            installment_expenses += amount
+        else:
+            manual_expenses += amount
+    
+    # Buscar receitas recorrentes (estimativa baseada no mês atual)
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    current_income = await db.transactions.find(
+        {"user_id": user.user_id, "type": "income", "date": {"$regex": f"^{current_month}"}},
+        {"_id": 0}
+    ).to_list(1000)
+    estimated_income = sum([t['amount'] for t in current_income])
+    
+    return {
+        "month": month,
+        "total_projected_expenses": total_projected,
+        "fixed_expenses": fixed_expenses,
+        "installment_expenses": installment_expenses,
+        "manual_expenses": manual_expenses,
+        "categories_totals": categories_totals,
+        "estimated_income": estimated_income,
+        "estimated_balance": estimated_income - total_projected,
+        "projections_count": len(projections)
+    }
+
+@api_router.post("/projections/insights")
+async def get_projection_insights(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not month:
+        next_month = datetime.now(timezone.utc) + timedelta(days=30)
+        month = next_month.strftime("%Y-%m")
+    
+    # Buscar resumo das projeções
+    projections = await db.projections.find(
+        {"user_id": user.user_id, "month": month},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    total_projected = sum([p.get('amount', 0) for p in projections])
+    
+    # Buscar receitas do mês atual como base
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    current_transactions = await db.transactions.find(
+        {"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    estimated_income = sum([t['amount'] for t in current_transactions if t['type'] == 'income'])
+    
+    # Categorias com maiores gastos
+    categories = {}
+    for p in projections:
+        cat = p.get('category', 'outros')
+        categories[cat] = categories.get(cat, 0) + p.get('amount', 0)
+    
+    top_categories = sorted(categories.items(), key=lambda x: x[1], reverse=True)[:3]
+    
+    prompt = f"""Você é um consultor financeiro pessoal. Analise a projeção de gastos para {month} e forneça insights e sugestões práticas.
+
+Dados da Projeção:
+- Receita Estimada: R$ {estimated_income:.2f}
+- Total de Despesas Projetadas: R$ {total_projected:.2f}
+- Saldo Estimado: R$ {estimated_income - total_projected:.2f}
+- Número de Despesas Projetadas: {len(projections)}
+
+Maiores Categorias de Gastos:
+{chr(10).join([f"- {cat}: R$ {val:.2f}" for cat, val in top_categories])}
+
+Despesas Parceladas: {len([p for p in projections if p.get('projection_type') == 'installment'])}
+Despesas Fixas: {len([p for p in projections if p.get('is_fixed')])}
+
+Forneça:
+1. Uma análise do cenário financeiro projetado
+2. Alertas se houver risco de saldo negativo
+3. Sugestões de economia específicas para as maiores categorias
+4. Dicas para melhorar a saúde financeira
+
+Responda em português, de forma objetiva e prática."""
+    
+    try:
+        response_obj = google_ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        insights = response_obj.text
+        
+        return {
+            "month": month,
+            "insights": insights,
+            "summary": {
+                "estimated_income": estimated_income,
+                "total_projected": total_projected,
+                "estimated_balance": estimated_income - total_projected,
+                "top_categories": top_categories
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 
