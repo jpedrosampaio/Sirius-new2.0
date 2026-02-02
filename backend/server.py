@@ -1295,7 +1295,7 @@ async def get_card_invoices(request: Request, card_id: str, session_token: Optio
     return invoices
 
 @api_router.post("/credit-cards/{card_id}/charge")
-async def charge_to_card(request: Request, card_id: str, amount: float, description: str, category: str, session_token: Optional[str] = Cookie(None)):
+async def charge_to_card(request: Request, card_id: str, charge_data: CardChargeRequest, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
@@ -1303,20 +1303,37 @@ async def charge_to_card(request: Request, card_id: str, amount: float, descript
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
     
+    amount = charge_data.amount
+    description = charge_data.description
+    category = charge_data.category
+    payment_type = charge_data.payment_type
+    installments = charge_data.installments or 1
+    
+    if payment_type == "parcelado" and installments < 2:
+        installments = 2  # Mínimo de 2 parcelas para parcelamento
+    
+    # Calcular valor da parcela
+    installment_amount = amount / installments if payment_type == "parcelado" else amount
+    
     transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
     transaction_doc = {
         "transaction_id": transaction_id,
         "user_id": user.user_id,
         "type": "expense",
-        "amount": amount,
+        "amount": installment_amount,  # Primeira parcela ou valor à vista
+        "total_amount": amount,  # Valor total da compra
         "category": category,
-        "description": f"{description} (Cartão: {card['name']})",
+        "description": f"{description} (Cartão: {card['name']})" + (f" - Parcela 1/{installments}" if payment_type == "parcelado" else ""),
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "card_id": card_id,
+        "payment_type": payment_type,
+        "installments": installments,
+        "installment_number": 1,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.transactions.insert_one(transaction_doc)
     
+    # Atualizar fatura atual
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
     invoice = await db.invoices.find_one({"card_id": card_id, "month": current_month}, {"_id": 0})
     
@@ -1327,19 +1344,54 @@ async def charge_to_card(request: Request, card_id: str, amount: float, descript
             "card_id": card_id,
             "user_id": user.user_id,
             "month": current_month,
-            "amount": amount,
+            "amount": installment_amount,
             "paid": False,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.invoices.insert_one(invoice_doc)
     else:
-        new_amount = invoice['amount'] + amount
+        new_amount = invoice['amount'] + installment_amount
         await db.invoices.update_one(
             {"invoice_id": invoice['invoice_id']},
             {"$set": {"amount": new_amount}}
         )
     
-    return {"message": "Charged to card", "transaction_id": transaction_id}
+    # Se for parcelado, criar projeções para os meses seguintes
+    if payment_type == "parcelado" and installments > 1:
+        current_date = datetime.now(timezone.utc)
+        
+        for i in range(2, installments + 1):  # Começar da parcela 2
+            # Calcular mês da parcela
+            future_date = current_date + timedelta(days=30 * (i - 1))
+            future_month = future_date.strftime("%Y-%m")
+            
+            projection_id = f"proj_{uuid.uuid4().hex[:12]}"
+            projection_doc = {
+                "projection_id": projection_id,
+                "user_id": user.user_id,
+                "month": future_month,
+                "description": f"{description} (Cartão: {card['name']}) - Parcela {i}/{installments}",
+                "amount": installment_amount,
+                "category": category,
+                "projection_type": "installment",
+                "is_fixed": False,
+                "repeat_count": None,
+                "remaining_repeats": None,
+                "source_transaction_id": transaction_id,
+                "installment_number": i,
+                "total_installments": installments,
+                "card_id": card_id,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.projections.insert_one(projection_doc)
+    
+    return {
+        "message": "Charged to card", 
+        "transaction_id": transaction_id,
+        "installment_amount": installment_amount,
+        "total_amount": amount,
+        "installments": installments
+    }
 
 @api_router.patch("/invoices/{invoice_id}/pay")
 async def pay_invoice(request: Request, invoice_id: str, session_token: Optional[str] = Cookie(None)):
