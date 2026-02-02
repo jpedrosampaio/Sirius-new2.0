@@ -114,39 +114,48 @@ user_problem_statement: |
 backend:
   - task: "Charge to card with installments"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented charge endpoint with payment_type (vista/parcelado) and installments support"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Credit card charge with installments working correctly. Created card, charged R$ 1200.00 in 3 installments (R$ 400.00 each). Installment projections created for future months as expected."
 
   - task: "Projections CRUD endpoints"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Created GET/POST/PATCH/DELETE endpoints for projections, plus summary and insights endpoints"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: All projection CRUD endpoints working correctly. GET /api/projections returns projections by month, POST creates new projections, PATCH updates amount/description, DELETE removes projections. Summary endpoint provides totals by category and type."
 
   - task: "Google Gemini AI integration"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Replaced Emergent LLM with Google Gemini (gemini-2.5-flash) for chat and reports"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Google Gemini AI integration working correctly. Both /api/projections/insights and /api/chat/send endpoints generate meaningful AI responses (5000+ characters). AI provides financial insights and responds to user queries appropriately."
 
 frontend:
   - task: "Credit card charge with installments UI"
