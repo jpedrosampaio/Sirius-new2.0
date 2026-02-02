@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,13 +16,18 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
-  const [imageFile, setImageFile] = useState(null);
-  const [audioFile, setAudioFile] = useState(null);
+  const scrollRef = useRef(null);
 
   useEffect(() => {
     fetchUser();
     fetchMessages();
   }, []);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   const fetchUser = async () => {
     try {
@@ -38,39 +43,50 @@ export default function Chat() {
       const res = await axios.get(`${API}/chat/messages`, { withCredentials: true });
       setMessages(res.data);
     } catch (error) {
-      toast.error("Erro ao carregar mensagens");
+      console.error("Erro ao carregar mensagens", error);
     }
   };
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!content.trim() && !imageFile && !audioFile) {
-      toast.error("Digite uma mensagem ou anexe um arquivo");
+    if (!content.trim()) {
+      toast.error("Digite uma mensagem");
       return;
     }
 
     setLoading(true);
+    const userMsg = {
+      message_id: `temp_${Date.now()}`,
+      role: "user",
+      content: content,
+      created_at: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, userMsg]);
+    const messageText = content;
+    setContent("");
+
     try {
-      const formData = new FormData();
-      formData.append('content', content);
-      if (imageFile) formData.append('image', imageFile);
-      if (audioFile) formData.append('audio', audioFile);
+      const res = await axios.post(
+        `${API}/chat/send`,
+        { content: messageText },
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
 
-      const res = await axios.post(`${API}/chat/send`, formData, {
-        withCredentials: true,
-        headers: { 'Content-Type': 'multipart/form-data' }
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.message_id !== userMsg.message_id);
+        return [...filtered, res.data.user_message, res.data.ai_message];
       });
-
-      setMessages([...messages, res.data.user_message, res.data.ai_message]);
-      setContent("");
-      setImageFile(null);
-      setAudioFile(null);
       
       if (res.data.ai_message.transaction_data) {
         toast.success("Transação registrada automaticamente!");
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Erro ao enviar mensagem");
+      console.error("Erro ao enviar:", error);
+      toast.error("Erro ao enviar mensagem");
+      setMessages(prev => prev.filter(m => m.message_id !== userMsg.message_id));
     } finally {
       setLoading(false);
     }
@@ -79,18 +95,19 @@ export default function Chat() {
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-64 flex flex-col h-screen">
-        <div className="p-6 border-b border-[#27272A]">
-          <h1 className="font-heading text-3xl mb-1" data-testid="chat-title">CHAT FINANCEIRO</h1>
-          <p className="text-sm text-[#A1A1AA]">Registre transações via texto, imagem ou áudio</p>
+      <div className="flex-1 ml-0 md:ml-64 flex flex-col h-screen">
+        <div className="p-4 md:p-6 border-b border-[#27272A]">
+          <h1 className="font-heading text-2xl md:text-3xl mb-1" data-testid="chat-title">CHAT FINANCEIRO</h1>
+          <p className="text-sm text-[#A1A1AA]">Registre transações via texto</p>
         </div>
 
-        <ScrollArea className="flex-1 p-6">
+        <div ref={scrollRef} className="flex-1 p-4 md:p-6 overflow-y-auto">
           <div className="max-w-4xl mx-auto space-y-4">
             {messages.length === 0 ? (
               <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
                 <MessageSquare className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
                 <p className="text-[#A1A1AA]">Inicie uma conversa sobre suas finanças</p>
+                <p className="text-sm text-[#52525B] mt-2">Exemplo: "Gastei R$ 50 no almoço"</p>
               </Card>
             ) : (
               messages.map((msg) => (
@@ -98,10 +115,10 @@ export default function Chat() {
                   key={msg.message_id}
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`flex items-start space-x-3 max-w-2xl ${
+                  <div className={`flex items-start space-x-3 max-w-[85%] md:max-w-2xl ${
                     msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                   }`}>
-                    <div className={`w-8 h-8 rounded-sm flex items-center justify-center ${
+                    <div className={`w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 ${
                       msg.role === 'user' ? 'bg-[#007AFF]' : 'bg-[#2C2C2E]'
                     }`}>
                       {msg.role === 'user' ? (
@@ -115,7 +132,7 @@ export default function Chat() {
                         ? 'bg-[#007AFF]/20 border border-[#007AFF]/30'
                         : 'bg-[#0A0A0A] border border-[#27272A]'
                     }`}>
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                       {msg.transaction_data && (
                         <div className="mt-3 pt-3 border-t border-[#27272A] text-xs">
                           <p className="text-[#39FF14] uppercase tracking-wider mb-1">Transação Registrada</p>
@@ -130,51 +147,11 @@ export default function Chat() {
               ))
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        <div className="p-6 border-t border-[#27272A] bg-[#0A0A0A]">
+        <div className="p-4 md:p-6 border-t border-[#27272A] bg-[#0A0A0A]">
           <form onSubmit={handleSend} className="max-w-4xl mx-auto">
             <div className="flex items-center space-x-3">
-              <div className="flex space-x-2">
-                <label htmlFor="image-upload">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="border-[#27272A] hover:bg-[#121212]"
-                    onClick={() => document.getElementById('image-upload').click()}
-                  >
-                    <Image className="w-5 h-5" />
-                  </Button>
-                </label>
-                <input
-                  id="image-upload"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => setImageFile(e.target.files[0])}
-                />
-
-                <label htmlFor="audio-upload">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="border-[#27272A] hover:bg-[#121212]"
-                    onClick={() => document.getElementById('audio-upload').click()}
-                  >
-                    <Mic className="w-5 h-5" />
-                  </Button>
-                </label>
-                <input
-                  id="audio-upload"
-                  type="file"
-                  accept="audio/*"
-                  className="hidden"
-                  onChange={(e) => setAudioFile(e.target.files[0])}
-                />
-              </div>
-
               <Input
                 data-testid="chat-input"
                 value={content}
@@ -197,12 +174,6 @@ export default function Chat() {
                 )}
               </Button>
             </div>
-            {(imageFile || audioFile) && (
-              <div className="mt-3 text-xs text-[#A1A1AA]">
-                {imageFile && <p>Imagem: {imageFile.name}</p>}
-                {audioFile && <p>Áudio: {audioFile.name}</p>}
-              </div>
-            )}
           </form>
         </div>
       </div>
