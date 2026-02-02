@@ -690,28 +690,7 @@ Exemplo de resposta JSON:
             system_message="Você é um assistente financeiro do Sirius."
         ).with_model("openai", "gpt-5.2")
         
-        if audio:
-            audio_bytes = await audio.read()
-            temp_path = f"/tmp/audio_{uuid.uuid4().hex}.mp3"
-            async with aiofiles.open(temp_path, 'wb') as f:
-                await f.write(audio_bytes)
-            
-            stt = OpenAISpeechToText(api_key=llm_key)
-            with open(temp_path, 'rb') as audio_file:
-                transcription = await stt.transcribe(file=audio_file, model="whisper-1", response_format="json")
-                content += f" [Áudio transcrito: {transcription.text}]"
-        
-        if image:
-            image_bytes = await image.read()
-            base64_image = base64.b64encode(image_bytes).decode('utf-8')
-            image_content = ImageContent(image_base64=base64_image)
-            user_msg = UserMessage(
-                text=f"{prompt}\n\nImagem enviada pelo usuário. Analise a imagem e extraia informações financeiras se houver (recibo, nota fiscal, etc.).",
-                file_contents=[image_content]
-            )
-            response = await chat.send_message(user_msg)
-        else:
-            response = await chat.send_message(UserMessage(text=prompt))
+        response = await chat.send_message(UserMessage(text=prompt))
         
         ai_message_id = f"msg_{uuid.uuid4().hex[:12]}"
         ai_message = {
@@ -743,6 +722,9 @@ Exemplo de resposta JSON:
             pass
         
         await db.chat_messages.insert_one(ai_message)
+        
+        user_message['created_at'] = datetime.fromisoformat(user_message['created_at'])
+        ai_message['created_at'] = datetime.fromisoformat(ai_message['created_at'])
         
         return {"user_message": user_message, "ai_message": ai_message}
     except Exception as e:
