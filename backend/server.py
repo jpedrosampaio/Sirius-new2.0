@@ -679,27 +679,61 @@ async def send_chat_message(request: Request, message_data: ChatMessageCreate, s
     }
     await db.chat_messages.insert_one(user_message)
     
-    prompt = f"""Você é um assistente financeiro integrado ao app Sirius. O usuário enviou a seguinte mensagem: "{content}".
-    
-Analise a mensagem e identifique se há informações sobre transações financeiras (receitas ou despesas).
-Se houver, extraia:
-- tipo: "income" ou "expense"
-- valor (número)
-- categoria
-- descrição
-
-Responda em formato JSON se for uma transação, ou uma mensagem de texto amigável caso contrário.
-
-Exemplo de resposta JSON:
-{{"type": "expense", "amount": 50.0, "category": "alimentação", "description": "almoço no restaurante"}}
-"""
-    
     try:
         llm_key = os.getenv("EMERGENT_LLM_KEY", "")
+        
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+        transactions = await db.transactions.find(
+            {"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}},
+            {"_id": 0}
+        ).to_list(100)
+        
+        total_income = sum([t['amount'] for t in transactions if t['type'] == 'income'])
+        total_expense = sum([t['amount'] for t in transactions if t['type'] == 'expense'])
+        
+        context = f"Contexto financeiro do usuário este mês: Receitas R$ {total_income:.2f}, Despesas R$ {total_expense:.2f}, Saldo R$ {total_income - total_expense:.2f}"
+        
+        is_transaction_query = any(word in content.lower() for word in ['gastei', 'ganhei', 'recebi', 'paguei', 'comprei', 'r$', 'reais'])
+        is_report_query = any(word in content.lower() for word in ['relatório', 'relatorio', 'resumo', 'analise', 'análise', 'como está', 'como estão'])
+        
+        if is_transaction_query:
+            prompt = f'''Analise a mensagem do usuário e extraia informações de transação financeira.
+
+Mensagem: "{content}"
+
+Se for uma transação, responda APENAS com JSON no formato:
+{{"type": "expense", "amount": 50.0, "category": "alimentação", "description": "descrição curta"}}
+
+Categorias válidas: alimentação, transporte, moradia, saúde, educação, lazer, outros
+
+Se NÃO for uma transação clara, responda com texto normal oferecendo ajuda.'''
+        
+        elif is_report_query:
+            prompt = f'''O usuário pediu um resumo/relatório financeiro.
+
+{context}
+
+Forneça uma análise completa e insights sobre:
+1. Status atual das finanças
+2. Principais gastos
+3. Sugestões de economia
+4. Alertas importantes
+
+Seja profissional mas amigável.'''
+        
+        else:
+            prompt = f'''Você é um assistente financeiro do Sirius.
+
+{context}
+
+Usuário: "{content}"
+
+Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. Se for conversa geral sobre finanças, seja prestativo.'''
+        
         chat = LlmChat(
             api_key=llm_key,
             session_id=f"chat_{user.user_id}",
-            system_message="Você é um assistente financeiro do Sirius."
+            system_message="Você é um assistente financeiro inteligente do Sirius. Ajude com transações, análises e insights financeiros."
         ).with_model("openai", "gpt-5.2")
         
         response = await chat.send_message(UserMessage(text=prompt))
@@ -713,25 +747,28 @@ Exemplo de resposta JSON:
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
-        try:
-            import json
-            transaction_data = json.loads(response)
-            if "type" in transaction_data and "amount" in transaction_data:
-                transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
-                transaction_doc = {
-                    "transaction_id": transaction_id,
-                    "user_id": user.user_id,
-                    "type": transaction_data["type"],
-                    "amount": float(transaction_data["amount"]),
-                    "category": transaction_data.get("category", "outros"),
-                    "description": transaction_data.get("description", ""),
-                    "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                    "created_at": datetime.now(timezone.utc).isoformat()
-                }
-                await db.transactions.insert_one(transaction_doc)
-                ai_message["transaction_data"] = transaction_data
-        except:
-            pass
+        transaction_data = None
+        if is_transaction_query:
+            try:
+                import json
+                transaction_data = json.loads(response)
+                if "type" in transaction_data and "amount" in transaction_data:
+                    transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
+                    transaction_doc = {
+                        "transaction_id": transaction_id,
+                        "user_id": user.user_id,
+                        "type": transaction_data["type"],
+                        "amount": float(transaction_data["amount"]),
+                        "category": transaction_data.get("category", "outros"),
+                        "description": transaction_data.get("description", ""),
+                        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.transactions.insert_one(transaction_doc)
+                    ai_message["transaction_data"] = transaction_data
+                    ai_message["content"] = f"✓ Transação registrada: {transaction_data['type']} de R$ {transaction_data['amount']:.2f} em {transaction_data['category']}"
+            except:
+                pass
         
         await db.chat_messages.insert_one(ai_message)
         
