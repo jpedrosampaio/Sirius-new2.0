@@ -347,19 +347,40 @@ async def logout(request: Request, response: Response, session_token: Optional[s
     return {"message": "Logged out"}
 
 @api_router.get("/tasks")
-async def get_tasks(request: Request, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+async def get_tasks(request: Request, date: Optional[str] = None, recurrence: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
-    query = {"user_id": user.user_id}
-    if date:
-        query["date"] = date
+    if not date:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
-    tasks = await db.tasks.find(query, {"_id": 0}).to_list(1000)
-    for task in tasks:
-        if isinstance(task['created_at'], str):
-            task['created_at'] = datetime.fromisoformat(task['created_at'])
-    return tasks
+    query = {"user_id": user.user_id}
+    if recurrence:
+        query["recurrence"] = recurrence
+    
+    all_tasks = await db.tasks.find({"user_id": user.user_id, "is_template": True}, {"_id": 0}).to_list(1000)
+    
+    result_tasks = []
+    for task in all_tasks:
+        if recurrence and task.get('recurrence') != recurrence:
+            continue
+            
+        instance = await db.task_instances.find_one({
+            "task_id": task["task_id"],
+            "date": date
+        }, {"_id": 0})
+        
+        task_copy = task.copy()
+        task_copy["date"] = date
+        task_copy["completed"] = instance["completed"] if instance else False
+        task_copy["instance_id"] = instance["instance_id"] if instance else None
+        
+        if isinstance(task_copy['created_at'], str):
+            task_copy['created_at'] = datetime.fromisoformat(task_copy['created_at'])
+        
+        result_tasks.append(task_copy)
+    
+    return result_tasks
 
 @api_router.post("/tasks")
 async def create_task(request: Request, task_data: TaskCreate, session_token: Optional[str] = Cookie(None)):
@@ -372,20 +393,48 @@ async def create_task(request: Request, task_data: TaskCreate, session_token: Op
         "user_id": user.user_id,
         "title": task_data.title,
         "description": task_data.description,
-        "completed": False,
-        "date": task_data.date,
         "priority": task_data.priority,
         "xp_reward": 10 if task_data.priority == "low" else 20 if task_data.priority == "medium" else 30,
+        "recurrence": task_data.recurrence,
+        "is_template": True,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.tasks.insert_one(task_doc)
     task_doc['created_at'] = datetime.fromisoformat(task_doc['created_at'])
+    task_doc['date'] = task_data.date
+    task_doc['completed'] = False
+    task_doc['instance_id'] = None
     return Task(**task_doc)
 
 @api_router.patch("/tasks/{task_id}")
-async def update_task(request: Request, task_id: str, completed: bool, session_token: Optional[str] = Cookie(None)):
+async def update_task(request: Request, task_id: str, completed: bool, date: str, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    task = await db.tasks.find_one({"task_id": task_id, "user_id": user.user_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    instance = await db.task_instances.find_one({"task_id": task_id, "date": date}, {"_id": 0})
+    
+    if not instance:
+        instance_id = f"inst_{uuid.uuid4().hex[:12]}"
+        instance_doc = {
+            "instance_id": instance_id,
+            "task_id": task_id,
+            "user_id": user.user_id,
+            "date": date,
+            "completed": completed,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.task_instances.insert_one(instance_doc)
+        was_completed = False
+    else:
+        await db.task_instances.update_one(
+            {"instance_id": instance["instance_id"]},
+            {"$set": {"completed": completed}}
+        )
+        was_completed = instance["completed"]
     
     task = await db.tasks.find_one({"task_id": task_id, "user_id": user.user_id}, {"_id": 0})
     if not task:
