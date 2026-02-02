@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckSquare, Plus, Trash2, Circle, CheckCircle2 } from "lucide-react";
@@ -93,16 +92,16 @@ export default function Tasks() {
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-64 p-8">
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
             <div>
-              <h1 className="font-heading text-4xl mb-2" data-testid="tasks-title">TAREFAS DIÁRIAS</h1>
+              <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="tasks-title">TAREFAS DIÁRIAS</h1>
               <p className="text-[#A1A1AA]">Execute com precisão</p>
             </div>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button data-testid="tasks-create-btn" className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest shadow-[0_0_10px_rgba(0,122,255,0.3)]">
+                <Button data-testid="tasks-create-btn" className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest shadow-[0_0_10px_rgba(0,122,255,0.3)] w-full md:w-auto">
                   <Plus className="w-4 h-4 mr-2" />
                   Nova Tarefa
                 </Button>
@@ -132,16 +131,21 @@ export default function Tasks() {
                   </div>
                   <div>
                     <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Prioridade</Label>
-                    <Select value={newTask.priority} onValueChange={(value) => setNewTask({...newTask, priority: value})}>
-                      <SelectTrigger data-testid="task-priority-select" className="bg-[#121212] border-[#27272A] text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#121212] border-[#27272A] text-white">
-                        <SelectItem value="low">Baixa</SelectItem>
-                        <SelectItem value="medium">Média</SelectItem>
-                        <SelectItem value="high">Alta</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      {['low', 'medium', 'high'].map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setNewTask({...newTask, priority: p})}
+                          className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
+                            newTask.priority === p
+                              ? 'bg-[#007AFF] text-white'
+                              : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                          }`}
+                        >
+                          {p === 'low' ? 'Baixa' : p === 'medium' ? 'Média' : 'Alta'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <Button data-testid="task-submit-btn" onClick={handleCreateTask} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
                     Criar
@@ -156,7 +160,7 @@ export default function Tasks() {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-[#0A0A0A] border-[#27272A] text-white font-mono max-w-xs"
+              className="bg-[#0A0A0A] border-[#27272A] text-white font-mono max-w-full md:max-w-xs"
             />
           </div>
 
