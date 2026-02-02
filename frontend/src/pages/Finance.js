@@ -6,23 +6,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2 } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const COLORS = ['#007AFF', '#39FF14', '#FF9500', '#FF3B30', '#00F0FF', '#FFD700', '#FF00FF'];
+const COLORS = ['#007AFF', '#39FF14', '#FF9500', '#FF3B30', '#00F0FF', '#FFD700', '#FF00FF', '#A855F7', '#10B981'];
 
 export default function Finance() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [budgets, setBudgets] = useState([]);
+  const [creditCards, setCreditCards] = useState([]);
   const [stats, setStats] = useState(null);
   const [openTransaction, setOpenTransaction] = useState(false);
   const [openBudget, setOpenBudget] = useState(false);
+  const [openCard, setOpenCard] = useState(false);
+  const [openCharge, setOpenCharge] = useState(false);
+  const [selectedCard, setSelectedCard] = useState(null);
+  
   const [newTransaction, setNewTransaction] = useState({
     type: "expense",
     amount: "",
@@ -30,6 +35,7 @@ export default function Finance() {
     description: "",
     date: new Date().toISOString().split('T')[0]
   });
+  
   const [newBudget, setNewBudget] = useState({
     category: "alimentação",
     limit: "",
@@ -37,6 +43,20 @@ export default function Finance() {
     budget_type: "fixed",
     percentage: ""
   });
+  
+  const [newCard, setNewCard] = useState({
+    name: "",
+    limit: "",
+    closing_day: "",
+    due_day: ""
+  });
+  
+  const [newCharge, setNewCharge] = useState({
+    amount: "",
+    description: "",
+    category: "alimentação"
+  });
+  
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   const categories = ["alimentação", "transporte", "moradia", "saúde", "educação", "lazer", "outros"];
@@ -46,6 +66,7 @@ export default function Finance() {
     fetchTransactions();
     fetchBudgets();
     fetchStats();
+    fetchCreditCards();
   }, [selectedMonth]);
 
   const fetchUser = async () => {
@@ -62,7 +83,7 @@ export default function Finance() {
       const res = await axios.get(`${API}/transactions?month=${selectedMonth}`, { withCredentials: true });
       setTransactions(res.data);
     } catch (error) {
-      toast.error("Erro ao carregar transações");
+      console.error("Erro ao carregar transações");
     }
   };
 
@@ -71,7 +92,7 @@ export default function Finance() {
       const res = await axios.get(`${API}/budgets?month=${selectedMonth}`, { withCredentials: true });
       setBudgets(res.data);
     } catch (error) {
-      toast.error("Erro ao carregar orçamentos");
+      console.error("Erro ao carregar orçamentos");
     }
   };
 
@@ -81,6 +102,15 @@ export default function Finance() {
       setStats(res.data);
     } catch (error) {
       console.error("Erro ao carregar estatísticas");
+    }
+  };
+
+  const fetchCreditCards = async () => {
+    try {
+      const res = await axios.get(`${API}/credit-cards`, { withCredentials: true });
+      setCreditCards(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar cartões");
     }
   };
 
@@ -144,6 +174,44 @@ export default function Finance() {
     }
   };
 
+  const handleCreateCard = async () => {
+    if (!newCard.name || !newCard.limit || !newCard.closing_day || !newCard.due_day) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+    try {
+      await axios.post(`${API}/credit-cards`, {
+        ...newCard,
+        limit: parseFloat(newCard.limit),
+        closing_day: parseInt(newCard.closing_day),
+        due_day: parseInt(newCard.due_day)
+      }, { withCredentials: true });
+      toast.success("Cartão cadastrado!");
+      setNewCard({ name: "", limit: "", closing_day: "", due_day: "" });
+      setOpenCard(false);
+      fetchCreditCards();
+    } catch (error) {
+      toast.error("Erro ao cadastrar cartão");
+    }
+  };
+
+  const handleChargeCard = async () => {
+    if (!newCharge.amount || parseFloat(newCharge.amount) <= 0) {
+      toast.error("Valor inválido");
+      return;
+    }
+    try {
+      await axios.post(`${API}/credit-cards/${selectedCard}/charge?amount=${parseFloat(newCharge.amount)}&description=${encodeURIComponent(newCharge.description)}&category=${newCharge.category}`, {}, { withCredentials: true });
+      toast.success("Compra lançada no cartão!");
+      setNewCharge({ amount: "", description: "", category: "alimentação" });
+      setOpenCharge(false);
+      fetchTransactions();
+      fetchStats();
+    } catch (error) {
+      toast.error("Erro ao lançar compra");
+    }
+  };
+
   const handleDeleteTransaction = async (id) => {
     try {
       await axios.delete(`${API}/transactions/${id}`, { withCredentials: true });
@@ -159,14 +227,9 @@ export default function Finance() {
   const expenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const balance = income - expenses;
 
-  const expenseChartData = stats ? Object.entries(stats.expense_by_category).map(([name, value]) => ({
+  const chartData = stats && stats.expense_by_category ? Object.entries(stats.expense_by_category).map(([name, value]) => ({
     name: name.charAt(0).toUpperCase() + name.slice(1),
     value: value
-  })) : [];
-
-  const barChartData = stats ? Object.entries(stats.expense_by_category).map(([name, value]) => ({
-    category: name.charAt(0).toUpperCase() + name.slice(1),
-    gasto: value
   })) : [];
 
   return (
@@ -174,11 +237,9 @@ export default function Finance() {
       <Sidebar user={user} />
       <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
-            <div>
-              <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="finance-title">FINANÇAS</h1>
-              <p className="text-[#A1A1AA]">Controle total do seu dinheiro</p>
-            </div>
+          <div className="mb-8">
+            <h1 className="font-heading text-3xl md:text-4xl mb-2">FINANÇAS</h1>
+            <p className="text-[#A1A1AA]">Controle total do seu dinheiro</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -209,49 +270,32 @@ export default function Finance() {
             </Card>
           </div>
 
-          {expenseChartData.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                <h3 className="font-heading text-xl mb-4 uppercase">Gastos por Categoria (Pizza)</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={expenseChartData}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={80}
-                      label={(entry) => `${entry.name}: R$ ${entry.value.toFixed(0)}`}
-                    >
-                      {expenseChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Card>
-
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                <h3 className="font-heading text-xl mb-4 uppercase">Gastos por Categoria (Barras)</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={barChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
-                    <XAxis dataKey="category" stroke="#A1A1AA" angle={-45} textAnchor="end" height={80} />
-                    <YAxis stroke="#A1A1AA" />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A' }}
-                      formatter={(value) => `R$ ${value.toFixed(2)}`}
-                    />
-                    <Bar dataKey="gasto" fill="#007AFF" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-            </div>
+          {chartData.length > 0 && (
+            <Card className="bg-[#0A0A0A] border-[#27272A] p-6 mb-8">
+              <h3 className="font-heading text-xl mb-4 uppercase">Gastos por Categoria</h3>
+              <ResponsiveContainer width="100%" height={350}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={120}
+                    label={(entry) => `${entry.name}: R$ ${entry.value.toFixed(0)}`}
+                    labelLine={true}
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </Card>
           )}
 
-          <div className="mb-6 flex items-center space-x-4">
+          <div className="mb-6">
             <Input
               type="month"
               value={selectedMonth}
@@ -262,20 +306,21 @@ export default function Finance() {
 
           <Tabs defaultValue="transactions" className="w-full">
             <TabsList className="bg-[#0A0A0A] border-[#27272A]">
-              <TabsTrigger value="transactions" className="data-[state=active]:bg-[#007AFF]">Transações</TabsTrigger>
-              <TabsTrigger value="budgets" className="data-[state=active]:bg-[#007AFF]">Orçamentos</TabsTrigger>
+              <TabsTrigger value="transactions">Transações</TabsTrigger>
+              <TabsTrigger value="budgets">Orçamentos</TabsTrigger>
+              <TabsTrigger value="cards">Cartões</TabsTrigger>
             </TabsList>
 
             <TabsContent value="transactions" className="mt-6">
               <div className="flex justify-end mb-4">
                 <Dialog open={openTransaction} onOpenChange={setOpenTransaction}>
                   <DialogTrigger asChild>
-                    <Button data-testid="transaction-create-btn" className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
+                    <Button className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
                       <Plus className="w-4 h-4 mr-2" />
                       Nova Transação
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white">
+                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
                     <DialogHeader>
                       <DialogTitle className="font-heading text-2xl">NOVA TRANSAÇÃO</DialogTitle>
                     </DialogHeader>
@@ -287,10 +332,8 @@ export default function Finance() {
                             <button
                               key={type.value}
                               onClick={() => setNewTransaction({...newTransaction, type: type.value})}
-                              className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
-                                newTransaction.type === type.value
-                                  ? 'bg-[#007AFF] text-white'
-                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors ${
+                                newTransaction.type === type.value ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
                               }`}
                             >
                               {type.label}
@@ -299,26 +342,24 @@ export default function Finance() {
                         </div>
                       </div>
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Valor</Label>
+                        <Label>Valor</Label>
                         <Input
                           type="number"
                           step="0.01"
                           value={newTransaction.amount}
                           onChange={(e) => setNewTransaction({...newTransaction, amount: e.target.value})}
-                          className="bg-[#121212] border-[#27272A] text-white font-mono"
+                          className="bg-[#121212] border-[#27272A] text-white"
                         />
                       </div>
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Categoria</Label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <Label>Categoria</Label>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
                           {categories.map(cat => (
                             <button
                               key={cat}
                               onClick={() => setNewTransaction({...newTransaction, category: cat})}
-                              className={`py-2 px-3 rounded-sm text-xs uppercase tracking-wider transition-colors ${
-                                newTransaction.category === cat
-                                  ? 'bg-[#007AFF] text-white'
-                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              className={`py-2 px-3 rounded-sm text-xs uppercase transition-colors ${
+                                newTransaction.category === cat ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
                               }`}
                             >
                               {cat}
@@ -327,7 +368,7 @@ export default function Finance() {
                         </div>
                       </div>
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Descrição</Label>
+                        <Label>Descrição</Label>
                         <Input
                           value={newTransaction.description}
                           onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
@@ -335,15 +376,15 @@ export default function Finance() {
                         />
                       </div>
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Data</Label>
+                        <Label>Data</Label>
                         <Input
                           type="date"
                           value={newTransaction.date}
                           onChange={(e) => setNewTransaction({...newTransaction, date: e.target.value})}
-                          className="bg-[#121212] border-[#27272A] text-white font-mono"
+                          className="bg-[#121212] border-[#27272A] text-white"
                         />
                       </div>
-                      <Button onClick={handleCreateTransaction} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
+                      <Button onClick={handleCreateTransaction} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
                         Criar
                       </Button>
                     </div>
@@ -357,40 +398,27 @@ export default function Finance() {
                     <p className="text-[#A1A1AA]">Nenhuma transação neste período</p>
                   </Card>
                 ) : (
-                  transactions.map((transaction) => (
-                    <Card key={transaction.transaction_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
+                  transactions.slice(0, 20).map((t) => (
+                    <Card key={t.transaction_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4 flex-1">
                           <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${
-                            transaction.type === 'income' ? 'bg-[#39FF14]/20' : 'bg-[#FF3B30]/20'
+                            t.type === 'income' ? 'bg-[#39FF14]/20' : 'bg-[#FF3B30]/20'
                           }`}>
-                            {transaction.type === 'income' ? (
-                              <TrendingUp className="w-5 h-5 text-[#39FF14]" />
-                            ) : (
-                              <TrendingDown className="w-5 h-5 text-[#FF3B30]" />
-                            )}
+                            {t.type === 'income' ? <TrendingUp className="w-5 h-5 text-[#39FF14]" /> : <TrendingDown className="w-5 h-5 text-[#FF3B30]" />}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-1">
-                              <span className="font-medium">{transaction.category}</span>
-                              <span className="text-xs text-[#A1A1AA]">{transaction.date}</span>
+                              <span className="font-medium">{t.category}</span>
+                              <span className="text-xs text-[#A1A1AA]">{t.date}</span>
                             </div>
-                            {transaction.description && (
-                              <p className="text-sm text-[#A1A1AA]">{transaction.description}</p>
-                            )}
+                            {t.description && <p className="text-sm text-[#A1A1AA]">{t.description}</p>}
                           </div>
-                          <div className={`font-data text-xl ${
-                            transaction.type === 'income' ? 'text-[#39FF14]' : 'text-[#FF3B30]'
-                          }`}>
-                            {transaction.type === 'income' ? '+' : '-'}R$ {transaction.amount.toFixed(2)}
+                          <div className={`font-data text-xl ${t.type === 'income' ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                            {t.type === 'income' ? '+' : '-'}R$ {t.amount.toFixed(2)}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteTransaction(transaction.transaction_id)}
-                            className="text-[#52525B] hover:text-[#FF3B30] hover:bg-[#FF3B30]/10"
-                          >
-                            <Trash2 className="w-4 h-4" />
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteTransaction(t.transaction_id)}>
+                            <Trash2 className="w-4 h-4 text-[#52525B] hover:text-[#FF3B30]" />
                           </Button>
                         </div>
                       </div>
@@ -404,27 +432,25 @@ export default function Finance() {
               <div className="flex justify-end mb-4">
                 <Dialog open={openBudget} onOpenChange={setOpenBudget}>
                   <DialogTrigger asChild>
-                    <Button data-testid="budget-create-btn" className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
+                    <Button className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
                       <Plus className="w-4 h-4 mr-2" />
                       Novo Orçamento
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white">
+                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
                     <DialogHeader>
                       <DialogTitle className="font-heading text-2xl">NOVO ORÇAMENTO</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 mt-4">
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Categoria</Label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <Label>Categoria</Label>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
                           {categories.map(cat => (
                             <button
                               key={cat}
                               onClick={() => setNewBudget({...newBudget, category: cat})}
-                              className={`py-2 px-3 rounded-sm text-xs uppercase tracking-wider transition-colors ${
-                                newBudget.category === cat
-                                  ? 'bg-[#007AFF] text-white'
-                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              className={`py-2 px-3 rounded-sm text-xs uppercase transition-colors ${
+                                newBudget.category === cat ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
                               }`}
                             >
                               {cat}
@@ -433,16 +459,14 @@ export default function Finance() {
                         </div>
                       </div>
                       <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Tipo</Label>
-                        <div className="flex gap-2">
-                          {[{value: 'fixed', label: 'Valor Fixo'}, {value: 'percentage', label: 'Percentual'}].map((type) => (
+                        <Label>Tipo</Label>
+                        <div className="flex gap-2 mt-2">
+                          {[{value: 'fixed', label: 'Valor Fixo'}, {value: 'percentage', label: '%'}].map((type) => (
                             <button
                               key={type.value}
                               onClick={() => setNewBudget({...newBudget, budget_type: type.value})}
-                              className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
-                                newBudget.budget_type === type.value
-                                  ? 'bg-[#007AFF] text-white'
-                                  : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
+                              className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors ${
+                                newBudget.budget_type === type.value ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
                               }`}
                             >
                               {type.label}
@@ -452,37 +476,26 @@ export default function Finance() {
                       </div>
                       {newBudget.budget_type === 'fixed' ? (
                         <div>
-                          <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Limite (R$)</Label>
+                          <Label>Limite (R$)</Label>
                           <Input
                             type="number"
-                            step="0.01"
                             value={newBudget.limit}
                             onChange={(e) => setNewBudget({...newBudget, limit: e.target.value})}
-                            className="bg-[#121212] border-[#27272A] text-white font-mono"
+                            className="bg-[#121212] border-[#27272A] text-white"
                           />
                         </div>
                       ) : (
                         <div>
-                          <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Percentual da Renda (%)</Label>
+                          <Label>% da Renda</Label>
                           <Input
                             type="number"
-                            step="0.1"
                             value={newBudget.percentage}
                             onChange={(e) => setNewBudget({...newBudget, percentage: e.target.value})}
-                            className="bg-[#121212] border-[#27272A] text-white font-mono"
+                            className="bg-[#121212] border-[#27272A] text-white"
                           />
                         </div>
                       )}
-                      <div>
-                        <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Mês</Label>
-                        <Input
-                          type="month"
-                          value={newBudget.month}
-                          onChange={(e) => setNewBudget({...newBudget, month: e.target.value})}
-                          className="bg-[#121212] border-[#27272A] text-white font-mono"
-                        />
-                      </div>
-                      <Button onClick={handleCreateBudget} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
+                      <Button onClick={handleCreateBudget} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
                         Criar
                       </Button>
                     </div>
@@ -498,45 +511,187 @@ export default function Finance() {
                 ) : (
                   budgets.map((budget) => {
                     const percentage = (budget.spent / budget.limit) * 100;
-                    const isOverBudget = percentage > 100;
+                    const isOver = percentage > 100;
                     return (
-                      <Card key={budget.budget_id} className={`bg-[#0A0A0A] border-[#27272A] p-6 ${isOverBudget ? 'border-[#FF3B30]' : ''}`}>
-                        {isOverBudget && (
+                      <Card key={budget.budget_id} className={`bg-[#0A0A0A] border-[#27272A] p-6 ${isOver ? 'border-[#FF3B30]' : ''}`}>
+                        {isOver && (
                           <div className="flex items-center space-x-2 mb-3 text-[#FF3B30]">
                             <AlertCircle className="w-5 h-5" />
-                            <span className="text-sm uppercase tracking-wider">Orçamento Estourado</span>
+                            <span className="text-sm uppercase">Estourado</span>
                           </div>
                         )}
                         <h3 className="font-heading text-xl mb-4">{budget.category.toUpperCase()}</h3>
-                        <div className="space-y-2 mb-4">
+                        <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-[#A1A1AA]">Gasto</span>
-                            <span className="font-data">R$ {budget.spent.toFixed(2)}</span>
+                            <span>R$ {budget.spent.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-[#A1A1AA]">Limite</span>
-                            <span className="font-data">R$ {budget.limit.toFixed(2)} {budget.budget_type === 'percentage' && `(${budget.percentage}%)`}</span>
+                            <span>R$ {budget.limit.toFixed(2)}</span>
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span className={percentage > 100 ? 'text-[#FF3B30]' : 'text-[#A1A1AA]'}>
-                              {percentage.toFixed(0)}%
-                            </span>
-                            <span className="font-data text-xs text-[#A1A1AA]">
-                              {budget.limit - budget.spent > 0 ? `R$ ${(budget.limit - budget.spent).toFixed(2)} restante` : 'Estourado'}
-                            </span>
-                          </div>
-                          <div className="h-2 bg-[#27272A] rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all ${isOverBudget ? 'bg-[#FF3B30]' : 'bg-[#007AFF]'}`}
-                              style={{ width: `${Math.min(percentage, 100)}%` }}
-                            />
+                          <div className="h-2 bg-[#27272A] rounded-full overflow-hidden mt-3">
+                            <div className={`h-full ${isOver ? 'bg-[#FF3B30]' : 'bg-[#007AFF]'}`} style={{ width: `${Math.min(percentage, 100)}%` }} />
                           </div>
                         </div>
                       </Card>
                     );
                   })
+                )}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="cards" className="mt-6">
+              <div className="flex justify-end mb-4 space-x-2">
+                <Dialog open={openCard} onOpenChange={setOpenCard}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Novo Cartão
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="font-heading text-2xl">CADASTRAR CARTÃO</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                      <div>
+                        <Label>Nome do Cartão</Label>
+                        <Input
+                          value={newCard.name}
+                          onChange={(e) => setNewCard({...newCard, name: e.target.value})}
+                          placeholder="Ex: Nubank, Itaú"
+                          className="bg-[#121212] border-[#27272A] text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label>Limite (R$)</Label>
+                        <Input
+                          type="number"
+                          value={newCard.limit}
+                          onChange={(e) => setNewCard({...newCard, limit: e.target.value})}
+                          className="bg-[#121212] border-[#27272A] text-white"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Dia Fechamento</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={newCard.closing_day}
+                            onChange={(e) => setNewCard({...newCard, closing_day: e.target.value})}
+                            className="bg-[#121212] border-[#27272A] text-white"
+                          />
+                        </div>
+                        <div>
+                          <Label>Dia Vencimento</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={newCard.due_day}
+                            onChange={(e) => setNewCard({...newCard, due_day: e.target.value})}
+                            className="bg-[#121212] border-[#27272A] text-white"
+                          />
+                        </div>
+                      </div>
+                      <Button onClick={handleCreateCard} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
+                        Cadastrar
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {creditCards.length === 0 ? (
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center col-span-full">
+                    <CreditCardIcon className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
+                    <p className="text-[#A1A1AA]">Nenhum cartão cadastrado</p>
+                  </Card>
+                ) : (
+                  creditCards.map((card) => (
+                    <Card key={card.card_id} className="bg-[#0A0A0A] border-[#27272A] p-6">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-12 h-12 bg-[#007AFF]/20 rounded-sm flex items-center justify-center">
+                          <CreditCardIcon className="w-6 h-6 text-[#007AFF]" />
+                        </div>
+                        <div>
+                          <h3 className="font-heading text-lg">{card.name}</h3>
+                          <p className="text-xs text-[#A1A1AA]">Limite: R$ {card.limit.toFixed(2)}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 text-sm mb-4">
+                        <div className="flex justify-between">
+                          <span className="text-[#A1A1AA]">Fechamento</span>
+                          <span>Dia {card.closing_day}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-[#A1A1AA]">Vencimento</span>
+                          <span>Dia {card.due_day}</span>
+                        </div>
+                      </div>
+                      <Dialog open={openCharge && selectedCard === card.card_id} onOpenChange={(open) => {
+                        setOpenCharge(open);
+                        if (!open) setSelectedCard(null);
+                      }}>
+                        <DialogTrigger asChild>
+                          <Button 
+                            onClick={() => setSelectedCard(card.card_id)}
+                            className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs"
+                          >
+                            Lançar Compra
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
+                          <DialogHeader>
+                            <DialogTitle className="font-heading text-xl">LANÇAR NO {card.name.toUpperCase()}</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 mt-4">
+                            <div>
+                              <Label>Valor</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={newCharge.amount}
+                                onChange={(e) => setNewCharge({...newCharge, amount: e.target.value})}
+                                className="bg-[#121212] border-[#27272A] text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label>Descrição</Label>
+                              <Input
+                                value={newCharge.description}
+                                onChange={(e) => setNewCharge({...newCharge, description: e.target.value})}
+                                className="bg-[#121212] border-[#27272A] text-white"
+                              />
+                            </div>
+                            <div>
+                              <Label>Categoria</Label>
+                              <div className="grid grid-cols-2 gap-2 mt-2">
+                                {categories.map(cat => (
+                                  <button
+                                    key={cat}
+                                    onClick={() => setNewCharge({...newCharge, category: cat})}
+                                    className={`py-2 px-3 rounded-sm text-xs uppercase transition-colors ${
+                                      newCharge.category === cat ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                                    }`}
+                                  >
+                                    {cat}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <Button onClick={handleChargeCard} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
+                              Lançar
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </Card>
+                  ))
                 )}
               </div>
             </TabsContent>
