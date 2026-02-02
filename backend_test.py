@@ -171,7 +171,60 @@ class SiriusBackendTester:
             self.log(f"❌ Credit card charge error: {str(e)}", "ERROR")
             return False
     
-    def test_projections_get(self):
+    def test_installment_projections_verification(self):
+        """Verify that installment projections are created correctly"""
+        self.log("🔍 Verifying installment projections creation...")
+        
+        # Create a new charge to test installment projections
+        if not self.test_card_id:
+            self.log("❌ No test card available", "ERROR")
+            return False
+            
+        charge_data = {
+            "amount": 600.00,
+            "description": "Teste verificação parcelas",
+            "category": "outros",
+            "payment_type": "parcelado",
+            "installments": 3
+        }
+        
+        try:
+            # Make the charge
+            response = self.session.post(f"{API_BASE}/credit-cards/{self.test_card_id}/charge", json=charge_data)
+            
+            if response.status_code != 200:
+                self.log(f"❌ Failed to create test charge: {response.status_code}", "ERROR")
+                return False
+            
+            # Check projections for the next 3 months
+            current_date = datetime.now()
+            installments_found = 0
+            
+            for month_offset in range(1, 4):  # Check next 3 months
+                future_date = current_date + timedelta(days=30 * month_offset)
+                check_month = future_date.strftime("%Y-%m")
+                
+                proj_response = self.session.get(f"{API_BASE}/projections?month={check_month}")
+                if proj_response.status_code == 200:
+                    projections = proj_response.json()
+                    installment_projs = [p for p in projections if 
+                                       p.get('projection_type') == 'installment' and 
+                                       'Teste verificação parcelas' in p.get('description', '')]
+                    
+                    if installment_projs:
+                        installments_found += len(installment_projs)
+                        self.log(f"   Found installment projection in {check_month}: R$ {installment_projs[0]['amount']:.2f}")
+            
+            if installments_found >= 2:  # Should find at least 2 future installments (installments 2 and 3)
+                self.log(f"✅ Installment projections verified - Found {installments_found} future installments")
+                return True
+            else:
+                self.log(f"❌ Expected at least 2 installment projections, found {installments_found}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Installment verification error: {str(e)}", "ERROR")
+            return False
         """Test getting projections for next month"""
         self.log("📊 Testing projections GET endpoint...")
         
