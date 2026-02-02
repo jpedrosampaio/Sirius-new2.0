@@ -436,13 +436,7 @@ async def update_task(request: Request, task_id: str, completed: bool, date: str
         )
         was_completed = instance["completed"]
     
-    task = await db.tasks.find_one({"task_id": task_id, "user_id": user.user_id}, {"_id": 0})
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    await db.tasks.update_one({"task_id": task_id}, {"$set": {"completed": completed}})
-    
-    if completed and not task['completed']:
+    if completed and not was_completed:
         new_xp = user.xp + task['xp_reward']
         new_rank = calculate_rank(new_xp)
         await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
