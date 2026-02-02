@@ -34,6 +34,40 @@ class SiriusBackendTester:
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] {level}: {message}")
         
+    def register_test_user(self):
+        """Register test user if it doesn't exist"""
+        self.log("📝 Registering test user...")
+        
+        register_data = {
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD,
+            "name": "Test Sirius User"
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/auth/register", json=register_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.session_token = data.get('session_token')
+                self.user_id = data.get('user', {}).get('user_id')
+                
+                # Set session cookie
+                self.session.cookies.set('session_token', self.session_token)
+                
+                self.log(f"✅ User registered successfully - User ID: {self.user_id}")
+                return True
+            elif response.status_code == 400 and "already registered" in response.text:
+                self.log("ℹ️ User already exists, proceeding to login...")
+                return self.login()
+            else:
+                self.log(f"❌ Registration failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Registration error: {str(e)}", "ERROR")
+            return False
+
     def login(self):
         """Login with test credentials"""
         self.log("🔐 Testing login...")
@@ -56,6 +90,10 @@ class SiriusBackendTester:
                 
                 self.log(f"✅ Login successful - User ID: {self.user_id}")
                 return True
+            elif response.status_code == 401:
+                # Try to register first
+                self.log("ℹ️ Login failed, trying to register user...")
+                return self.register_test_user()
             else:
                 self.log(f"❌ Login failed: {response.status_code} - {response.text}", "ERROR")
                 return False
