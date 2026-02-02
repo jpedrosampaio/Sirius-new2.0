@@ -101,3 +101,104 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Implementar funcionalidades de parcelamento em cartão de crédito e projeção de gastos futuros no sistema Sirius.
+  - Ao adicionar compra no cartão, escolher se é à vista ou parcelado (com número de parcelas)
+  - Nova aba "Projeção" para visualizar gastos futuros
+  - Seletor de meses futuros
+  - Despesas fixas ou temporárias com repetição
+  - Insights e sugestões com IA (usando Google Gemini)
+  - Substituir Emergent LLM por Google Gemini AI
+
+backend:
+  - task: "Charge to card with installments"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented charge endpoint with payment_type (vista/parcelado) and installments support"
+
+  - task: "Projections CRUD endpoints"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created GET/POST/PATCH/DELETE endpoints for projections, plus summary and insights endpoints"
+
+  - task: "Google Gemini AI integration"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Replaced Emergent LLM with Google Gemini (gemini-2.5-flash) for chat and reports"
+
+frontend:
+  - task: "Credit card charge with installments UI"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Finance.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added payment_type selector (vista/parcelado) and installments input in charge dialog"
+
+  - task: "Projections tab UI"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Finance.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created new Projections tab with month selector, summary cards, projections list, AI insights button"
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Charge to card with installments"
+    - "Projections CRUD endpoints"
+    - "Google Gemini AI integration"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Implemented new features:
+      1. Credit card charge now supports installments (parcelado) - POST /api/credit-cards/{card_id}/charge
+      2. New projections endpoints: GET/POST/PATCH/DELETE /api/projections, /api/projections/summary, /api/projections/insights
+      3. Replaced Emergent LLM with Google Gemini AI (gemini-2.5-flash)
+      4. Frontend updated with new Projections tab and installment support in card charge dialog
+      
+      Please test:
+      - Create credit card and charge with installments
+      - Verify projections are created for future months
+      - Test projection CRUD operations
+      - Test AI insights generation
