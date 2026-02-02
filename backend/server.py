@@ -191,6 +191,10 @@ async def get_current_user(authorization: Optional[str] = None, session_token: O
     
     return User(**user_doc)
 
+@api_router.get("/")
+async def root():
+    return {"message": "Sirius API - Discipline is Destiny"}
+
 @api_router.post("/auth/register")
 async def register(user_data: UserCreate):
     existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
