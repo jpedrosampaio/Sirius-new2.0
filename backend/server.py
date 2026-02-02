@@ -859,21 +859,27 @@ async def check_goal_day(request: Request, goal_id: str, date: str, session_toke
         raise HTTPException(status_code=404, detail="Goal not found")
     
     daily_checks = goal.get('daily_checks', [])
-    if date in daily_checks:
+    was_checked = date in daily_checks
+    
+    if was_checked:
         daily_checks.remove(date)
+        xp_change = 0
     else:
         daily_checks.append(date)
+        xp_change = 5
+        new_xp = user.xp + xp_change
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
     
     await db.goals.update_one(
         {"goal_id": goal_id},
         {"$set": {"daily_checks": daily_checks}}
     )
     
-    new_xp = user.xp + 5
-    new_rank = calculate_rank(new_xp)
-    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
-    
-    return {"message": "Day checked", "xp_earned": 5, "new_xp": new_xp}
+    if xp_change > 0:
+        return {"message": "Day checked", "xp_earned": xp_change, "new_xp": user.xp + xp_change}
+    else:
+        return {"message": "Day unchecked", "xp_earned": 0}
 
 @api_router.get("/challenges/current")
 async def get_current_challenges(request: Request, session_token: Optional[str] = Cookie(None)):
