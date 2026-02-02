@@ -1225,6 +1225,39 @@ class Invoice(BaseModel):
     paid: bool = False
     created_at: datetime
 
+class Projection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    projection_id: str
+    user_id: str
+    month: str
+    description: str
+    amount: float
+    category: str
+    projection_type: str  # "fixed", "installment", "manual"
+    is_fixed: bool = False  # Despesa fixa que se repete todo mês
+    repeat_count: Optional[int] = None  # Número de vezes que se repete (se não for fixa)
+    remaining_repeats: Optional[int] = None  # Repetições restantes
+    source_transaction_id: Optional[str] = None  # ID da transação original (para parcelas)
+    installment_number: Optional[int] = None  # Número da parcela atual
+    total_installments: Optional[int] = None  # Total de parcelas
+    card_id: Optional[str] = None  # Cartão associado (se aplicável)
+    created_at: datetime
+
+class ProjectionCreate(BaseModel):
+    description: str
+    amount: float
+    category: str
+    month: str
+    is_fixed: bool = False
+    repeat_count: Optional[int] = None
+
+class CardChargeRequest(BaseModel):
+    amount: float
+    description: str
+    category: str
+    payment_type: str = "vista"  # "vista" ou "parcelado"
+    installments: Optional[int] = 1  # Número de parcelas
+
 @api_router.get("/credit-cards")
 async def get_credit_cards(request: Request, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
