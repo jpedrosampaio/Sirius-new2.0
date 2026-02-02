@@ -128,6 +128,7 @@ class Goal(BaseModel):
     target_date: str
     progress: float = 0
     sprint_duration: int = 60
+    daily_checks: List[str] = []
     sprints: List[Dict[str, Any]] = []
     created_at: datetime
 
@@ -136,6 +137,17 @@ class GoalCreate(BaseModel):
     description: Optional[str] = None
     target_date: str
     sprint_duration: int = 60
+
+class Challenge(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    challenge_id: str
+    title: str
+    description: str
+    xp_reward: int
+    week_start: str
+    week_end: str
+    completed_by: List[str] = []
+    created_at: datetime
 
 class Achievement(BaseModel):
     model_config = ConfigDict(extra="ignore")
