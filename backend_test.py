@@ -171,6 +171,46 @@ class SiriusBackendTester:
             self.log(f"❌ Credit card charge error: {str(e)}", "ERROR")
             return False
     
+    def test_projections_get(self):
+        """Test getting projections for next month"""
+        self.log("📊 Testing projections GET endpoint...")
+        
+        # Test for next month (2025-08)
+        next_month = "2025-08"
+        
+        try:
+            response = self.session.get(f"{API_BASE}/projections?month={next_month}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log(f"✅ Projections GET successful - Found {len(data)} projections for {next_month}")
+                
+                # Check if installment projections were created from previous charge
+                installment_projections = [p for p in data if p.get('projection_type') == 'installment']
+                if installment_projections:
+                    self.log(f"   Found {len(installment_projections)} installment projections")
+                else:
+                    # Check current month and next few months to see where projections were created
+                    self.log("   No installment projections found for 2025-08, checking other months...")
+                    for month_offset in [0, 1, 2, 3]:
+                        check_date = datetime.now() + timedelta(days=30 * month_offset)
+                        check_month = check_date.strftime("%Y-%m")
+                        check_response = self.session.get(f"{API_BASE}/projections?month={check_month}")
+                        if check_response.status_code == 200:
+                            check_data = check_response.json()
+                            installments = [p for p in check_data if p.get('projection_type') == 'installment']
+                            if installments:
+                                self.log(f"   Found {len(installments)} installment projections in {check_month}")
+                
+                return True
+            else:
+                self.log(f"❌ Projections GET failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Projections GET error: {str(e)}", "ERROR")
+            return False
+
     def test_installment_projections_verification(self):
         """Verify that installment projections are created correctly"""
         self.log("🔍 Verifying installment projections creation...")
