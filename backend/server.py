@@ -729,8 +729,6 @@ async def send_chat_message(request: Request, message_data: ChatMessageCreate, s
     await db.chat_messages.insert_one(user_message.copy())
     
     try:
-        llm_key = os.getenv("EMERGENT_LLM_KEY", "")
-        
         current_month = datetime.now(timezone.utc).strftime("%Y-%m")
         transactions = await db.transactions.find(
             {"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}},
@@ -779,13 +777,12 @@ Usuário: "{content}"
 
 Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. Se for conversa geral sobre finanças, seja prestativo.'''
         
-        chat = LlmChat(
-            api_key=llm_key,
-            session_id=f"chat_{user.user_id}",
-            system_message="Você é um assistente financeiro inteligente do Sirius. Ajude com transações, análises e insights financeiros."
-        ).with_model("openai", "gpt-5.2")
-        
-        response = await chat.send_message(UserMessage(text=prompt))
+        # Use Google Gemini API
+        response_obj = google_ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        response = response_obj.text
         
         ai_message_id = f"msg_{uuid.uuid4().hex[:12]}"
         ai_message = {
