@@ -53,8 +53,12 @@ export default function Sidebar({ user }) {
         isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
       }`}>
         <div className="p-6 border-b border-[#27272A]">
-          <div className="flex items-center space-x-2 mb-4">
-            <Shield className="w-8 h-8 text-[#007AFF]" />
+          <div className="flex items-center space-x-3 mb-4">
+            <img 
+              src="https://static.prod-images.emergentagent.com/jobs/2eaa4c06-773d-4844-95bd-8cce61c803a6/images/061c7bd12a785215d4f5716d988e06dffb8dfd6d668f5617ab162d23c32aa822.png" 
+              alt="Sirius Logo" 
+              className="w-10 h-10 object-contain"
+            />
             <span className="font-heading text-2xl">SIRIUS</span>
           </div>
           {user && (
