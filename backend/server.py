@@ -797,7 +797,6 @@ Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. 
         transaction_data = None
         if is_transaction_query:
             try:
-                import json
                 transaction_data = json.loads(response)
                 if "type" in transaction_data and "amount" in transaction_data:
                     transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
