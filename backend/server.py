@@ -816,7 +816,7 @@ Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. 
             except:
                 pass
         
-        await db.chat_messages.insert_one(ai_message)
+        await db.chat_messages.insert_one(ai_message.copy())
         
         user_message['created_at'] = datetime.fromisoformat(user_message['created_at'])
         ai_message['created_at'] = datetime.fromisoformat(ai_message['created_at'])
