@@ -185,14 +185,13 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Charge to card with installments"
-    - "Projections CRUD endpoints"
-    - "Google Gemini AI integration"
+    - "Credit card charge with installments UI"
+    - "Projections tab UI"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -211,3 +210,27 @@ agent_communication:
       - Verify projections are created for future months
       - Test projection CRUD operations
       - Test AI insights generation
+  - agent: "testing"
+    message: |
+      ✅ BACKEND TESTING COMPLETE - ALL TESTS PASSED (11/11)
+      
+      Comprehensive testing completed for all new backend features:
+      
+      🔐 Authentication: Working correctly (auto-registration + login)
+      💳 Credit Card Features:
+        - Card creation: ✅ Working
+        - Installment charges: ✅ Working (R$ 1200 → 3x R$ 400)
+        - Future projections: ✅ Created correctly in appropriate months
+      
+      📊 Projections API:
+        - GET /api/projections: ✅ Working (filters by month)
+        - POST /api/projections: ✅ Working (creates manual projections)
+        - PATCH /api/projections/{id}: ✅ Working (updates amount/description)
+        - DELETE /api/projections/{id}: ✅ Working
+        - GET /api/projections/summary: ✅ Working (provides totals by category)
+      
+      🤖 AI Integration (Google Gemini):
+        - POST /api/projections/insights: ✅ Working (5000+ char responses)
+        - POST /api/chat/send: ✅ Working (contextual financial advice)
+      
+      All backend APIs are functioning correctly. Ready for frontend testing.
