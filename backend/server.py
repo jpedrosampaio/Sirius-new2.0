@@ -2577,6 +2577,522 @@ async def get_notification_templates():
     ]
     return templates
 
+# ========== BODY MEASUREMENTS ENDPOINTS ==========
+@api_router.get("/body-measurements")
+async def get_body_measurements(request: Request, limit: int = 30, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    measurements = await db.body_measurements.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("date", -1).limit(limit).to_list(limit)
+    
+    return measurements
+
+@api_router.get("/body-measurements/latest")
+async def get_latest_measurement(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    measurement = await db.body_measurements.find_one(
+        {"user_id": user.user_id}, {"_id": 0}, sort=[("date", -1)]
+    )
+    
+    return measurement
+
+@api_router.post("/body-measurements")
+async def create_body_measurement(request: Request, data: BodyMeasurementCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    measurement_id = f"measure_{uuid.uuid4().hex[:12]}"
+    
+    # Calcular IMC se altura e peso foram fornecidos
+    bmi = None
+    if data.weight_kg and data.height_cm:
+        height_m = data.height_cm / 100
+        bmi = round(data.weight_kg / (height_m ** 2), 1)
+    
+    measurement_doc = {
+        "measurement_id": measurement_id,
+        "user_id": user.user_id,
+        "date": data.date,
+        "weight_kg": data.weight_kg,
+        "body_fat_percentage": data.body_fat_percentage,
+        "muscle_mass_kg": data.muscle_mass_kg,
+        "bone_mass_kg": data.bone_mass_kg,
+        "water_percentage": data.water_percentage,
+        "visceral_fat": data.visceral_fat,
+        "metabolic_age": data.metabolic_age,
+        "bmr_kcal": data.bmr_kcal,
+        "height_cm": data.height_cm,
+        "neck_cm": data.neck_cm,
+        "shoulders_cm": data.shoulders_cm,
+        "chest_cm": data.chest_cm,
+        "waist_cm": data.waist_cm,
+        "abdomen_cm": data.abdomen_cm,
+        "hips_cm": data.hips_cm,
+        "left_arm_cm": data.left_arm_cm,
+        "right_arm_cm": data.right_arm_cm,
+        "left_forearm_cm": data.left_forearm_cm,
+        "right_forearm_cm": data.right_forearm_cm,
+        "left_thigh_cm": data.left_thigh_cm,
+        "right_thigh_cm": data.right_thigh_cm,
+        "left_calf_cm": data.left_calf_cm,
+        "right_calf_cm": data.right_calf_cm,
+        "bmi": bmi,
+        "notes": data.notes,
+        "source": data.source,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.body_measurements.insert_one(measurement_doc)
+    measurement_doc.pop('_id', None)
+    
+    return measurement_doc
+
+@api_router.delete("/body-measurements/{measurement_id}")
+async def delete_body_measurement(request: Request, measurement_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.body_measurements.delete_one({"measurement_id": measurement_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Measurement not found")
+    
+    return {"message": "Measurement deleted"}
+
+@api_router.get("/body-measurements/evolution")
+async def get_body_evolution(request: Request, months: int = 6, session_token: Optional[str] = Cookie(None)):
+    """Get body measurement evolution over time"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    start_date = (datetime.now() - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+    
+    measurements = await db.body_measurements.find(
+        {"user_id": user.user_id, "date": {"$gte": start_date}}, {"_id": 0}
+    ).sort("date", 1).to_list(1000)
+    
+    # Calculate changes
+    if len(measurements) >= 2:
+        first = measurements[0]
+        last = measurements[-1]
+        
+        changes = {}
+        for field in ["weight_kg", "body_fat_percentage", "muscle_mass_kg", "waist_cm", "bmi"]:
+            if first.get(field) and last.get(field):
+                changes[field] = round(last[field] - first[field], 2)
+    else:
+        changes = {}
+    
+    return {
+        "measurements": measurements,
+        "changes": changes,
+        "total_records": len(measurements)
+    }
+
+# ========== PDF ANALYSIS ENDPOINT ==========
+@api_router.post("/body-measurements/analyze-pdf")
+async def analyze_pdf_measurement(
+    request: Request,
+    file: UploadFile = File(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Analyze a PDF file containing body measurement data using AI"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+    
+    # Read file content
+    content = await file.read()
+    file_base64 = base64.b64encode(content).decode('utf-8')
+    
+    # Use Gemini to analyze the PDF
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"pdf_analysis_{user.user_id}",
+            system_message="""Você é um especialista em análise de avaliações físicas e bioimpedância.
+            Analise o documento e extraia TODOS os dados disponíveis.
+            Responda APENAS em formato JSON válido com os campos encontrados.
+            Use os seguintes nomes de campos (deixe null se não encontrado):
+            - weight_kg, height_cm, body_fat_percentage, muscle_mass_kg
+            - bone_mass_kg, water_percentage, visceral_fat, metabolic_age, bmr_kcal
+            - neck_cm, shoulders_cm, chest_cm, waist_cm, abdomen_cm, hips_cm
+            - left_arm_cm, right_arm_cm, left_forearm_cm, right_forearm_cm
+            - left_thigh_cm, right_thigh_cm, left_calf_cm, right_calf_cm
+            - date (formato YYYY-MM-DD), notes (observações relevantes)
+            - recommendations (array de recomendações baseadas nos dados)"""
+        ).with_model("gemini", "gemini-2.5-flash")
+        
+        user_message = UserMessage(
+            text="Analise este documento de avaliação física/bioimpedância e extraia todos os dados em JSON:",
+            files=[{"mime_type": "application/pdf", "data": file_base64}]
+        )
+        
+        response = await chat.send_message(user_message)
+        
+        # Try to parse JSON from response
+        try:
+            # Remove markdown code blocks if present
+            json_str = response.strip()
+            if json_str.startswith("```json"):
+                json_str = json_str[7:]
+            if json_str.startswith("```"):
+                json_str = json_str[3:]
+            if json_str.endswith("```"):
+                json_str = json_str[:-3]
+            
+            extracted_data = json.loads(json_str.strip())
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return raw analysis
+            extracted_data = {"raw_analysis": response, "parse_error": True}
+        
+        return {
+            "success": True,
+            "extracted_data": extracted_data,
+            "filename": file.filename
+        }
+        
+    except Exception as e:
+        logging.error(f"PDF analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to analyze PDF: {str(e)}")
+
+# ========== AI RECOMMENDATIONS ==========
+@api_router.get("/body-measurements/recommendations")
+async def get_workout_recommendations(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get AI-powered workout and health recommendations based on body measurements"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get latest measurements
+    measurements = await db.body_measurements.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("date", -1).limit(5).to_list(5)
+    
+    # Get recent workouts
+    workouts = await db.workout_logs.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("date", -1).limit(10).to_list(10)
+    
+    if not measurements:
+        return {
+            "recommendations": ["Registre suas medidas corporais para receber recomendações personalizadas."],
+            "based_on": "no_data"
+        }
+    
+    latest = measurements[0]
+    
+    prompt = f"""Com base nos seguintes dados corporais do usuário, forneça recomendações personalizadas de treino e saúde:
+
+MEDIDAS ATUAIS:
+- Peso: {latest.get('weight_kg', 'N/A')} kg
+- Altura: {latest.get('height_cm', 'N/A')} cm
+- IMC: {latest.get('bmi', 'N/A')}
+- Gordura corporal: {latest.get('body_fat_percentage', 'N/A')}%
+- Massa muscular: {latest.get('muscle_mass_kg', 'N/A')} kg
+- Cintura: {latest.get('waist_cm', 'N/A')} cm
+- Gordura visceral: {latest.get('visceral_fat', 'N/A')}
+
+HISTÓRICO DE TREINOS (últimos 10):
+{json.dumps([{"name": w.get("name"), "type": w.get("activity_type"), "duration": w.get("duration_minutes")} for w in workouts], indent=2)}
+
+Forneça:
+1. 3-5 recomendações específicas de treino
+2. Dicas de nutrição
+3. Áreas de foco prioritárias
+4. Metas sugeridas para os próximos 30 dias
+
+Responda em português de forma direta e motivadora."""
+
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"recommendations_{user.user_id}",
+            system_message="Você é um personal trainer e nutricionista experiente. Forneça recomendações práticas e motivadoras."
+        ).with_model("gemini", "gemini-2.5-flash")
+        
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+        
+        return {
+            "recommendations": response,
+            "based_on": latest,
+            "workouts_analyzed": len(workouts)
+        }
+        
+    except Exception as e:
+        logging.error(f"Recommendations generation failed: {e}")
+        return {
+            "recommendations": "Não foi possível gerar recomendações no momento. Tente novamente mais tarde.",
+            "error": str(e)
+        }
+
+# ========== MOTIVATIONAL QUOTES ==========
+@api_router.get("/motivational-quote")
+async def get_motivational_quote(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get a personalized motivational quote based on user's progress"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get user stats
+    today = datetime.now().strftime("%Y-%m-%d")
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    
+    workouts_this_week = await db.workout_logs.count_documents({
+        "user_id": user.user_id,
+        "date": {"$gte": week_ago},
+        "completed": True
+    })
+    
+    habits_today = await db.habit_logs.count_documents({
+        "user_id": user.user_id,
+        "date": today,
+        "completed": True
+    })
+    
+    latest_measurement = await db.body_measurements.find_one(
+        {"user_id": user.user_id}, {"_id": 0}, sort=[("date", -1)]
+    )
+    
+    context = f"""
+    Nome do usuário: {user.name}
+    XP atual: {user.xp}
+    Rank: {user.rank}
+    Treinos esta semana: {workouts_this_week}
+    Hábitos completados hoje: {habits_today}
+    """
+    
+    if latest_measurement:
+        context += f"\nÚltimo peso registrado: {latest_measurement.get('weight_kg', 'N/A')} kg"
+    
+    prompt = f"""Gere UMA frase motivacional personalizada e única para este usuário.
+
+CONTEXTO DO USUÁRIO:
+{context}
+
+INSTRUÇÕES:
+- A frase deve ser curta (máximo 2 linhas)
+- Deve ser personalizada baseada no contexto
+- Pode mencionar o nome do usuário
+- Deve ser inspiradora e energizante
+- Use emojis de forma moderada (1-2)
+- Varie o estilo: pode ser um conselho, uma celebração, um desafio ou uma reflexão
+
+Responda APENAS com a frase motivacional, sem explicações."""
+
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"motivation_{user.user_id}_{datetime.now().hour}",
+            system_message="Você é um coach motivacional especializado em fitness e desenvolvimento pessoal."
+        ).with_model("gemini", "gemini-2.5-flash")
+        
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+        
+        return {
+            "quote": response.strip(),
+            "context": {
+                "workouts_this_week": workouts_this_week,
+                "habits_today": habits_today
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Quote generation failed: {e}")
+        # Fallback quotes
+        fallback_quotes = [
+            "💪 Cada treino te deixa mais forte. Continue assim!",
+            "🔥 Disciplina é o que te leva onde a motivação não alcança.",
+            "⭐ Você está construindo a melhor versão de si mesmo!",
+            "🚀 Pequenos progressos diários levam a grandes resultados.",
+            "💎 A consistência é a chave do sucesso. Não desista!"
+        ]
+        import random
+        return {
+            "quote": random.choice(fallback_quotes),
+            "fallback": True
+        }
+
+# ========== DAILY WORKOUT STATUS ==========
+@api_router.get("/daily-workout-status/{plan_id}")
+async def get_daily_workout_status(request: Request, plan_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get the exercise completion status for a plan on today's date"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    status = await db.daily_workout_status.find_one({
+        "user_id": user.user_id,
+        "plan_id": plan_id,
+        "date": today
+    }, {"_id": 0})
+    
+    return status or {"exercises_status": {}, "completed": False}
+
+@api_router.post("/daily-workout-status/{plan_id}/toggle/{exercise_idx}")
+async def toggle_daily_exercise(request: Request, plan_id: str, exercise_idx: int, session_token: Optional[str] = Cookie(None)):
+    """Toggle an exercise completion status for today"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Get or create today's status
+    status = await db.daily_workout_status.find_one({
+        "user_id": user.user_id,
+        "plan_id": plan_id,
+        "date": today
+    })
+    
+    if not status:
+        status = {
+            "status_id": f"dws_{uuid.uuid4().hex[:12]}",
+            "user_id": user.user_id,
+            "plan_id": plan_id,
+            "date": today,
+            "exercises_status": {},
+            "completed": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.daily_workout_status.insert_one(status)
+    
+    # Toggle the exercise
+    exercise_key = str(exercise_idx)
+    current_status = status.get("exercises_status", {}).get(exercise_key, False)
+    new_status = not current_status
+    
+    await db.daily_workout_status.update_one(
+        {"user_id": user.user_id, "plan_id": plan_id, "date": today},
+        {
+            "$set": {
+                f"exercises_status.{exercise_key}": new_status,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Get updated status
+    updated = await db.daily_workout_status.find_one({
+        "user_id": user.user_id,
+        "plan_id": plan_id,
+        "date": today
+    }, {"_id": 0})
+    
+    return updated
+
+@api_router.post("/daily-workout-status/{plan_id}/complete")
+async def complete_daily_workout(request: Request, plan_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Complete a daily workout and log it"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Get the plan
+    plan = await db.workout_plans.find_one({"plan_id": plan_id, "user_id": user.user_id}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    # Get today's status
+    status = await db.daily_workout_status.find_one({
+        "user_id": user.user_id,
+        "plan_id": plan_id,
+        "date": today
+    }, {"_id": 0})
+    
+    exercises_status = status.get("exercises_status", {}) if status else {}
+    
+    # Build exercises_completed list
+    exercises_completed = []
+    for idx, ex in enumerate(plan.get("exercises", [])):
+        exercises_completed.append({
+            **ex,
+            "completed": exercises_status.get(str(idx), False)
+        })
+    
+    completed_count = sum(1 for ex in exercises_completed if ex.get("completed"))
+    total_exercises = len(exercises_completed)
+    
+    # Calculate XP based on completion
+    base_xp = 20
+    completion_bonus = int((completed_count / total_exercises) * 30) if total_exercises > 0 else 0
+    duration_bonus = (data.get("duration_minutes", 30) // 15) * 5
+    total_xp = base_xp + completion_bonus + duration_bonus
+    
+    # Estimate calories if not provided (rough estimate based on duration and activity)
+    calories = data.get("calories")
+    if not calories:
+        # Average 5-8 calories per minute for strength training
+        calories = int(data.get("duration_minutes", 30) * 6)
+    
+    # Create workout log
+    log_id = f"workout_{uuid.uuid4().hex[:12]}"
+    workout_doc = {
+        "log_id": log_id,
+        "user_id": user.user_id,
+        "plan_id": plan_id,
+        "activity_type": "weightlifting",
+        "name": plan.get("name", "Treino"),
+        "duration_minutes": data.get("duration_minutes", 30),
+        "calories": calories,
+        "exercises_completed": exercises_completed,
+        "notes": data.get("notes", ""),
+        "xp_earned": total_xp,
+        "completed": True,
+        "date": today,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.workout_logs.insert_one(workout_doc)
+    
+    # Update user XP
+    new_xp = user.xp + total_xp
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    # Mark daily status as completed
+    await db.daily_workout_status.update_one(
+        {"user_id": user.user_id, "plan_id": plan_id, "date": today},
+        {"$set": {"completed": True, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    workout_doc.pop('_id', None)
+    return {
+        **workout_doc,
+        "new_xp": new_xp,
+        "new_rank": new_rank,
+        "exercises_completed_count": completed_count,
+        "total_exercises": total_exercises
+    }
+
+@api_router.post("/daily-workout-status/{plan_id}/reset")
+async def reset_daily_workout(request: Request, plan_id: str, session_token: Optional[str] = Cookie(None)):
+    """Reset today's workout status for a plan"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    await db.daily_workout_status.update_one(
+        {"user_id": user.user_id, "plan_id": plan_id, "date": today},
+        {
+            "$set": {
+                "exercises_status": {},
+                "completed": False,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    return {"message": "Daily workout status reset", "date": today}
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 
