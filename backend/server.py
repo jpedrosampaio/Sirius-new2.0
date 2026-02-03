@@ -199,6 +199,85 @@ class Report(BaseModel):
     insights: str
     created_at: datetime
 
+# ========== WORKOUT MODELS ==========
+class WorkoutPlan(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    plan_id: str
+    user_id: str
+    name: str
+    description: Optional[str] = None
+    exercises: List[Dict[str, Any]] = []  # [{name, sets, reps, weight, notes}]
+    created_at: datetime
+
+class WorkoutPlanCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    exercises: List[Dict[str, Any]] = []
+
+class WorkoutLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    log_id: str
+    user_id: str
+    plan_id: Optional[str] = None
+    activity_type: str  # running, weightlifting, cycling, swimming, etc.
+    name: str
+    duration_minutes: int = 0
+    distance_km: Optional[float] = None
+    calories: Optional[int] = None
+    exercises_completed: List[Dict[str, Any]] = []
+    notes: Optional[str] = None
+    xp_earned: int = 20
+    completed: bool = True
+    date: str
+    created_at: datetime
+
+class WorkoutLogCreate(BaseModel):
+    plan_id: Optional[str] = None
+    activity_type: str
+    name: str
+    duration_minutes: int = 0
+    distance_km: Optional[float] = None
+    calories: Optional[int] = None
+    exercises_completed: List[Dict[str, Any]] = []
+    notes: Optional[str] = None
+    date: str
+
+# ========== NOTIFICATION MODELS ==========
+class Notification(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    notification_id: str
+    user_id: str
+    title: str
+    message: str
+    type: str  # reminder, achievement, alert, system
+    category: str  # workout, habit, task, hydration, custom
+    scheduled_time: Optional[str] = None
+    repeat: str = "none"  # none, daily, weekly, custom
+    repeat_days: List[str] = []  # ["monday", "tuesday", etc.]
+    enabled: bool = True
+    channels: List[str] = ["in_app"]  # in_app, browser, email, whatsapp, telegram
+    last_sent: Optional[str] = None
+    created_at: datetime
+
+class NotificationCreate(BaseModel):
+    title: str
+    message: str
+    type: str = "reminder"
+    category: str = "custom"
+    scheduled_time: Optional[str] = None
+    repeat: str = "none"
+    repeat_days: List[str] = []
+    channels: List[str] = ["in_app"]
+
+class NotificationLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    log_id: str
+    notification_id: str
+    user_id: str
+    sent_at: datetime
+    channel: str
+    status: str  # sent, read, dismissed
+
 async def get_current_user(authorization: Optional[str] = None, session_token: Optional[str] = Cookie(None)) -> User:
     token = session_token or (authorization.replace("Bearer ", "") if authorization else None)
     if not token:
