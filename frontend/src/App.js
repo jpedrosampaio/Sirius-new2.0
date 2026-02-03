@@ -13,6 +13,8 @@ import Goals from "@/pages/Goals";
 import Chat from "@/pages/Chat";
 import Reports from "@/pages/Reports";
 import Profile from "@/pages/Profile";
+import Workouts from "@/pages/Workouts";
+import Notifications from "@/pages/Notifications";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
@@ -35,6 +37,8 @@ function AppRouter() {
       <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      <Route path="/workouts" element={<ProtectedRoute><Workouts /></ProtectedRoute>} />
+      <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
     </Routes>
   );
 }
