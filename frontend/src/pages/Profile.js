@@ -53,6 +53,52 @@ export default function Profile() {
     }
   };
 
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Apenas imagens JPEG, PNG, GIF ou WebP são permitidas");
+      return;
+    }
+    
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("A imagem deve ter no máximo 5MB");
+      return;
+    }
+    
+    setUploadingPhoto(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+      const res = await axios.post(`${API}/auth/upload-picture`, formData, {
+        withCredentials: true,
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      
+      setUser(prev => ({ ...prev, picture: res.data.picture }));
+      toast.success("Foto de perfil atualizada!");
+    } catch (error) {
+      toast.error("Erro ao enviar foto");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    try {
+      await axios.delete(`${API}/auth/remove-picture`, { withCredentials: true });
+      setUser(prev => ({ ...prev, picture: null }));
+      toast.success("Foto de perfil removida");
+    } catch (error) {
+      toast.error("Erro ao remover foto");
+    }
+  };
+
   const ranks = [
     { name: "Recruta", xp: 0, icon: Shield, color: "#A1A1AA" },
     { name: "Soldado", xp: 100, icon: Shield, color: "#A1A1AA" },
