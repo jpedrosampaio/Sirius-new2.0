@@ -70,7 +70,8 @@ export default function Finance() {
     description: "",
     category: "alimentação",
     payment_type: "vista",
-    installments: 2
+    installments: 2,
+    start_month: "current"  // "current" ou "next"
   });
   
   const [newProjection, setNewProjection] = useState({
