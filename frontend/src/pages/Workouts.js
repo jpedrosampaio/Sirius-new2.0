@@ -514,7 +514,7 @@ export default function Workouts() {
                   <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
                     <Dumbbell className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
                     <p className="text-[#A1A1AA]">Nenhum treino registrado hoje</p>
-                    <p className="text-sm text-[#52525B] mt-1">Clique em "Registrar Treino" para começar</p>
+                    <p className="text-sm text-[#52525B] mt-1">Clique em &quot;Registrar Treino&quot; para começar</p>
                   </Card>
                 ) : (
                   workouts.filter(w => w.date === today).map(workout => (
