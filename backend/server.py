@@ -742,7 +742,8 @@ async def send_chat_message(request: Request, message_data: ChatMessageCreate, s
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
-    content = message_data.content
+    content = message_data.content.strip()
+    content_lower = content.lower()
     
     message_id = f"msg_{uuid.uuid4().hex[:12]}"
     user_message = {
@@ -755,110 +756,160 @@ async def send_chat_message(request: Request, message_data: ChatMessageCreate, s
     await db.chat_messages.insert_one(user_message.copy())
     
     try:
+        # Get financial context
         current_month = datetime.now(timezone.utc).strftime("%Y-%m")
         transactions = await db.transactions.find(
             {"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}},
             {"_id": 0}
-        ).to_list(100)
+        ).to_list(500)
         
         total_income = sum([t['amount'] for t in transactions if t['type'] == 'income'])
         total_expense = sum([t['amount'] for t in transactions if t['type'] == 'expense'])
+        balance = total_income - total_expense
         
-        context = f"Contexto financeiro do usuário este mês: Receitas R$ {total_income:.2f}, Despesas R$ {total_expense:.2f}, Saldo R$ {total_income - total_expense:.2f}"
+        # Get budgets
+        budgets = await db.budgets.find({"user_id": user.user_id, "month": current_month}, {"_id": 0}).to_list(100)
         
-        # Expanded keywords for transaction detection
-        income_keywords = ['ganhei', 'recebi', 'entrou', 'salário', 'salario', 'renda', 'recebimento', 'depósito', 'deposito', 'transferência recebida', 'pix recebido', 'crédito', 'credito']
-        expense_keywords = ['gastei', 'paguei', 'comprei', 'compra', 'gasto', 'despesa', 'conta', 'boleto', 'parcela']
-        amount_keywords = ['r$', 'reais', 'real', '1000', '500', '100', '200', '300', '50', '150']
+        # Get categories usage
+        expense_by_category = {}
+        income_by_category = {}
+        for t in transactions:
+            if t['type'] == 'expense':
+                expense_by_category[t['category']] = expense_by_category.get(t['category'], 0) + t['amount']
+            else:
+                income_by_category[t['category']] = income_by_category.get(t['category'], 0) + t['amount']
         
-        is_income_transaction = any(word in content.lower() for word in income_keywords)
-        is_expense_transaction = any(word in content.lower() for word in expense_keywords)
-        has_amount = any(word in content.lower() for word in amount_keywords)
-        is_transaction_query = (is_income_transaction or is_expense_transaction) and has_amount
+        context = f"""Contexto Financeiro do Usuário ({current_month}):
+- Receitas Totais: R$ {total_income:.2f}
+- Despesas Totais: R$ {total_expense:.2f}
+- Saldo Atual: R$ {balance:.2f}
+- Total de Transações: {len(transactions)}
+
+Despesas por Categoria: {json.dumps(expense_by_category, ensure_ascii=False)}
+Receitas por Categoria: {json.dumps(income_by_category, ensure_ascii=False)}
+Orçamentos Definidos: {len(budgets)}"""
+
+        # Detect user intent
+        income_keywords = ['ganhei', 'recebi', 'entrou', 'salário', 'salario', 'renda', 'recebimento', 
+                          'depósito', 'deposito', 'transferência recebida', 'pix recebido', 'crédito', 
+                          'credito', 'freelance', 'bônus', 'bonus', 'comissão', 'comissao', 'vendi',
+                          'receita', 'entrada', 'reembolso']
         
-        is_report_query = any(word in content.lower() for word in ['relatório', 'relatorio', 'resumo', 'analise', 'análise', 'como está', 'como estão', 'situação'])
+        expense_keywords = ['gastei', 'paguei', 'comprei', 'compra', 'gasto', 'despesa', 'conta', 
+                           'boleto', 'parcela', 'débito', 'debito', 'saída', 'saida', 'pix enviado',
+                           'transferi', 'aluguel', 'luz', 'água', 'agua', 'internet', 'supermercado',
+                           'mercado', 'restaurante', 'uber', 'combustível', 'combustivel', 'gasolina']
         
-        if is_transaction_query:
-            trans_type = "income" if is_income_transaction else "expense"
-            prompt = f'''Você é um assistente financeiro. Extraia os dados da transação financeira da mensagem do usuário.
+        report_keywords = ['relatório', 'relatorio', 'resumo', 'analise', 'análise', 'como está', 
+                          'como estão', 'situação', 'balanço', 'balanco', 'extrato', 'histórico',
+                          'quanto gastei', 'quanto ganhei', 'quanto tenho', 'saldo']
+        
+        budget_keywords = ['orçamento', 'orcamento', 'limite', 'meta de gasto', 'definir limite',
+                          'criar orçamento', 'criar orcamento', 'estabelecer limite']
+        
+        category_keywords = ['categoria', 'categorias', 'classificar', 'classificação', 'tipo de gasto']
+        
+        delete_keywords = ['deletar', 'remover', 'excluir', 'apagar', 'cancelar transação', 'desfazer']
+        
+        list_keywords = ['listar', 'mostrar', 'ver transações', 'ver gastos', 'ver receitas', 
+                        'últimas transações', 'ultimas transacoes']
+        
+        help_keywords = ['ajuda', 'help', 'o que você pode fazer', 'comandos', 'funcionalidades']
+        
+        # Check for amount in message
+        import re
+        amount_pattern = r'(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)'
+        amount_matches = re.findall(amount_pattern, content)
+        has_amount = len(amount_matches) > 0
+        
+        is_income = any(word in content_lower for word in income_keywords)
+        is_expense = any(word in content_lower for word in expense_keywords)
+        is_report = any(word in content_lower for word in report_keywords)
+        is_budget = any(word in content_lower for word in budget_keywords)
+        is_category = any(word in content_lower for word in category_keywords)
+        is_delete = any(word in content_lower for word in delete_keywords)
+        is_list = any(word in content_lower for word in list_keywords)
+        is_help = any(word in content_lower for word in help_keywords)
+        
+        ai_response = ""
+        action_taken = None
+        
+        # HELP - Show available commands
+        if is_help:
+            ai_response = """🤖 **Olá! Sou o assistente financeiro do Sirius. Posso ajudar com:**
+
+💰 **Registrar Transações:**
+- "Recebi 5000 de salário"
+- "Gastei 150 no supermercado"
+- "Paguei 200 de luz"
+- "Entrou 300 de freelance"
+
+📊 **Relatórios e Análises:**
+- "Como estão minhas finanças?"
+- "Resumo do mês"
+- "Quanto gastei este mês?"
+- "Qual meu saldo?"
+
+📋 **Listar Transações:**
+- "Mostrar últimas transações"
+- "Ver gastos do mês"
+- "Listar receitas"
+
+💡 **Dicas e Insights:**
+- "Me dê dicas de economia"
+- "Analise meus gastos"
+
+📝 **Orçamentos:**
+- "Criar orçamento de 500 para alimentação"
+- "Definir limite de 1000 para lazer"
+
+**Categorias disponíveis:** alimentação, transporte, moradia, saúde, educação, lazer, salário, outros"""
+        
+        # LIST TRANSACTIONS
+        elif is_list:
+            recent = transactions[-10:] if len(transactions) > 10 else transactions
+            if not recent:
+                ai_response = "📋 Não há transações registradas este mês."
+            else:
+                ai_response = "📋 **Últimas Transações:**\n\n"
+                for t in reversed(recent):
+                    emoji = "💚" if t['type'] == 'income' else "🔴"
+                    tipo = "+" if t['type'] == 'income' else "-"
+                    ai_response += f"{emoji} {t['date']} | {tipo}R$ {t['amount']:.2f} | {t['category']}"
+                    if t.get('description'):
+                        ai_response += f" | {t['description']}"
+                    ai_response += "\n"
+        
+        # INCOME TRANSACTION
+        elif is_income and has_amount:
+            prompt = f'''Extraia os dados da RECEITA/ENTRADA financeira desta mensagem.
 
 Mensagem: "{content}"
 
-IMPORTANTE: Responda APENAS com um JSON válido, sem texto adicional, no formato:
-{{"type": "{trans_type}", "amount": 1000.0, "category": "outros", "description": "descrição curta"}}
+Responda APENAS com JSON válido:
+{{"type": "income", "amount": 1000.0, "category": "salário", "description": "descrição curta"}}
 
-Para type, use:
-- "income" para receitas (recebimentos, salário, ganhos, depósitos, pix recebido)
-- "expense" para despesas (gastos, pagamentos, compras)
-
-Categorias válidas: alimentação, transporte, moradia, saúde, educação, lazer, salário, outros
-
-Extraia o valor numérico da mensagem. Se não houver valor claro, use 0.
-Responda SOMENTE com o JSON, nada mais.'''
-        
-        elif is_report_query:
-            prompt = f'''O usuário pediu um resumo/relatório financeiro.
-
-{context}
-
-Forneça uma análise completa e insights sobre:
-1. Status atual das finanças
-2. Principais gastos
-3. Sugestões de economia
-4. Alertas importantes
-
-Seja profissional mas amigável.'''
-        
-        else:
-            prompt = f'''Você é um assistente financeiro do Sirius.
-
-{context}
-
-Usuário: "{content}"
-
-Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. Se for conversa geral sobre finanças, seja prestativo.'''
-        
-        # Use Google Gemini API
-        response_obj = google_ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        response = response_obj.text
-        
-        ai_message_id = f"msg_{uuid.uuid4().hex[:12]}"
-        ai_message = {
-            "message_id": ai_message_id,
-            "user_id": user.user_id,
-            "role": "assistant",
-            "content": response,
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        transaction_data = None
-        if is_transaction_query:
+Categorias para receita: salário, freelance, investimentos, vendas, reembolso, outros
+Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
+            
+            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            response = response_obj.text
+            
             try:
-                # Clean response - extract JSON from response
                 clean_response = response.strip()
-                # Remove markdown code blocks if present
-                if clean_response.startswith("```"):
-                    clean_response = clean_response.split("```")[1]
-                    if clean_response.startswith("json"):
-                        clean_response = clean_response[4:]
-                    clean_response = clean_response.strip()
-                
-                # Find JSON in response
+                if "```" in clean_response:
+                    clean_response = clean_response.split("```")[1].replace("json", "").strip()
                 start_idx = clean_response.find('{')
                 end_idx = clean_response.rfind('}') + 1
                 if start_idx != -1 and end_idx > start_idx:
-                    json_str = clean_response[start_idx:end_idx]
-                    transaction_data = json.loads(json_str)
+                    transaction_data = json.loads(clean_response[start_idx:end_idx])
                     
-                    if "type" in transaction_data and "amount" in transaction_data and float(transaction_data["amount"]) > 0:
+                    if float(transaction_data.get("amount", 0)) > 0:
                         transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
                         transaction_doc = {
                             "transaction_id": transaction_id,
                             "user_id": user.user_id,
-                            "type": transaction_data["type"],
+                            "type": "income",
                             "amount": float(transaction_data["amount"]),
                             "category": transaction_data.get("category", "outros"),
                             "description": transaction_data.get("description", ""),
@@ -866,16 +917,212 @@ Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. 
                             "created_at": datetime.now(timezone.utc).isoformat()
                         }
                         await db.transactions.insert_one(transaction_doc)
-                        ai_message["transaction_data"] = transaction_data
+                        action_taken = transaction_data
                         
-                        tipo_str = "Receita" if transaction_data["type"] == "income" else "Despesa"
-                        ai_message["content"] = f"✓ {tipo_str} registrada: R$ {float(transaction_data['amount']):.2f} em {transaction_data.get('category', 'outros')}"
-                        if transaction_data.get("description"):
-                            ai_message["content"] += f" - {transaction_data['description']}"
-            except Exception as parse_error:
-                # If parsing fails, keep the original response
-                logging.error(f"Failed to parse transaction: {parse_error}")
+                        new_balance = balance + float(transaction_data["amount"])
+                        ai_response = f"""✅ **Receita Registrada!**
+
+💰 **Valor:** R$ {float(transaction_data['amount']):.2f}
+📁 **Categoria:** {transaction_data.get('category', 'outros')}
+📝 **Descrição:** {transaction_data.get('description', '-')}
+
+📊 **Novo Saldo:** R$ {new_balance:.2f}"""
+            except Exception as e:
+                ai_response = f"❌ Não consegui processar a receita. Tente: 'Recebi 1000 de salário'"
+        
+        # EXPENSE TRANSACTION
+        elif is_expense and has_amount:
+            prompt = f'''Extraia os dados da DESPESA/GASTO financeiro desta mensagem.
+
+Mensagem: "{content}"
+
+Responda APENAS com JSON válido:
+{{"type": "expense", "amount": 100.0, "category": "alimentação", "description": "descrição curta"}}
+
+Categorias para despesa: alimentação, transporte, moradia, saúde, educação, lazer, outros
+Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
+            
+            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            response = response_obj.text
+            
+            try:
+                clean_response = response.strip()
+                if "```" in clean_response:
+                    clean_response = clean_response.split("```")[1].replace("json", "").strip()
+                start_idx = clean_response.find('{')
+                end_idx = clean_response.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    transaction_data = json.loads(clean_response[start_idx:end_idx])
+                    
+                    if float(transaction_data.get("amount", 0)) > 0:
+                        transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
+                        transaction_doc = {
+                            "transaction_id": transaction_id,
+                            "user_id": user.user_id,
+                            "type": "expense",
+                            "amount": float(transaction_data["amount"]),
+                            "category": transaction_data.get("category", "outros"),
+                            "description": transaction_data.get("description", ""),
+                            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await db.transactions.insert_one(transaction_doc)
+                        action_taken = transaction_data
+                        
+                        # Check budget
+                        cat = transaction_data.get("category", "outros")
+                        budget_alert = ""
+                        for b in budgets:
+                            if b['category'] == cat:
+                                new_spent = expense_by_category.get(cat, 0) + float(transaction_data["amount"])
+                                pct = (new_spent / b['limit']) * 100
+                                if pct >= 100:
+                                    budget_alert = f"\n\n⚠️ **ALERTA:** Orçamento de {cat} estourado! ({pct:.0f}%)"
+                                elif pct >= 80:
+                                    budget_alert = f"\n\n⚠️ **Atenção:** {pct:.0f}% do orçamento de {cat} usado"
+                        
+                        new_balance = balance - float(transaction_data["amount"])
+                        ai_response = f"""✅ **Despesa Registrada!**
+
+🔴 **Valor:** R$ {float(transaction_data['amount']):.2f}
+📁 **Categoria:** {transaction_data.get('category', 'outros')}
+📝 **Descrição:** {transaction_data.get('description', '-')}
+
+📊 **Novo Saldo:** R$ {new_balance:.2f}{budget_alert}"""
+            except Exception as e:
+                ai_response = f"❌ Não consegui processar a despesa. Tente: 'Gastei 50 no mercado'"
+        
+        # CREATE BUDGET
+        elif is_budget and has_amount:
+            prompt = f'''Extraia os dados do orçamento desta mensagem.
+
+Mensagem: "{content}"
+
+Responda APENAS com JSON válido:
+{{"category": "alimentação", "limit": 500.0}}
+
+Categorias: alimentação, transporte, moradia, saúde, educação, lazer, outros
+Responda SOMENTE com o JSON.'''
+            
+            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            response = response_obj.text
+            
+            try:
+                clean_response = response.strip()
+                if "```" in clean_response:
+                    clean_response = clean_response.split("```")[1].replace("json", "").strip()
+                start_idx = clean_response.find('{')
+                end_idx = clean_response.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    budget_data = json.loads(clean_response[start_idx:end_idx])
+                    
+                    # Check if budget exists
+                    existing = await db.budgets.find_one({
+                        "user_id": user.user_id, 
+                        "category": budget_data['category'], 
+                        "month": current_month
+                    })
+                    
+                    if existing:
+                        await db.budgets.update_one(
+                            {"budget_id": existing['budget_id']},
+                            {"$set": {"limit": float(budget_data['limit'])}}
+                        )
+                        ai_response = f"""✅ **Orçamento Atualizado!**
+
+📁 **Categoria:** {budget_data['category']}
+💰 **Novo Limite:** R$ {float(budget_data['limit']):.2f}
+📅 **Mês:** {current_month}"""
+                    else:
+                        budget_id = f"budget_{uuid.uuid4().hex[:12]}"
+                        budget_doc = {
+                            "budget_id": budget_id,
+                            "user_id": user.user_id,
+                            "category": budget_data['category'],
+                            "limit": float(budget_data['limit']),
+                            "spent": expense_by_category.get(budget_data['category'], 0),
+                            "month": current_month,
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await db.budgets.insert_one(budget_doc)
+                        ai_response = f"""✅ **Orçamento Criado!**
+
+📁 **Categoria:** {budget_data['category']}
+💰 **Limite:** R$ {float(budget_data['limit']):.2f}
+📅 **Mês:** {current_month}"""
+            except:
+                ai_response = "❌ Não consegui criar o orçamento. Tente: 'Criar orçamento de 500 para alimentação'"
+        
+        # REPORT / ANALYSIS
+        elif is_report:
+            # Generate detailed report
+            top_expenses = sorted(expense_by_category.items(), key=lambda x: x[1], reverse=True)[:5]
+            top_income = sorted(income_by_category.items(), key=lambda x: x[1], reverse=True)[:3]
+            
+            budget_status = ""
+            for b in budgets:
+                pct = (b['spent'] / b['limit']) * 100 if b['limit'] > 0 else 0
+                status = "🔴 Estourado" if pct >= 100 else "🟡 Atenção" if pct >= 80 else "🟢 OK"
+                budget_status += f"- {b['category']}: R$ {b['spent']:.2f} / R$ {b['limit']:.2f} ({pct:.0f}%) {status}\n"
+            
+            ai_response = f"""📊 **RELATÓRIO FINANCEIRO - {current_month}**
+
+💰 **Resumo:**
+- Receitas: R$ {total_income:.2f}
+- Despesas: R$ {total_expense:.2f}
+- **Saldo: R$ {balance:.2f}** {"✅" if balance >= 0 else "⚠️"}
+
+📈 **Maiores Receitas:**
+"""
+            for cat, val in top_income:
+                ai_response += f"- {cat}: R$ {val:.2f}\n"
+            
+            ai_response += f"\n📉 **Maiores Despesas:**\n"
+            for cat, val in top_expenses:
+                ai_response += f"- {cat}: R$ {val:.2f}\n"
+            
+            if budget_status:
+                ai_response += f"\n📋 **Status dos Orçamentos:**\n{budget_status}"
+            
+            # Add AI insights
+            prompt = f"""Baseado nestes dados financeiros, dê 2-3 insights curtos e práticos:
+{context}
+
+Seja direto e objetivo. Foque em dicas acionáveis."""
+            
+            try:
+                response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                insights = response_obj.text
+                ai_response += f"\n💡 **Insights:**\n{insights}"
+            except:
                 pass
+        
+        # GENERAL CONVERSATION - Use AI
+        else:
+            prompt = f"""Você é o assistente financeiro inteligente do Sirius. Ajude o usuário com finanças pessoais.
+
+{context}
+
+Mensagem do usuário: "{content}"
+
+Responda de forma útil, amigável e em português. Se o usuário parecer querer registrar uma transação mas não ficou claro, pergunte os detalhes. Se for uma pergunta sobre finanças, responda com base no contexto. Se for uma saudação, seja amigável e ofereça ajuda.
+
+Mantenha a resposta concisa (máximo 3-4 parágrafos)."""
+            
+            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            ai_response = response_obj.text
+        
+        ai_message_id = f"msg_{uuid.uuid4().hex[:12]}"
+        ai_message = {
+            "message_id": ai_message_id,
+            "user_id": user.user_id,
+            "role": "assistant",
+            "content": ai_response,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        if action_taken:
+            ai_message["transaction_data"] = action_taken
         
         await db.chat_messages.insert_one(ai_message.copy())
         
@@ -884,6 +1131,7 @@ Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. 
         
         return {"user_message": user_message, "ai_message": ai_message}
     except Exception as e:
+        logging.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/reports")
