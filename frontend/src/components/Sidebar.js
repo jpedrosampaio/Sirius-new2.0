@@ -1,12 +1,49 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Shield, Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell } from "lucide-react";
+import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// SVG Logo Component - Aggressive Wolf/Sirius Star
+const SiriusLogo = () => (
+  <svg viewBox="0 0 100 100" className="w-12 h-12">
+    <defs>
+      <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#00F0FF" />
+        <stop offset="50%" stopColor="#007AFF" />
+        <stop offset="100%" stopColor="#00F0FF" />
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+        <feMerge>
+          <feMergeNode in="coloredBlur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+    {/* Outer ring */}
+    <circle cx="50" cy="50" r="45" fill="none" stroke="url(#logoGradient)" strokeWidth="2" opacity="0.5"/>
+    {/* Inner aggressive star/sirius symbol */}
+    <path 
+      d="M50 5 L58 35 L90 35 L64 55 L73 88 L50 68 L27 88 L36 55 L10 35 L42 35 Z" 
+      fill="url(#logoGradient)" 
+      filter="url(#glow)"
+    />
+    {/* Center circle */}
+    <circle cx="50" cy="50" r="12" fill="#050505"/>
+    <circle cx="50" cy="50" r="8" fill="url(#logoGradient)" opacity="0.8"/>
+    {/* Cross lines for aggressive look */}
+    <line x1="50" y1="20" x2="50" y2="42" stroke="#050505" strokeWidth="3"/>
+    <line x1="50" y1="58" x2="50" y2="80" stroke="#050505" strokeWidth="3"/>
+    <line x1="20" y1="50" x2="42" y2="50" stroke="#050505" strokeWidth="3"/>
+    <line x1="58" y1="50" x2="80" y2="50" stroke="#050505" strokeWidth="3"/>
+  </svg>
+);
 
 export default function Sidebar({ user }) {
   const navigate = useNavigate();
@@ -56,22 +93,28 @@ export default function Sidebar({ user }) {
       }`}>
         <div className="p-6 border-b border-[#27272A]">
           <div className="flex items-center space-x-3 mb-4">
-            <img 
-              src="https://static.prod-images.emergentagent.com/jobs/2eaa4c06-773d-4844-95bd-8cce61c803a6/images/061c7bd12a785215d4f5716d988e06dffb8dfd6d668f5617ab162d23c32aa822.png" 
-              alt="Sirius Logo" 
-              className="w-12 h-12 object-contain"
-            />
-            <span className="font-heading text-2xl">SIRIUS</span>
+            <SiriusLogo />
+            <div>
+              <span className="font-heading text-2xl bg-gradient-to-r from-[#00F0FF] to-[#007AFF] bg-clip-text text-transparent">SIRIUS</span>
+              <p className="text-[8px] text-[#52525B] uppercase tracking-widest">Discipline System</p>
+            </div>
           </div>
           {user && (
-            <div>
-              <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Operador</p>
-              <p className="font-medium truncate">{user.name}</p>
-              <div className="mt-2 flex items-center space-x-2">
-                <span className="rank-badge bg-[#007AFF] text-white px-2 py-0.5 rounded-sm text-xs">
-                  {user.rank}
-                </span>
-                <span className="font-data text-sm text-[#A1A1AA]">{user.xp} XP</span>
+            <div className="flex items-center space-x-3">
+              <Avatar className="w-10 h-10 border-2 border-[#007AFF]">
+                <AvatarImage src={user.picture} />
+                <AvatarFallback className="bg-[#007AFF] text-white font-heading text-sm">
+                  {user.name.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate text-sm">{user.name}</p>
+                <div className="flex items-center space-x-2">
+                  <span className="rank-badge bg-[#007AFF] text-white px-1.5 py-0.5 rounded-sm text-[10px]">
+                    {user.rank}
+                  </span>
+                  <span className="font-data text-xs text-[#A1A1AA]">{user.xp} XP</span>
+                </div>
               </div>
             </div>
           )}
