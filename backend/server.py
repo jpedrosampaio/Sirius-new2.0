@@ -826,8 +826,6 @@ Orçamentos Definidos: {len(budgets)}"""
         is_expense = any(word in content_lower for word in expense_keywords)
         is_report = any(word in content_lower for word in report_keywords)
         is_budget = any(word in content_lower for word in budget_keywords)
-        is_category = any(word in content_lower for word in category_keywords)
-        is_delete = any(word in content_lower for word in delete_keywords)
         is_list = any(word in content_lower for word in list_keywords)
         is_help = any(word in content_lower for word in help_keywords)
         
