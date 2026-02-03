@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Shield, Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X } from "lucide-react";
+import { Shield, Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import axios from "axios";
@@ -28,9 +28,11 @@ export default function Sidebar({ user }) {
     { icon: Home, label: "Dashboard", path: "/dashboard" },
     { icon: CheckSquare, label: "Tarefas", path: "/tasks" },
     { icon: TrendingUp, label: "Hábitos", path: "/habits" },
+    { icon: Dumbbell, label: "Treinos", path: "/workouts" },
     { icon: DollarSign, label: "Finanças", path: "/finance" },
     { icon: Target, label: "Metas", path: "/goals" },
     { icon: MessageSquare, label: "Chat", path: "/chat" },
+    { icon: Bell, label: "Notificações", path: "/notifications" },
     { icon: FileText, label: "Relatórios", path: "/reports" },
     { icon: User, label: "Perfil", path: "/profile" }
   ];
