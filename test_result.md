@@ -294,6 +294,30 @@ agent_communication:
       - Verify projections are created for future months
       - Test projection CRUD operations
       - Test AI insights generation
+      
+  - agent: "testing"
+    message: "All backend features tested - 11/11 tests passed. Ready for frontend testing."
+    
+  - agent: "main"
+    message: |
+      Bug fixes and enhancements implemented:
+      1. Enhanced chat - now registers income/expenses via natural language
+      2. Chat generates detailed reports, creates budgets, shows help
+      3. Habit toggle with XP deduction when uncompleting
+      4. Task toggle with XP deduction when uncompleting
+      5. Goal/Sprint already had XP deduction implemented
+      
+  - agent: "testing"
+    message: |
+      Enhanced chat and XP deduction testing complete - 17/18 tests passed (94.4%)
+      - Income registration via chat: WORKING
+      - Expense registration via chat: WORKING
+      - Financial reports: WORKING
+      - Help command: WORKING
+      - Budget creation via chat: WORKING
+      - Habit XP deduction on uncomplete: WORKING (+15/-15 XP)
+      - Task XP deduction on uncomplete: WORKING (+20/-20 XP)
+      - Only failure: API rate limit (429) - temporary issue, not code problem
   - agent: "testing"
     message: |
       ✅ BACKEND TESTING COMPLETE - ALL TESTS PASSED (11/11)
