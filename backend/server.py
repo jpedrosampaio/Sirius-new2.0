@@ -989,8 +989,8 @@ Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
 📝 **Descrição:** {transaction_data.get('description', '-')}
 
 📊 **Novo Saldo:** R$ {new_balance:.2f}{budget_alert}"""
-            except Exception as e:
-                ai_response = f"❌ Não consegui processar a despesa. Tente: 'Gastei 50 no mercado'"
+            except Exception:
+                ai_response = "❌ Não consegui processar a despesa. Tente: 'Gastei 50 no mercado'"
         
         # CREATE BUDGET
         elif is_budget and has_amount:
