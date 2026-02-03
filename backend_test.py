@@ -462,6 +462,300 @@ class SiriusBackendTester:
         except Exception as e:
             self.log(f"❌ AI chat error: {str(e)}", "ERROR")
             return False
+
+    def test_chat_register_income(self):
+        """Test chat functionality for registering income"""
+        self.log("💰 Testing chat - register income...")
+        
+        # Test income registration via chat
+        income_messages = [
+            "Recebi 1000 no cartão pré-pago",
+            "Ganhei 500 de freelance"
+        ]
+        
+        success_count = 0
+        
+        for message in income_messages:
+            try:
+                chat_data = {"content": message}
+                response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    ai_message = data.get('ai_message', {})
+                    transaction_data = ai_message.get('transaction_data')
+                    
+                    if transaction_data and transaction_data.get('type') == 'income':
+                        self.log(f"✅ Income registered: {message} -> R$ {transaction_data.get('amount'):.2f}")
+                        success_count += 1
+                    else:
+                        self.log(f"❌ No transaction data found for: {message}", "ERROR")
+                else:
+                    self.log(f"❌ Chat income failed: {response.status_code} - {response.text}", "ERROR")
+                    
+            except Exception as e:
+                self.log(f"❌ Chat income error: {str(e)}", "ERROR")
+        
+        return success_count == len(income_messages)
+
+    def test_chat_register_expense(self):
+        """Test chat functionality for registering expenses"""
+        self.log("🛒 Testing chat - register expense...")
+        
+        # Test expense registration via chat
+        expense_messages = [
+            "Gastei 150 no supermercado",
+            "Paguei 200 de luz"
+        ]
+        
+        success_count = 0
+        
+        for message in expense_messages:
+            try:
+                chat_data = {"content": message}
+                response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    ai_message = data.get('ai_message', {})
+                    transaction_data = ai_message.get('transaction_data')
+                    
+                    if transaction_data and transaction_data.get('type') == 'expense':
+                        self.log(f"✅ Expense registered: {message} -> R$ {transaction_data.get('amount'):.2f}")
+                        success_count += 1
+                    else:
+                        self.log(f"❌ No transaction data found for: {message}", "ERROR")
+                else:
+                    self.log(f"❌ Chat expense failed: {response.status_code} - {response.text}", "ERROR")
+                    
+            except Exception as e:
+                self.log(f"❌ Chat expense error: {str(e)}", "ERROR")
+        
+        return success_count == len(expense_messages)
+
+    def test_chat_reports(self):
+        """Test chat functionality for financial reports"""
+        self.log("📊 Testing chat - financial reports...")
+        
+        chat_data = {"content": "Como estão minhas finanças?"}
+        
+        try:
+            response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_message = data.get('ai_message', {})
+                ai_content = ai_message.get('content', '')
+                
+                # Check if response contains financial report keywords
+                report_keywords = ['receitas', 'despesas', 'saldo', 'R$']
+                has_report_content = any(keyword.lower() in ai_content.lower() for keyword in report_keywords)
+                
+                if has_report_content and len(ai_content) > 100:
+                    self.log("✅ Financial report generated successfully")
+                    self.log(f"   Report length: {len(ai_content)} characters")
+                    return True
+                else:
+                    self.log("❌ Financial report missing expected content", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Chat reports failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Chat reports error: {str(e)}", "ERROR")
+            return False
+
+    def test_chat_help(self):
+        """Test chat help functionality"""
+        self.log("❓ Testing chat - help command...")
+        
+        chat_data = {"content": "ajuda"}
+        
+        try:
+            response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_message = data.get('ai_message', {})
+                ai_content = ai_message.get('content', '')
+                
+                # Check if response contains help keywords
+                help_keywords = ['comandos', 'funcionalidades', 'registrar', 'relatórios', 'orçamento']
+                has_help_content = any(keyword.lower() in ai_content.lower() for keyword in help_keywords)
+                
+                if has_help_content and len(ai_content) > 200:
+                    self.log("✅ Help message generated successfully")
+                    self.log(f"   Help length: {len(ai_content)} characters")
+                    return True
+                else:
+                    self.log("❌ Help message missing expected content", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Chat help failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Chat help error: {str(e)}", "ERROR")
+            return False
+
+    def test_chat_create_budget(self):
+        """Test chat functionality for creating budgets"""
+        self.log("💼 Testing chat - create budget...")
+        
+        chat_data = {"content": "Criar orçamento de 500 para alimentação"}
+        
+        try:
+            response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_message = data.get('ai_message', {})
+                ai_content = ai_message.get('content', '')
+                
+                # Check if response indicates budget creation
+                budget_keywords = ['orçamento', 'criado', 'alimentação', '500']
+                has_budget_content = any(keyword.lower() in ai_content.lower() for keyword in budget_keywords)
+                
+                if has_budget_content:
+                    self.log("✅ Budget creation via chat successful")
+                    return True
+                else:
+                    self.log("❌ Budget creation response missing expected content", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Chat budget creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Chat budget creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_habit_toggle_xp(self):
+        """Test habit completion/uncompletion with XP changes"""
+        self.log("🎯 Testing habit toggle with XP...")
+        
+        # First create a habit
+        habit_data = {
+            "name": "Test Habit",
+            "color": "#007AFF"
+        }
+        
+        try:
+            # Create habit
+            response = self.session.post(f"{API_BASE}/habits", json=habit_data)
+            if response.status_code != 200:
+                self.log(f"❌ Failed to create test habit: {response.status_code}", "ERROR")
+                return False
+            
+            habit_id = response.json().get('habit_id')
+            test_date = "2025-07-03"
+            
+            # Get initial XP
+            me_response = self.session.get(f"{API_BASE}/auth/me")
+            if me_response.status_code != 200:
+                self.log("❌ Failed to get user info", "ERROR")
+                return False
+            
+            initial_xp = me_response.json().get('xp', 0)
+            
+            # Complete habit (should add XP)
+            complete_response = self.session.post(f"{API_BASE}/habits/{habit_id}/complete?date={test_date}")
+            if complete_response.status_code != 200:
+                self.log(f"❌ Failed to complete habit: {complete_response.status_code}", "ERROR")
+                return False
+            
+            complete_data = complete_response.json()
+            xp_earned_complete = complete_data.get('xp_earned', 0)
+            
+            if xp_earned_complete != 15:
+                self.log(f"❌ Expected 15 XP for completion, got {xp_earned_complete}", "ERROR")
+                return False
+            
+            # Uncomplete habit (should deduct XP)
+            uncomplete_response = self.session.post(f"{API_BASE}/habits/{habit_id}/complete?date={test_date}")
+            if uncomplete_response.status_code != 200:
+                self.log(f"❌ Failed to uncomplete habit: {uncomplete_response.status_code}", "ERROR")
+                return False
+            
+            uncomplete_data = uncomplete_response.json()
+            xp_earned_uncomplete = uncomplete_data.get('xp_earned', 0)
+            
+            if xp_earned_uncomplete != -15:
+                self.log(f"❌ Expected -15 XP for uncompletion, got {xp_earned_uncomplete}", "ERROR")
+                return False
+            
+            self.log("✅ Habit toggle with XP working correctly")
+            self.log(f"   Complete: +{xp_earned_complete} XP, Uncomplete: {xp_earned_uncomplete} XP")
+            return True
+            
+        except Exception as e:
+            self.log(f"❌ Habit toggle XP error: {str(e)}", "ERROR")
+            return False
+
+    def test_task_toggle_xp(self):
+        """Test task completion/uncompletion with XP changes"""
+        self.log("📋 Testing task toggle with XP...")
+        
+        # First create a task
+        task_data = {
+            "title": "Test Task",
+            "date": "2025-07-03",
+            "priority": "medium",
+            "recurrence": "daily"
+        }
+        
+        try:
+            # Create task
+            response = self.session.post(f"{API_BASE}/tasks", json=task_data)
+            if response.status_code != 200:
+                self.log(f"❌ Failed to create test task: {response.status_code}", "ERROR")
+                return False
+            
+            task_id = response.json().get('task_id')
+            test_date = "2025-07-03"
+            
+            # Get initial XP
+            me_response = self.session.get(f"{API_BASE}/auth/me")
+            if me_response.status_code != 200:
+                self.log("❌ Failed to get user info", "ERROR")
+                return False
+            
+            initial_xp = me_response.json().get('xp', 0)
+            
+            # Complete task (should add XP)
+            complete_response = self.session.patch(f"{API_BASE}/tasks/{task_id}?completed=true&date={test_date}")
+            if complete_response.status_code != 200:
+                self.log(f"❌ Failed to complete task: {complete_response.status_code}", "ERROR")
+                return False
+            
+            complete_data = complete_response.json()
+            xp_earned_complete = complete_data.get('xp_earned', 0)
+            
+            if xp_earned_complete != 20:  # Medium priority = 20 XP
+                self.log(f"❌ Expected 20 XP for completion, got {xp_earned_complete}", "ERROR")
+                return False
+            
+            # Uncomplete task (should deduct XP)
+            uncomplete_response = self.session.patch(f"{API_BASE}/tasks/{task_id}?completed=false&date={test_date}")
+            if uncomplete_response.status_code != 200:
+                self.log(f"❌ Failed to uncomplete task: {uncomplete_response.status_code}", "ERROR")
+                return False
+            
+            uncomplete_data = uncomplete_response.json()
+            xp_earned_uncomplete = uncomplete_data.get('xp_earned', 0)
+            
+            if xp_earned_uncomplete != -20:
+                self.log(f"❌ Expected -20 XP for uncompletion, got {xp_earned_uncomplete}", "ERROR")
+                return False
+            
+            self.log("✅ Task toggle with XP working correctly")
+            self.log(f"   Complete: +{xp_earned_complete} XP, Uncomplete: {xp_earned_uncomplete} XP")
+            return True
+            
+        except Exception as e:
+            self.log(f"❌ Task toggle XP error: {str(e)}", "ERROR")
+            return False
     
     def run_all_tests(self):
         """Run all backend tests"""
