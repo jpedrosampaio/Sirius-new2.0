@@ -146,12 +146,44 @@ export default function Profile() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             <Card className="bg-[#0A0A0A] border-[#27272A] p-6 lg:col-span-2">
               <div className="flex items-start space-x-6">
-                <Avatar className="w-24 h-24 border-2 border-[#007AFF]">
-                  <AvatarImage src={user.picture} />
-                  <AvatarFallback className="bg-[#007AFF] text-white font-heading text-2xl">
-                    {user.name.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative group">
+                  <Avatar className="w-24 h-24 border-2 border-[#007AFF]">
+                    <AvatarImage src={user.picture} />
+                    <AvatarFallback className="bg-[#007AFF] text-white font-heading text-2xl">
+                      {user.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {/* Overlay para upload */}
+                  <div className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingPhoto}
+                      className="p-2 bg-[#007AFF] rounded-full hover:bg-[#0056b3] transition-colors"
+                    >
+                      {uploadingPhoto ? (
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Camera className="w-5 h-5 text-white" />
+                      )}
+                    </button>
+                  </div>
+                  {/* Botão de remover foto */}
+                  {user.picture && (
+                    <button
+                      onClick={handleRemovePhoto}
+                      className="absolute -bottom-1 -right-1 p-1.5 bg-red-500 rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-3 h-3 text-white" />
+                    </button>
+                  )}
+                </div>
                 <div className="flex-1">
                   <h2 className="font-heading text-3xl mb-2">{user.name}</h2>
                   <p className="text-[#A1A1AA] mb-4">{user.email}</p>
