@@ -741,33 +741,121 @@ export default function Workouts() {
                     <p className="text-sm text-[#52525B] mt-2">Clique em "Nova Ficha" para criar uma</p>
                   </Card>
                 ) : (
-                  plans.map(plan => (
-                    <Card key={plan.plan_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-heading text-lg">{plan.name}</h3>
-                          {plan.description && <p className="text-sm text-[#A1A1AA]">{plan.description}</p>}
-                        </div>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditDialog(plan)} className="text-[#00F0FF] h-8 w-8 p-0">
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDeletePlan(plan.plan_id)} className="text-red-500 h-8 w-8 p-0">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        {plan.exercises.map((ex, idx) => (
-                          <div key={idx} className="bg-[#121212] p-2 rounded text-sm font-mono flex items-center gap-2">
-                            <span className="text-[#52525B]">{idx + 1}.</span>
-                            <span>{ex.name} - {ex.sets}x{ex.reps} {ex.weight && `@ ${ex.weight}`}</span>
+                  plans.map(plan => {
+                    const isExpanded = expandedPlans[plan.plan_id];
+                    const { completed, total } = getPlanCompletedCount(plan.plan_id);
+                    const exerciseStatus = planExerciseStatus[plan.plan_id] || {};
+                    
+                    return (
+                      <Card key={plan.plan_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
+                        {/* Cabeçalho clicável */}
+                        <div 
+                          className="cursor-pointer"
+                          onClick={() => togglePlanExpanded(plan.plan_id)}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-heading text-lg">{plan.name}</h3>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-4 h-4 text-[#A1A1AA]" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-[#A1A1AA]" />
+                                )}
+                              </div>
+                              {plan.description && <p className="text-sm text-[#A1A1AA]">{plan.description}</p>}
+                              <p className="text-xs text-[#52525B] mt-1">
+                                {plan.exercises.length} exercícios
+                                {isExpanded && total > 0 && (
+                                  <span className="ml-2 text-[#00F0FF]">
+                                    ({completed}/{total} marcados)
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="sm" onClick={() => openEditDialog(plan)} className="text-[#00F0FF] h-8 w-8 p-0">
+                                <Edit2 className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDeletePlan(plan.plan_id)} className="text-red-500 h-8 w-8 p-0">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-[#52525B] mt-3">{plan.exercises.length} exercícios</p>
-                    </Card>
-                  ))
+                        </div>
+                        
+                        {/* Lista de exercícios com checkboxes - só aparece quando expandido */}
+                        {isExpanded && (
+                          <div className="mt-4 border-t border-[#27272A] pt-4">
+                            <div className="flex justify-between items-center mb-3">
+                              <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">Exercícios</Label>
+                              <div className="flex gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => markAllPlanExercises(plan.plan_id, true)}
+                                  className="text-xs text-[#00F0FF] h-6 px-2"
+                                >
+                                  Marcar Todos
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => resetPlanExercises(plan.plan_id)}
+                                  className="text-xs text-[#A1A1AA] h-6 px-2"
+                                >
+                                  Limpar
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              {plan.exercises.map((ex, idx) => {
+                                const isChecked = exerciseStatus[idx] || false;
+                                return (
+                                  <div 
+                                    key={idx} 
+                                    onClick={() => togglePlanExercise(plan.plan_id, idx)}
+                                    className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-all ${
+                                      isChecked 
+                                        ? 'bg-[#1a2f1a] border border-green-900' 
+                                        : 'bg-[#121212] border border-[#27272A] hover:border-[#3f3f46]'
+                                    }`}
+                                  >
+                                    <Checkbox 
+                                      checked={isChecked}
+                                      onCheckedChange={() => togglePlanExercise(plan.plan_id, idx)}
+                                      className="border-[#52525B] data-[state=checked]:bg-[#00F0FF] data-[state=checked]:border-[#00F0FF]"
+                                    />
+                                    <span className="text-[#52525B] font-mono text-sm">{idx + 1}.</span>
+                                    <span className={`font-mono text-sm flex-1 ${isChecked ? 'text-green-400 line-through' : 'text-white'}`}>
+                                      {ex.name} - {ex.sets}x{ex.reps} {ex.weight && `@ ${ex.weight}`}
+                                    </span>
+                                    {isChecked && <Check className="w-4 h-4 text-green-500" />}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            
+                            {/* Barra de progresso */}
+                            {total > 0 && (
+                              <div className="mt-4">
+                                <div className="flex justify-between text-xs text-[#A1A1AA] mb-1">
+                                  <span>Progresso</span>
+                                  <span>{Math.round((completed / total) * 100)}%</span>
+                                </div>
+                                <div className="h-2 bg-[#121212] rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-gradient-to-r from-[#00F0FF] to-[#22C55E] transition-all duration-300"
+                                    style={{ width: `${(completed / total) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  })
                 )}
               </div>
             </TabsContent>
