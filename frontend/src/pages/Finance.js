@@ -272,7 +272,8 @@ export default function Finance() {
         description: newCharge.description,
         category: newCharge.category,
         payment_type: newCharge.payment_type,
-        installments: newCharge.payment_type === "parcelado" ? parseInt(newCharge.installments) : 1
+        installments: newCharge.payment_type === "parcelado" ? parseInt(newCharge.installments) : 1,
+        start_month: newCharge.start_month
       };
       
       const res = await axios.post(`${API}/credit-cards/${selectedCard}/charge`, chargeData, { withCredentials: true });
