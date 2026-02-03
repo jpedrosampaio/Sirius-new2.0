@@ -1,223 +1,159 @@
 <analysis>**original_problem_statement:**
-O usuário solicitou a construção de uma aplicação full-stack chamada Sirius com as seguintes funcionalidades:
-- **Tarefas Diárias:** Criar, organizar e executar tarefas com um dashboard de progresso.
-- **Sistema de Hábitos:** Registrar sequências de hábitos para construir consistência.
-- **Controle Financeiro:** Rastrear receitas, despesas e orçamentos, com alertas de estouro.
-- **Metas & Sprints:** Definir metas divididas em sprints de 60 dias.
-- **Gamificação Militar:** Ganhar XP, subir de ranking (patentes do exército) e desbloquear conquistas.
-- **Relatórios Inteligentes:** Geração automática de relatórios para identificar padrões e sugerir otimizações.
-- **Interface:** Tema escuro (dark theme).
-- **Autenticação:** E-mail/senha e Google Auth.
-- **Inteligência Artificial:** Sistema completo da Emergent (OpenAI, Claude, Gemini) para análise e insights, especialmente em um chat que também registra transações financeiras a partir de texto, imagens e áudio.
-- **Recursos Adicionais Solicitados:**
-    - Notificações push para alertas de orçamento.
-    - Dashboard avançado com gráficos de progresso histórico.
-    - Sistema de desafios semanais com XP bônus.
-    - Sprints devem usar checkboxes diários em vez de uma barra de progresso.
-    - Tarefas devem ser recorrentes (diárias, semanais, mensais).
-    - A área financeira deve incluir gráficos de despesas por categoria, metas de gastos por categoria e gerenciamento de cartões de crédito/faturas.
+O usuário solicitou as seguintes funcionalidades:
 
-**User's preferred language**: Portuguese
+1.  **Aprimoramento do Cartão de Crédito:** Na aba Financeiro, ao adicionar uma compra, o usuário deve poder escolher entre à vista ou parcelado. Se for parcelado, deve ser possível informar o número de parcelas para que o sistema crie uma projeção de gastos para os meses seguintes.
+2.  **Nova Aba de Projeção de Gastos:**
+    *   Criar uma nova aba para visualizar a projeção de gastos futuros.
+    *   Incluir um seletor para navegar entre os meses.
+    *   Permitir a adição manual de despesas, definindo-as como fixas ou com um número específico de repetições.
+    *   A aba deve conter um resumo das receitas e fornecer insights e sugestões (usando IA).
+3.  **Troca da Ferramenta de IA:** Substituir a integração existente da Emergent LLM pela API do Gemma do Google AI, utilizando a chave fornecida: .
+4.  **Correções de Bugs e Melhorias Adicionais:**
+    *   O chat não está registrando transações financeiras (entradas/saídas).
+    *   Permitir que o usuário desmarque um hábito concluído.
+    *   Ao desmarcar um hábito, tarefa ou sprint, o XP ganho deve ser descontado.
+    *   Tornar o chat um assistente financeiro completo, capaz de registrar transações, gerar relatórios e criar categorias sob demanda.
+
+**User's preferred language**: Portuguese (Português). The next agent MUST respond in Portuguese.
 
 **what currently exists?**
-Uma aplicação full-stack (FastAPI + React + MongoDB) foi criada com a estrutura básica para todas as funcionalidades solicitadas. O backend está contido em um único arquivo monolítico () e o frontend possui páginas separadas para cada funcionalidade. Múltiplas tentativas de correção de bugs e implementação de novos recursos foram feitas, mas várias funcionalidades principais permanecem quebradas ou incompletas.
+O agente implementou a maior parte dos requisitos no backend e no frontend.
+*   **Backend ():**
+    *   A integração com a IA foi trocada para o Google Gemini () usando a biblioteca .
+    *   O endpoint de cobrança no cartão () foi atualizado para aceitar compras parceladas.
+    *   Foram criados novos endpoints () para gerenciar projeções de gastos. As projeções são criadas automaticamente para compras parceladas.
+    *   O endpoint do chat () foi completamente reescrito para funcionar como um assistente financeiro robusto.
+    *   Foram implementadas as lógicas para descontar XP ao desmarcar a conclusão de hábitos e tarefas.
+*   **Frontend ():**
+    *   O arquivo foi reescrito para incluir uma nova aba Projeções.
+    *   O formulário de Lançar Compra foi modificado para incluir as opções À Vista e Parcelado.
 
 **Last working item**:
-- **Last item agent was working:** O agente estava tentando corrigir o chat, que apresentava erros ao enviar mensagens, e implementar a página de Finanças, adicionando gráficos de despesas e uma nova seção para gerenciamento de cartões de crédito. A última ação foi sobrescrever o arquivo  com o código completo para esta página e reiniciar o serviço de frontend.
+- **Last item agent was working:** O agente estava finalizando a implementação das correções e melhorias solicitadas pelo usuário, focando em tornar o chat um assistente financeiro funcional e corrigir o sistema de XP. Após implementar as mudanças no , o agente executou os testes de backend.
 - **Status:** USER VERIFICATION PENDING
-- **Agent Testing Done:** N
-- **Which testing method agent to use?** both
+- **Agent Testing Done:** Y (Apenas para o backend)
+- **Which testing method agent to use?** frontend testing agent. O backend foi testado, mas o frontend precisa de validação para garantir que as novas abas, formulários e fluxos de usuário funcionem corretamente de ponta a ponta.
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-- **Issue 1:** Chat não funciona corretamente (P0)
-- **Issue 2:** Gráficos na página de Finanças não são exibidos (P0)
-- **Issue 3:** Lógica de XP para Sprints/Goals está incorreta (P1)
-- **Issue 4:** Tarefas recorrentes não persistem corretamente (P1)
-- **Issue 5:** Download de relatórios não funciona (P2)
-- **Issue 6:** Responsividade mobile incompleta (P2)
+- **Issue 1: (P0) Falha no teste da API do Gemini por limite de taxa**
+  - **Description:** Um dos 18 testes de backend falhou com um erro  da API do Gemini. Embora o agente o tenha considerado um problema temporário, ele representa um ponto de falha potencial na funcionalidade do chat.
+  - **Attempted fixes:** Nenhuma. O agente presumiu que era um problema transitório.
+  - **Next debug checklist:**
+    - Verificar o endpoint  em .
+    - Implementar um mecanismo de retry com exponential backoff para as chamadas à API do Gemini para lidar com erros de limite de taxa de forma mais robusta.
+  - **Why fix this issue and what will be achieved with the fix?** Garante que a funcionalidade do chat, que é central para a nova experiência do usuário, seja confiável e não falhe devido a picos de uso da API.
+  - **Status:** NOT STARTED
+  - **Is recurring issue?** N
+  - **Should Test backend/both after fix?** backend
 
-**Issues Detail:**
-- **Issue 1:** Chat não funciona corretamente
-    - **Attempted fixes:** O agente tentou reescrever o manipulador de chat no backend () e no frontend (), e corrigiu importações ausentes/duplicadas () no . Apesar disso, o usuário continua relatando que ao enviar uma mensagem, um erro é exibido, a mensagem desaparece e só reaparece junto com a resposta da IA após um refresh na página. O chat também não fornece os insights financeiros solicitados.
-    - **Next debug checklist:**
-        1. Verificar os logs do console do navegador no momento exato do envio da mensagem para capturar erros de frontend.
-        2. Inspecionar a resposta da API  no painel de Network do navegador para ver se o formato é o esperado pelo frontend.
-        3. Adicionar logs detalhados no endpoint  em  para rastrear o fluxo de dados, a chamada para a IA e a formatação da resposta.
-        4. Validar se a atualização de estado do React em  está manipulando corretamente a resposta da API para renderizar as mensagens sem a necessidade de um refresh.
-    - **Why fix this issue and what will be achieved with the fix?** O chat com IA é uma funcionalidade central e crítica para o usuário, especialmente para o registro de transações financeiras. A correção permitirá uma interação fluida e a utilização de uma das principais features do app.
-    - **Status:** IN PROGRESS
-    - **Is recurring issue?** Y
-    - **Should Test frontend/backend/both after fix?** both
-    - **Blocked on other issue:** None
+- **Issue 2: (P1) Verificação do desconto de XP para Sprints**
+  - **Description:** O agente implementou o desconto de XP para hábitos e tarefas, mas a lógica para sprints não foi confirmada. É necessário verificar se ao desmarcar um sprint o XP é devidamente descontado.
+  - **Attempted fixes:** Nenhuma. O agente analisou o código, mas a sessão terminou antes da confirmação ou correção.
+  - **Next debug checklist:**
+    - Revisar o endpoint  em .
+    - Verificar se a lógica de atualização () para o XP do usuário também considera o caso de desmarcação ().
+    - Se necessário, adicionar a lógica para subtrair o XP.
+  - **Why fix this issue and what will be achieved with the fix?** Mantém a consistência e a integridade do sistema de gamificação da aplicação.
+  - **Status:** NOT STARTED
+  - **Is recurring issue?** N
+  - **Should Test backend/both after fix?** backend
 
-- **Issue 2:** Gráficos na página de Finanças não são exibidos
-    - **Attempted fixes:** O agente instalou a biblioteca  e sobrescreveu  várias vezes com código que deveria renderizar os gráficos. O usuário relata que a área do gráfico permanece em branco.
-    - **Next debug checklist:**
-        1. Verificar se o endpoint que fornece os dados para os gráficos ( ou similar) em  está retornando os dados no formato correto que o  espera.
-        2. Depurar o componente React em , verificando se os dados da API estão sendo recebidos corretamente no estado do componente.
-        3. Inspecionar o DOM para garantir que os componentes do  estão sendo renderizados e não há erros de console relacionados.
-    - **Why fix this issue and what will be achieved with the fix?** A visualização de dados é essencial para a funcionalidade de controle financeiro. A correção fornecerá ao usuário os insights visuais solicitados sobre suas despesas.
-    - **Status:** IN PROGRESS
-    - **Is recurring issue?** Y
-    - **Should Test frontend/backend/both after fix?** frontend
-    - **Blocked on other issue:** None
-
-- **Issue 3:** Lógica de XP para Sprints/Goals está incorreta
-    - **Attempted fixes:** O agente modificou o endpoint  em  para deduzir XP quando um checkbox é desmarcado.
-    - **Next debug checklist:**
-        1. Testar manualmente o fluxo: marcar um dia, verificar se o XP aumenta; desmarcar o mesmo dia, verificar se o XP é deduzido para o valor original.
-        2. Revisar a lógica no endpoint para garantir que a dedução seja exatamente o valor que foi ganho.
-    - **Why fix this issue and what will be achieved with the fix?** Corrige a lógica de gamificação para que funcione como esperado, prevenindo o abuso do sistema para ganhar XP infinito.
-    - **Status:** IN PROGRESS
-    - **Is recurring issue?** Y
-    - **Should Test frontend/backend/both after fix?** backend
-    - **Blocked on other issue:** None
-
-- **Issue 4:** Tarefas recorrentes não persistem corretamente
-    - **Attempted fixes:** O agente reescreveu o sistema de tarefas no backend para incluir um campo  e atualizou o frontend. No entanto, o usuário relatou que ao mudar a data, a tarefa some.
-    - **Next debug checklist:**
-        1. Revisar a lógica de busca de tarefas em . O endpoint  deve filtrar as tarefas com base na data solicitada, mas também instanciar as tarefas recorrentes (diárias, semanais, mensais) que se aplicam àquela data.
-    - **Why fix this issue and what will be achieved with the fix?** A funcionalidade principal do app é o gerenciamento de tarefas. A correção fará com que as tarefas recorrentes funcionem conforme o esperado.
-    - **Status:** IN PROGRESS
-    - **Is recurring issue?** Y
-    - **Should Test frontend/backend/both after fix?** backend
-    - **Blocked on other issue:** None
-
-- **Issue 5:** Download de relatórios não funciona
-    - **Attempted fixes:** None. O agente não abordou este bug.
-    - **Next debug checklist:**
-        1. Localizar ou criar o endpoint de download de relatório no .
-        2. Implementar a lógica para gerar um arquivo (PDF ou CSV) com os dados do relatório.
-        3. Conectar o botão de download no frontend a este endpoint.
-    - **Why fix this issue and what will be achieved with the fix?** Implementará uma das funcionalidades originais solicitadas pelo usuário.
-    - **Status:** NOT STARTED
-    - **Is recurring issue?** N
-    - **Should Test frontend/backend/both after fix?** backend
-    - **Blocked on other issue:** None
-
-- **Issue 6:** Responsividade mobile incompleta
-    - **Attempted fixes:** O agente atualizou o , mas o usuário mencionou a necessidade de uma otimização mais ampla.
-    - **Next debug checklist:**
-        1. Usar as ferramentas de desenvolvedor do navegador para simular a visualização em dispositivos móveis.
-        2. Revisar os principais componentes e páginas (, , , etc.) e adicionar classes de responsividade do Tailwind CSS onde necessário.
-    - **Why fix this issue and what will be achieved with the fix?** Melhorará a usabilidade do aplicativo em dispositivos móveis.
-    - **Status:** NOT STARTED
-    - **Is recurring issue?** N
-    - **Should Test frontend/backend/both after fix?** frontend
-    - **Blocked on other issue:** None
+- **Issue 3: (P2) Warnings de compilação no Frontend**
+  - **Description:** O frontend compila, mas exibe warnings de  no arquivo .
+  - **Attempted fixes:** Nenhuma. Foram considerados não críticos.
+  - **Next debug checklist:**
+    - Abrir .
+    - Localizar os  e  hooks e adicionar as dependências ausentes aos seus arrays de dependência para corrigir os warnings.
+  - **Why fix this issue and what will be achieved with the fix?** Melhora a qualidade do código e previne bugs de renderização inesperados ou efeitos obsoletos no React.
+  - **Status:** NOT STARTED
+  - **Is recurring issue?** N
+  - **Should Test frontend/both after fix?** frontend
 
 **In progress Task List**:
-- **Task 1:** Implementar gerenciamento de Cartão de Crédito
-    - **Where to resume:** O agente acabou de adicionar os endpoints no backend e sobrescreveu a página . É necessário testar toda a funcionalidade de ponta a ponta.
-    - **What will be achieved with this?** Adicionará uma nova funcionalidade principal à seção de finanças, conforme solicitado pelo usuário.
-    - **Status:** IN PROGRESS
-    - **Should Test frontend/backend/both after fix?** both
-    - **Blocked on something:** Depends on Issue #2 (Finance Page Charts) for a complete UI.
+- **Task 1: (P0) Validação completa das funcionalidades implementadas**
+  - **Description:** As funcionalidades de parcelamento, projeções e as correções de bugs foram implementadas, mas o fluxo completo ainda não foi validado pelo usuário ou por um teste de ponta a ponta.
+  - **Where to resume:** A aplicação está pronta para ser testada. O próximo passo é solicitar que o usuário valide as mudanças ou pedir permissão para executar o agente de testes de frontend para verificar a UI e os fluxos de trabalho.
+  - **What will be achieved with this?** Confirmar que todos os novos recursos e correções funcionam conforme o esperado e que a aplicação está pronta para ser entregue ao usuário.
+  - **Status:** USER VERIFICATION PENDING
+  - **Should Test frontend/backend/both after fix?** both
 
 **Upcoming and Future Tasks**
-- **Upcoming Tasks:**
-    - (P1) Implementar notificações push para alertas de orçamento.
-    - (P1) Permitir que o usuário configure metas de gastos por categoria na página de Finanças.
-    - (P2) Criar um sistema de desafios semanais com bônus de XP.
-    - (P2) Implementar um dashboard avançado com gráficos de progresso histórico.
+- **(P1) Mover a chave da API do Google para o arquivo .env:** A chave da API do Google está atualmente hardcoded em . Ela deve ser movida para  e carregada como uma variável de ambiente para seguir as melhores práticas de segurança.
+- **(P2) Validar a exibição do resumo de receitas na aba de projeções:** O requisito do usuário mencionava um resumo das receitas na nova aba. É preciso verificar se a implementação atual em  contempla isso e, caso contrário, implementá-lo.
 
 **Completed work in this session**
-- Criação da estrutura inicial do projeto full-stack (Backend FastAPI, Frontend React).
-- Implementação da autenticação por email/senha e Google Auth (embora a configuração de cookies tenha exigido uma correção).
-- Criação das páginas e componentes básicos para todas as funcionalidades (Dashboard, Tarefas, Hábitos, Finanças, Metas, Chat, etc.).
-- Implementação inicial da lógica de gamificação (XP e ranks).
-- Múltiplas correções de bugs nos endpoints de registro, login, tarefas e metas.
+- **Integração do Google Gemini:** A IA foi migrada do Emergent LLM para o Google Gemini (), e a chave da API do usuário foi configurada.
+- **Backend para Parcelamento e Projeções:** A lógica de backend para registrar compras parceladas e criar projeções de despesas futuras foi implementada ().
+- **Frontend para Parcelamento e Projeções:** A UI na página de Finanças foi atualizada para incluir a aba de Projeções e o formulário para compras parceladas ().
+- **Chat como Assistente Financeiro:** O endpoint  foi refeito para entender e registrar transações financeiras.
+- **Correção do Sistema de XP:** A lógica para deduzir XP ao desmarcar hábitos e tarefas foi implementada.
+- **Testes de Backend:** Foram executados testes de backend () que passaram com sucesso (17 de 18), validando as novas funcionalidades e correções no servidor.
 
 **Earlier issues found/mentioned but not fixed**
-   - **Issue 1:** Download de relatórios não funciona. O usuário mencionou isso e o agente não abordou a questão.
-   - **Issue 2:** Responsividade mobile geral. O usuário pediu para otimizar, o agente só mexeu no Sidebar, o que provavelmente não é suficiente.
+- **Issue 1: Warnings de Lint no Frontend**
+  - **Debug checklist:** Analisar o arquivo  e adicionar as dependências ausentes aos hooks do React (, ).
+  - **Why to solve this issue and what will be achieved with this?** Prevenir bugs relacionados a stale state e garantir que os componentes reajam corretamente às mudanças de estado.
+  - **Should Test frontend/backend/both after fix:** frontend
+  - **Is recurring issue?** N
 
 **Known issue recurrence from previous fork**
-- Not applicable, this is the first session.
+- N/A
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Backend:** FastAPI, Pydantic, Motor (async MongoDB driver), JWT para autenticação.
-- **Frontend:** React, React Router, Tailwind CSS, Recharts para gráficos, Axios para chamadas de API.
-- **Database:** MongoDB.
-- **Architecture:** Monolithic backend () com um frontend React desacoplado.
+- **Backend:** FastAPI, Pydantic, MongoDB (com ), Google Generative AI SDK.
+- **Frontend:** React, React Hooks, Tailwind CSS.
+- **AI:** Integração direta com a API do Google Gemini ().
 
 **key DB schema**
-- **users:** {, , , , , , ...}
-- **tasks:** {, , , , , ...}
-- **task_instances:** {, , Mon Feb  2 15:02:58 UTC 2026, }
-- **goals:** {, , , , }
-- **transactions:** {, , , , , }
-- **chat_messages:** {,  ('user' or 'assistant'), , }
-- **credit_cards:** {, , , , }
-- **card_invoices:** {, , , , }
+- **projections:** (Nova) Armazena itens de projeção mensal. Campos incluem: , , , ,  (, ), .
+- **credit_cards:** As transações () agora podem gerar entradas na coleção .
+- **habits, tasks:** Possuem campos  e  que são usados para o sistema de gamificação.
+
+**changes in tech stack**
+- A integração de IA foi alterada de **Emergent LLM** para **Google Gemini**.
 
 **All files of reference**
-- : Arquivo principal e monolítico do backend. Contém toda a lógica de negócios, endpoints de API e modelos de dados. Foi modificado extensivamente para corrigir bugs e adicionar novos recursos.
-- : Componente React para a interface de chat. É um ponto central de falha recorrente.
-- : Componente React para a seção financeira. Foi recentemente sobrescrito para adicionar gráficos e gerenciamento de cartão de crédito. Sua funcionalidade é incerta.
-- : Componente React para gerenciamento de tarefas. Contém a lógica para exibir tarefas recorrentes.
-- : Componente React para os sprints. Contém a lógica dos checkboxes diários.
-
-**Areas that need refactoring**:
-- O arquivo  é extremamente grande (mais de 1000 linhas) e contém toda a lógica da aplicação. Dividi-lo em múltiplos arquivos (routers, models, services) por funcionalidade (e.g., , , ) melhoraria drasticamente a manutenibilidade e facilitaria a depuração.
-
-**key api endpoints**
-- , , , 
-- , 
-- , 
-- 
-- , , 
-- , 
-- 
+- : Arquivo principal do backend, modificado para incluir a integração com Gemini, endpoints de projeção, lógica de parcelamento e correções de bugs.
+- : Arquivo principal da UI de finanças, modificado para adicionar a aba de projeções e o formulário de parcelamento.
+- : Atualizado para incluir .
+- : Atualizado com os novos casos de teste para o backend.
 
 **Critical Info for New Agent**
-- O agente anterior ficou preso em um ciclo de implementar, declarar sucesso com a ferramenta , e então receber feedback do usuário de que as funcionalidades ainda estavam quebradas. Não confie em nenhuma alegação de que uma funcionalidade funciona perfeitamente sem verificação.
-- Os problemas mais críticos e recorrentes são o **chat** e os **gráficos de finanças**. Foque em resolvê-los de forma definitiva antes de passar para novos recursos.
-- O arquivo  é um grande monolito e propenso a erros. Tenha muito cuidado ao editá-lo. A causa de muitos bugs pode ser interações inesperadas entre partes diferentes do código neste arquivo.
-- O usuário está fornecendo feedback detalhado e técnico. Leve os relatórios de bug a sério e investigue a fundo.
+- A aplicação foi migrada para usar o Google Gemini com a chave de API do usuário (). A chave está atualmente no código () e deve ser movida para um arquivo .
+- As principais funcionalidades solicitadas (parcelamento, projeções, correção de bugs) foram implementadas e testadas no backend. A validação do frontend é o próximo passo crucial.
+- Esteja ciente do possível erro de  da API do Gemini e considere implementar uma solução de retentativa.
 
 **documents and test reports created in this job**
-- 
-- 
-- 
+-  foi atualizado com o plano de teste e os resultados dos testes de backend.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (Latest):** O chat ainda está com erro, a mensagem some e só aparece após refresh. Os gráficos de finanças não aparecem. Pede uma área para controle de cartão de crédito.
-2.  **User:** O chat de IA não funciona. Não consigo mais criar tarefas. Nos sprints, desmarcar a caixa não deveria descontar XP.
-3.  **User:** A aba de finanças continua sem funcionar direito. O chat não dá insights. Gráficos não foram implantados. Tarefas não são recorrentes e somem.
-4.  **User:** O chat dá erro. A responsividade mobile precisa de otimização. Erro de  ao criar tarefas. Pede notificações push, dashboard avançado, desafios e checkboxes nos sprints.
-5.  **User (Initial Feedback):** Confirma as escolhas de integração (Emergent), tipo de relatório (diário, semanal, etc.), gamificação (exército) e pede um sistema de chat para registrar finanças.
+1.   **Usuário:** *Continue. Preciso que o chat registre entradas, saídas, gere relatórios quando for solicitado, crie categorias quando for solicitado, e todas as funções que forem úteis para agilizar no dia a dia.*
+    *   **Status:** **Concluído (Verificação Pendente)**. O agente reescreveu o backend do chat para atender a esses requisitos.
+2.   **Usuário:** *O chat não está registrando as entradas... O usuário pode desmarcar um habito... Ao desmarcar habito, tarefa ou sprint, o xp ganho deverá ser descontado.*
+    *   **Status:** **Concluído (Verificação Pendente)**. O agente implementou as correções no backend para o chat e o sistema de XP.
+3.   **Usuário:** *Pode seguir.*
+    *   **Status:** **Concluído**. O agente prosseguiu com o plano.
 
 **Project Health Check:**
-- **Broken:**
-    - Chat com IA (, )
-    - Exibição de gráficos de finanças ()
-    - Download de relatórios
-- **Mocked:** N/A
+- **Broken:** A integração com a API Gemini pode ser instável devido à falta de tratamento para erros de limite de taxa.
+- **Mocked:** N/A.
 
 **3rd Party Integrations**
-- **Emergent-managed Google Auth:** Requer User-provided key (gerenciado pela plataforma)
-- **OpenAI (via emergentintegrations):** Usa Emergent LLM Key
-- **Claude (via emergentintegrations):** Usa Emergent LLM Key
-- **Gemini (via emergentintegrations):** Usa Emergent LLM Key
+- **Google Gemini ():** Integrado via  SDK. Requer uma chave de API do usuário.
 
 **Testing status**
-- **Testing agent used after significant changes:** NO (Agent called it but didn't wait for results and moved on)
-- **Troubleshoot agent used after agent stuck in loop:** NO
-- **Test files created:** None
-- **Known regressions:**
-    - A criação de tarefas foi quebrada em algum momento (erro ), que foi supostamente corrigido, mas precisa de verificação.
+- **Testing agent used after significant changes:** YES (Apenas ).
+- **Troubleshoot agent used after agent stuck in loop:** NO.
+- **Test files created:** Casos de teste foram adicionados ao arquivo .
+- **Known regressions:** Nenhuma regressão direta foi identificada, mas o erro de limite de taxa da API Gemini é uma nova vulnerabilidade.
 
 **Credentials to test flow:**
-N/A (Use a ferramenta de registro para criar um usuário de teste)
+- **Google API Key:** 
 
 **What agent forgot to execute**
-- Jamais abordou o bug do Download de relatórios não funciona.
-- Não implementou a funcionalidade de metas de gastos por categoria na seção financeira.
-- Não implementou o dashboard avançado com gráficos de progresso histórico (apenas gráficos básicos na página de finanças, que não funcionam).
-- Não implementou o sistema de desafios semanais com XP bônus.
-- Não realizou uma otimização completa da responsividade para mobile.</analysis>
+- O agente não confirmou nem implementou a lógica de dedução de XP ao desmarcar **sprints**, embora tenha feito isso para hábitos e tarefas.
+- A chave da API do Google foi deixada no código-fonte () em vez de ser movida para um arquivo de ambiente (), o que é uma má prática de segurança.</analysis>
