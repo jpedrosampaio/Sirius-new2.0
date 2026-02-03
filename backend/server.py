@@ -706,10 +706,18 @@ async def delete_transaction(request: Request, transaction_id: str, session_toke
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
-    result = await db.transactions.delete_one({"transaction_id": transaction_id, "user_id": user.user_id})
-    if result.deleted_count == 0:
+    # Primeiro verificar se a transação existe e pegar seus dados
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id, "user_id": user.user_id}, {"_id": 0})
+    if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    return {"message": "Transaction deleted"}
+    
+    # Deletar projeções relacionadas (parcelas futuras)
+    await db.projections.delete_many({"source_transaction_id": transaction_id, "user_id": user.user_id})
+    
+    # Deletar a transação
+    await db.transactions.delete_one({"transaction_id": transaction_id, "user_id": user.user_id})
+    
+    return {"message": "Transaction and related projections deleted"}
 
 @api_router.get("/budgets")
 async def get_budgets(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
