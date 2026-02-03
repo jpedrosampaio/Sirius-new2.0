@@ -37,6 +37,8 @@ export default function Workouts() {
   const [editingPlan, setEditingPlan] = useState(null);
   const [activeTab, setActiveTab] = useState("log");
   const [expandedWorkouts, setExpandedWorkouts] = useState({});
+  const [expandedPlans, setExpandedPlans] = useState({});
+  const [planExerciseStatus, setPlanExerciseStatus] = useState({});
   const today = new Date().toISOString().split('T')[0];
   
   const [newWorkout, setNewWorkout] = useState({
