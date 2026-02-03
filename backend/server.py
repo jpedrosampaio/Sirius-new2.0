@@ -1071,7 +1071,7 @@ Responda SOMENTE com o JSON.'''
             for cat, val in top_income:
                 ai_response += f"- {cat}: R$ {val:.2f}\n"
             
-            ai_response += f"\n📉 **Maiores Despesas:**\n"
+            ai_response += "\n📉 **Maiores Despesas:**\n"
             for cat, val in top_expenses:
                 ai_response += f"- {cat}: R$ {val:.2f}\n"
             
