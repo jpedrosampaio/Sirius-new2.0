@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Award, Trophy, Star, Shield, Target, TrendingUp, CheckSquare } from "lucide-react";
+import { Award, Trophy, Star, Shield, Target, TrendingUp, CheckSquare, Camera, Trash2, Upload } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -16,6 +16,8 @@ export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [achievements, setAchievements] = useState([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchUser();
