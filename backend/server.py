@@ -1050,7 +1050,7 @@ Responda SOMENTE com o JSON.'''
 📁 **Categoria:** {budget_data['category']}
 💰 **Limite:** R$ {float(budget_data['limit']):.2f}
 📅 **Mês:** {current_month}"""
-            except:
+            except Exception:
                 ai_response = "❌ Não consegui criar o orçamento. Tente: 'Criar orçamento de 500 para alimentação'"
         
         # REPORT / ANALYSIS
