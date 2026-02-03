@@ -157,6 +157,90 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Google Gemini AI integration working correctly. Both /api/projections/insights and /api/chat/send endpoints generate meaningful AI responses (5000+ characters). AI provides financial insights and responds to user queries appropriately."
 
+  - task: "Enhanced chat - register income"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Chat income registration working perfectly. Messages like 'Recebi 1000 no cartão pré-pago' and 'Ganhei 500 de freelance' correctly create income transactions with proper amounts and categories. AI extracts transaction data accurately."
+
+  - task: "Enhanced chat - register expense"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Chat expense registration working perfectly. Messages like 'Gastei 150 no supermercado' and 'Paguei 200 de luz' correctly create expense transactions with proper amounts and categories. AI extracts transaction data accurately."
+
+  - task: "Enhanced chat - financial reports"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Chat financial reports working correctly. Query 'Como estão minhas finanças?' generates detailed 968-character report with income, expenses, balance, and financial insights."
+
+  - task: "Enhanced chat - help command"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Chat help command working correctly. 'ajuda' command generates comprehensive 712-character help message with available commands and examples."
+
+  - task: "Enhanced chat - budget creation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Chat budget creation working correctly. Message 'Criar orçamento de 500 para alimentação' successfully creates budget with proper amount and category."
+
+  - task: "Habit toggle with XP deduction"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Habit XP toggle working perfectly. Completing habit awards +15 XP, uncompleting same habit deducts -15 XP. XP changes are correctly applied and returned in API response."
+
+  - task: "Task toggle with XP deduction"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Task XP toggle working perfectly. Completing medium priority task awards +20 XP, uncompleting same task deducts -20 XP. XP changes are correctly applied and returned in API response."
+
 frontend:
   - task: "Credit card charge with installments UI"
     implemented: true
