@@ -2888,6 +2888,7 @@ async def get_motivational_quote(request: Request, session_token: Optional[str] 
     # Get user stats
     today = datetime.now().strftime("%Y-%m-%d")
     week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    hour = datetime.now().hour
     
     workouts_this_week = await db.workout_logs.count_documents({
         "user_id": user.user_id,
@@ -2901,41 +2902,50 @@ async def get_motivational_quote(request: Request, session_token: Optional[str] 
         "completed": True
     })
     
-    latest_measurement = await db.body_measurements.find_one(
-        {"user_id": user.user_id}, {"_id": 0}, sort=[("date", -1)]
-    )
+    # Determine time of day
+    if hour < 12:
+        time_of_day = "manhã"
+    elif hour < 18:
+        time_of_day = "tarde"
+    else:
+        time_of_day = "noite"
     
-    context = f"""
-    Nome do usuário: {user.name}
-    XP atual: {user.xp}
-    Rank: {user.rank}
-    Treinos esta semana: {workouts_this_week}
-    Hábitos completados hoje: {habits_today}
-    """
-    
-    if latest_measurement:
-        context += f"\nÚltimo peso registrado: {latest_measurement.get('weight_kg', 'N/A')} kg"
-    
-    prompt = f"""Gere UMA frase motivacional personalizada e única para este usuário.
+    prompt = f"""Gere UMA frase motivacional ÚNICA, CRIATIVA e IMPACTANTE.
 
-CONTEXTO DO USUÁRIO:
-{context}
+CONTEXTO:
+- Nome: {user.name}
+- Hora do dia: {time_of_day}
+- Treinos esta semana: {workouts_this_week}
+- Atividades hoje: {habits_today}
 
-INSTRUÇÕES:
-- A frase deve ser curta (máximo 2 linhas)
-- Deve ser personalizada baseada no contexto
-- Pode mencionar o nome do usuário
-- Deve ser inspiradora e energizante
-- Use emojis de forma moderada (1-2)
-- Varie o estilo: pode ser um conselho, uma celebração, um desafio ou uma reflexão
+ESTILOS POSSÍVEIS (escolha um aleatoriamente):
+1. Frase filosófica profunda sobre disciplina e crescimento
+2. Citação inspiradora no estilo de grandes líderes ou atletas
+3. Metáfora poderosa sobre superação
+4. Desafio direto e provocativo
+5. Reflexão sobre mentalidade de guerreiro/campeão
+6. Frase sobre consistência e processo
+7. Motivação brutal e direta estilo militar
+8. Insight sobre autoconhecimento e evolução
+9. Comparação inspiradora com a natureza ou elementos
+10. Frase sobre legado e propósito
 
-Responda APENAS com a frase motivacional, sem explicações."""
+REGRAS:
+- Máximo 2 linhas
+- Seja CRIATIVO e ORIGINAL - evite clichês
+- Pode ou não mencionar o nome "{user.name}"
+- Use 1-2 emojis impactantes (🔥💪⚡🎯🏆🦁⚔️🌟💎🚀)
+- A frase deve causar IMPACTO e fazer a pessoa querer agir
+- Varie entre tom filosófico, agressivo, reflexivo ou desafiador
+- NÃO precisa falar de XP, patente ou progresso no app
+
+Responda APENAS com a frase, sem explicações."""
 
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
-            session_id=f"motivation_{user.user_id}_{datetime.now().hour}",
-            system_message="Você é um coach motivacional especializado em fitness e desenvolvimento pessoal."
+            session_id=f"motivation_{user.user_id}_{datetime.now().minute}",
+            system_message="Você é um mestre motivacional que combina sabedoria filosófica, mentalidade de elite atlética e coaching de alta performance. Suas frases são impactantes, únicas e memoráveis."
         ).with_model("gemini", "gemini-2.5-flash")
         
         user_message = UserMessage(text=prompt)
@@ -2951,13 +2961,24 @@ Responda APENAS com a frase motivacional, sem explicações."""
         
     except Exception as e:
         logging.error(f"Quote generation failed: {e}")
-        # Fallback quotes
+        # Fallback quotes - mais impactantes e variadas
         fallback_quotes = [
-            "💪 Cada treino te deixa mais forte. Continue assim!",
-            "🔥 Disciplina é o que te leva onde a motivação não alcança.",
-            "⭐ Você está construindo a melhor versão de si mesmo!",
-            "🚀 Pequenos progressos diários levam a grandes resultados.",
-            "💎 A consistência é a chave do sucesso. Não desista!"
+            "🔥 A dor do treino é temporária. A dor do arrependimento é permanente.",
+            "⚔️ Guerreiros não nascem. São forjados no fogo da disciplina diária.",
+            "🦁 Seja a pessoa que você precisava quando era mais novo.",
+            "💎 Diamantes são apenas pedras que não desistiram sob pressão.",
+            "🎯 Enquanto outros dormem, você constrói seu império.",
+            "⚡ Sua única competição é quem você era ontem.",
+            "🏆 Champions são feitos quando ninguém está olhando.",
+            "🚀 Conforto é a morte lenta dos seus sonhos. Acorde!",
+            "💪 Seu corpo pode quase tudo. É sua mente que você precisa convencer.",
+            "🌟 A excelência não é um ato, é um hábito. Que hábito você está construindo?"
+        ]
+        import random
+        return {
+            "quote": random.choice(fallback_quotes),
+            "fallback": True
+        }
         ]
         import random
         return {
