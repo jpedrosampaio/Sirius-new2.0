@@ -771,6 +771,17 @@ class SiriusBackendTester:
             self.log("❌ Cannot proceed without authentication", "ERROR")
             return results
         
+        # Enhanced Chat Functionality Tests
+        results['chat_register_income'] = self.test_chat_register_income()
+        results['chat_register_expense'] = self.test_chat_register_expense()
+        results['chat_reports'] = self.test_chat_reports()
+        results['chat_help'] = self.test_chat_help()
+        results['chat_create_budget'] = self.test_chat_create_budget()
+        
+        # XP Toggle Tests
+        results['habit_toggle_xp'] = self.test_habit_toggle_xp()
+        results['task_toggle_xp'] = self.test_task_toggle_xp()
+        
         # Credit Card Tests
         results['credit_card_creation'] = self.test_credit_card_creation()
         results['credit_card_charge_installments'] = self.test_credit_card_charge_installments()
