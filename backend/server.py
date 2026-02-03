@@ -1699,12 +1699,25 @@ async def charge_to_card(request: Request, card_id: str, charge_data: CardCharge
     category = charge_data.category
     payment_type = charge_data.payment_type
     installments = charge_data.installments or 1
+    start_month = charge_data.start_month  # "current" ou "next"
     
     if payment_type == "parcelado" and installments < 2:
         installments = 2  # Mínimo de 2 parcelas para parcelamento
     
     # Calcular valor da parcela
     installment_amount = amount / installments if payment_type == "parcelado" else amount
+    
+    # Determinar o mês de início baseado na escolha do usuário
+    current_date = datetime.now(timezone.utc)
+    if start_month == "next":
+        # Primeira parcela no próximo mês
+        first_month_date = current_date + timedelta(days=30)
+        first_month = first_month_date.strftime("%Y-%m")
+        transaction_date = first_month_date.strftime("%Y-%m-%d")
+    else:
+        # Primeira parcela no mês atual
+        first_month = current_date.strftime("%Y-%m")
+        transaction_date = current_date.strftime("%Y-%m-%d")
     
     transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
     transaction_doc = {
@@ -1715,18 +1728,43 @@ async def charge_to_card(request: Request, card_id: str, charge_data: CardCharge
         "total_amount": amount,  # Valor total da compra
         "category": category,
         "description": f"{description} (Cartão: {card['name']})" + (f" - Parcela 1/{installments}" if payment_type == "parcelado" else ""),
-        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "date": transaction_date,
         "card_id": card_id,
         "payment_type": payment_type,
         "installments": installments,
         "installment_number": 1,
+        "start_month": start_month,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    await db.transactions.insert_one(transaction_doc)
     
-    # Atualizar fatura atual
-    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-    invoice = await db.invoices.find_one({"card_id": card_id, "month": current_month}, {"_id": 0})
+    # Se for para o próximo mês, criar como projeção ao invés de transação
+    if start_month == "next":
+        # Criar projeção para primeira parcela
+        projection_id = f"proj_{uuid.uuid4().hex[:12]}"
+        projection_doc = {
+            "projection_id": projection_id,
+            "user_id": user.user_id,
+            "month": first_month,
+            "description": f"{description} (Cartão: {card['name']})" + (f" - Parcela 1/{installments}" if payment_type == "parcelado" else ""),
+            "amount": installment_amount,
+            "category": category,
+            "projection_type": "installment",
+            "is_fixed": False,
+            "repeat_count": None,
+            "remaining_repeats": None,
+            "source_transaction_id": transaction_id,
+            "installment_number": 1,
+            "total_installments": installments,
+            "card_id": card_id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.projections.insert_one(projection_doc)
+    else:
+        # Mês atual - criar transação normalmente
+        await db.transactions.insert_one(transaction_doc)
+    
+    # Atualizar fatura do mês correspondente
+    invoice = await db.invoices.find_one({"card_id": card_id, "month": first_month}, {"_id": 0})
     
     if not invoice:
         invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
@@ -1734,7 +1772,7 @@ async def charge_to_card(request: Request, card_id: str, charge_data: CardCharge
             "invoice_id": invoice_id,
             "card_id": card_id,
             "user_id": user.user_id,
-            "month": current_month,
+            "month": first_month,
             "amount": installment_amount,
             "paid": False,
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -1749,11 +1787,12 @@ async def charge_to_card(request: Request, card_id: str, charge_data: CardCharge
     
     # Se for parcelado, criar projeções para os meses seguintes
     if payment_type == "parcelado" and installments > 1:
-        current_date = datetime.now(timezone.utc)
+        # Determinar data base para cálculo dos meses seguintes
+        base_date = first_month_date if start_month == "next" else current_date
         
         for i in range(2, installments + 1):  # Começar da parcela 2
             # Calcular mês da parcela
-            future_date = current_date + timedelta(days=30 * (i - 1))
+            future_date = base_date + timedelta(days=30 * (i - 1))
             future_month = future_date.strftime("%Y-%m")
             
             projection_id = f"proj_{uuid.uuid4().hex[:12]}"
