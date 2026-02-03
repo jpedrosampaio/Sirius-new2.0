@@ -1642,6 +1642,7 @@ class CardChargeRequest(BaseModel):
     category: str
     payment_type: str = "vista"  # "vista" ou "parcelado"
     installments: Optional[int] = 1  # Número de parcelas
+    start_month: str = "current"  # "current" ou "next" - quando começa a primeira parcela
 
 @api_router.get("/credit-cards")
 async def get_credit_cards(request: Request, session_token: Optional[str] = Cookie(None)):
