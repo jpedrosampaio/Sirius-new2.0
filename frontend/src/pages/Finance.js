@@ -284,7 +284,7 @@ export default function Finance() {
         toast.success("Compra à vista lançada no cartão!");
       }
       
-      setNewCharge({ amount: "", description: "", category: "alimentação", payment_type: "vista", installments: 2 });
+      setNewCharge({ amount: "", description: "", category: "alimentação", payment_type: "vista", installments: 2, start_month: "current" });
       setOpenCharge(false);
       fetchTransactions();
       fetchStats();
