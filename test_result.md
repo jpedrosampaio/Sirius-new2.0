@@ -234,3 +234,29 @@ agent_communication:
         - POST /api/chat/send: ✅ Working (contextual financial advice)
       
       All backend APIs are functioning correctly. Ready for frontend testing.
+  - agent: "testing"
+    message: |
+      ✅ ENHANCED CHAT & XP TESTING COMPLETE - 17/18 TESTS PASSED (94.4%)
+      
+      🎯 **NEW FEATURES TESTED:**
+      
+      💬 **Enhanced Chat Functionality:**
+      - ✅ Income Registration: "Recebi 1000 no cartão pré-pago" → R$ 1000.00 registered
+      - ✅ Expense Registration: "Gastei 150 no supermercado" → R$ 150.00 registered  
+      - ✅ Financial Reports: "Como estão minhas finanças?" → Detailed 968-char report
+      - ✅ Help Command: "ajuda" → Comprehensive 712-char help message
+      - ✅ Budget Creation: "Criar orçamento de 500 para alimentação" → Budget created
+      
+      🏆 **XP Deduction System:**
+      - ✅ Habit Toggle: Complete (+15 XP) → Uncomplete (-15 XP) working correctly
+      - ✅ Task Toggle: Complete (+20 XP) → Uncomplete (-20 XP) working correctly
+      
+      ⚠️ **MINOR ISSUE:**
+      - ❌ AI Insights: Google Gemini API quota exhausted (429 error) - Rate limit issue, not functional problem
+      
+      🔐 **Authentication & Core Features:**
+      - ✅ Login with testsirius@test.com working
+      - ✅ All credit card and projections features still working
+      - ✅ AI chat responses generating correctly
+      
+      **CONCLUSION:** All requested enhanced chat functionality and XP deduction features are working perfectly. The only failure is due to API rate limits, not code issues.
