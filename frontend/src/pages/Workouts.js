@@ -237,6 +237,62 @@ export default function Workouts() {
     setExpandedWorkouts(prev => ({ ...prev, [logId]: !prev[logId] }));
   };
 
+  const togglePlanExpanded = (planId) => {
+    setExpandedPlans(prev => ({ ...prev, [planId]: !prev[planId] }));
+    // Inicializa o status dos exercícios se ainda não existir
+    if (!planExerciseStatus[planId]) {
+      const plan = plans.find(p => p.plan_id === planId);
+      if (plan) {
+        const initialStatus = {};
+        plan.exercises.forEach((_, idx) => {
+          initialStatus[idx] = false;
+        });
+        setPlanExerciseStatus(prev => ({ ...prev, [planId]: initialStatus }));
+      }
+    }
+  };
+
+  const togglePlanExercise = (planId, exerciseIdx) => {
+    setPlanExerciseStatus(prev => ({
+      ...prev,
+      [planId]: {
+        ...prev[planId],
+        [exerciseIdx]: !prev[planId]?.[exerciseIdx]
+      }
+    }));
+  };
+
+  const resetPlanExercises = (planId) => {
+    const plan = plans.find(p => p.plan_id === planId);
+    if (plan) {
+      const resetStatus = {};
+      plan.exercises.forEach((_, idx) => {
+        resetStatus[idx] = false;
+      });
+      setPlanExerciseStatus(prev => ({ ...prev, [planId]: resetStatus }));
+    }
+  };
+
+  const markAllPlanExercises = (planId, value) => {
+    const plan = plans.find(p => p.plan_id === planId);
+    if (plan) {
+      const newStatus = {};
+      plan.exercises.forEach((_, idx) => {
+        newStatus[idx] = value;
+      });
+      setPlanExerciseStatus(prev => ({ ...prev, [planId]: newStatus }));
+    }
+  };
+
+  const getPlanCompletedCount = (planId) => {
+    const status = planExerciseStatus[planId];
+    if (!status) return { completed: 0, total: 0 };
+    const plan = plans.find(p => p.plan_id === planId);
+    if (!plan) return { completed: 0, total: 0 };
+    const completed = Object.values(status).filter(v => v).length;
+    return { completed, total: plan.exercises.length };
+  };
+
   const getActivityIcon = (type) => ACTIVITY_TYPES.find(a => a.value === type)?.icon || "⚡";
   const getActivityLabel = (type) => ACTIVITY_TYPES.find(a => a.value === type)?.label || type;
 
