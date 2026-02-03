@@ -1098,8 +1098,7 @@ Responda SOMENTE com o JSON.'''
 Seja direto e objetivo. Foque em dicas acionáveis."""
             
             try:
-                response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                insights = response_obj.text
+                insights = await call_llm(prompt, f"insights_{user.user_id}")
                 ai_response += f"\n💡 **Insights:**\n{insights}"
             except Exception:
                 pass
@@ -1116,8 +1115,7 @@ Responda de forma útil, amigável e em português. Se o usuário parecer querer
 
 Mantenha a resposta concisa (máximo 3-4 parágrafos)."""
             
-            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            ai_response = response_obj.text
+            ai_response = await call_llm(prompt, f"chat_{user.user_id}")
         
         ai_message_id = f"msg_{uuid.uuid4().hex[:12]}"
         ai_message = {
