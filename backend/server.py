@@ -501,9 +501,27 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
     if not habit:
         raise HTTPException(status_code=404, detail="Habit not found")
     
+    # Toggle: if already completed, uncomplete it
     if date in habit['completions']:
-        return {"message": "Habit already completed today"}
+        # Uncomplete - remove date and deduct XP
+        completions = [d for d in habit['completions'] if d != date]
+        completions.sort()
+        
+        streak = calculate_streak(completions)
+        
+        await db.habits.update_one(
+            {"habit_id": habit_id},
+            {"$set": {"completions": completions, "streak": streak}}
+        )
+        
+        # Deduct XP
+        new_xp = max(0, user.xp - 15)
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        
+        return {"message": "Habit uncompleted", "streak": streak, "xp_earned": -15, "new_xp": new_xp, "uncompleted": True}
     
+    # Complete - add date and award XP
     completions = habit['completions'] + [date]
     completions.sort()
     
@@ -519,7 +537,7 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
     new_rank = calculate_rank(new_xp)
     await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
     
-    return {"message": "Habit completed", "streak": streak, "xp_earned": 15, "new_xp": new_xp}
+    return {"message": "Habit completed", "streak": streak, "xp_earned": 15, "new_xp": new_xp, "uncompleted": False}
 
 @api_router.delete("/habits/{habit_id}")
 async def delete_habit(request: Request, habit_id: str, session_token: Optional[str] = Cookie(None)):
