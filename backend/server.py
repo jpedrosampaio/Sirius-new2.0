@@ -951,8 +951,7 @@ Responda APENAS com JSON válido:
 Categorias para despesa: alimentação, transporte, moradia, saúde, educação, lazer, outros
 Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
             
-            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            response = response_obj.text
+            response = await call_llm(prompt, f"expense_{user.user_id}")
             
             try:
                 clean_response = response.strip()
