@@ -278,6 +278,84 @@ class NotificationLog(BaseModel):
     channel: str
     status: str  # sent, read, dismissed
 
+# ========== BODY MEASUREMENT MODELS ==========
+class BodyMeasurement(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    measurement_id: str
+    user_id: str
+    date: str
+    # Peso e composição corporal
+    weight_kg: Optional[float] = None
+    body_fat_percentage: Optional[float] = None
+    muscle_mass_kg: Optional[float] = None
+    bone_mass_kg: Optional[float] = None
+    water_percentage: Optional[float] = None
+    visceral_fat: Optional[int] = None
+    metabolic_age: Optional[int] = None
+    bmr_kcal: Optional[int] = None  # Taxa metabólica basal
+    # Medidas corporais (cm)
+    height_cm: Optional[float] = None
+    neck_cm: Optional[float] = None
+    shoulders_cm: Optional[float] = None
+    chest_cm: Optional[float] = None
+    waist_cm: Optional[float] = None
+    abdomen_cm: Optional[float] = None
+    hips_cm: Optional[float] = None
+    left_arm_cm: Optional[float] = None
+    right_arm_cm: Optional[float] = None
+    left_forearm_cm: Optional[float] = None
+    right_forearm_cm: Optional[float] = None
+    left_thigh_cm: Optional[float] = None
+    right_thigh_cm: Optional[float] = None
+    left_calf_cm: Optional[float] = None
+    right_calf_cm: Optional[float] = None
+    # Calculados
+    bmi: Optional[float] = None  # IMC
+    # Notas e observações
+    notes: Optional[str] = None
+    source: str = "manual"  # manual, pdf_import, bioimpedance
+    created_at: datetime
+
+class BodyMeasurementCreate(BaseModel):
+    date: str
+    weight_kg: Optional[float] = None
+    body_fat_percentage: Optional[float] = None
+    muscle_mass_kg: Optional[float] = None
+    bone_mass_kg: Optional[float] = None
+    water_percentage: Optional[float] = None
+    visceral_fat: Optional[int] = None
+    metabolic_age: Optional[int] = None
+    bmr_kcal: Optional[int] = None
+    height_cm: Optional[float] = None
+    neck_cm: Optional[float] = None
+    shoulders_cm: Optional[float] = None
+    chest_cm: Optional[float] = None
+    waist_cm: Optional[float] = None
+    abdomen_cm: Optional[float] = None
+    hips_cm: Optional[float] = None
+    left_arm_cm: Optional[float] = None
+    right_arm_cm: Optional[float] = None
+    left_forearm_cm: Optional[float] = None
+    right_forearm_cm: Optional[float] = None
+    left_thigh_cm: Optional[float] = None
+    right_thigh_cm: Optional[float] = None
+    left_calf_cm: Optional[float] = None
+    right_calf_cm: Optional[float] = None
+    notes: Optional[str] = None
+    source: str = "manual"
+
+# ========== DAILY WORKOUT TRACKING ==========
+class DailyWorkoutStatus(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    status_id: str
+    user_id: str
+    plan_id: str
+    date: str
+    exercises_status: Dict[int, bool] = {}  # {exercise_index: completed}
+    completed: bool = False
+    created_at: datetime
+    updated_at: datetime
+
 async def get_current_user(authorization: Optional[str] = None, session_token: Optional[str] = Cookie(None)) -> User:
     token = session_token or (authorization.replace("Bearer ", "") if authorization else None)
     if not token:
