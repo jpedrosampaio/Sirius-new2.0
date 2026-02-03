@@ -1944,11 +1944,7 @@ Forneça:
 Responda em português, de forma objetiva e prática."""
     
     try:
-        response_obj = google_ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        insights = response_obj.text
+        insights = await call_llm(prompt, f"projection_insights_{user.user_id}")
         
         return {
             "month": month,
