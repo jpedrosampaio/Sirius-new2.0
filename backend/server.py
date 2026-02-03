@@ -2979,12 +2979,6 @@ Responda APENAS com a frase, sem explicações."""
             "quote": random.choice(fallback_quotes),
             "fallback": True
         }
-        ]
-        import random
-        return {
-            "quote": random.choice(fallback_quotes),
-            "fallback": True
-        }
 
 # ========== DAILY WORKOUT STATUS ==========
 @api_router.get("/daily-workout-status/{plan_id}")
