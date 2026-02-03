@@ -70,52 +70,52 @@ export default function Workouts() {
     notes: ""
   });
 
-  useEffect(() => {
-    fetchUser();
-    fetchWorkouts();
-    fetchPlans();
-    fetchStats();
-  }, []);
-
-  useEffect(() => {
-    fetchStats();
-  }, [statsPeriod]);
-
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(res.data);
     } catch (error) {
       toast.error("Erro ao carregar usuário");
     }
-  };
+  }, []);
 
-  const fetchWorkouts = async () => {
+  const fetchWorkouts = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/workouts`, { withCredentials: true });
       setWorkouts(res.data);
     } catch (error) {
       toast.error("Erro ao carregar treinos");
     }
-  };
+  }, []);
 
-  const fetchPlans = async () => {
+  const fetchPlans = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/workout-plans`, { withCredentials: true });
       setPlans(res.data);
     } catch (error) {
       toast.error("Erro ao carregar fichas de treino");
     }
-  };
+  }, []);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/workout-stats?period=${statsPeriod}`, { withCredentials: true });
       setStats(res.data);
     } catch (error) {
       console.error("Erro ao carregar estatísticas");
     }
-  };
+  }, [statsPeriod]);
+
+  useEffect(() => {
+    fetchUser();
+    fetchWorkouts();
+    fetchPlans();
+    fetchStats();
+  }, [fetchUser, fetchWorkouts, fetchPlans, fetchStats]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   const handleLogWorkout = async () => {
     if (!newWorkout.name.trim()) {
