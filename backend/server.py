@@ -525,6 +525,53 @@ async def logout(request: Request, response: Response, session_token: Optional[s
     response.delete_cookie("session_token", path="/")
     return {"message": "Logged out"}
 
+@api_router.post("/auth/upload-picture")
+async def upload_profile_picture(
+    request: Request,
+    file: UploadFile = File(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Upload a profile picture for the user"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, GIF or WebP images are allowed")
+    
+    # Read and encode file
+    content = await file.read()
+    
+    # Check file size (max 5MB)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
+    
+    # Store as base64 data URL
+    file_base64 = base64.b64encode(content).decode('utf-8')
+    data_url = f"data:{file.content_type};base64,{file_base64}"
+    
+    # Update user picture
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"picture": data_url}}
+    )
+    
+    return {"message": "Profile picture updated", "picture": data_url}
+
+@api_router.delete("/auth/remove-picture")
+async def remove_profile_picture(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Remove the user's profile picture"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"picture": None}}
+    )
+    
+    return {"message": "Profile picture removed"}
+
 @api_router.get("/tasks")
 async def get_tasks(request: Request, date: Optional[str] = None, recurrence: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
