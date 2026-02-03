@@ -1012,8 +1012,7 @@ Responda APENAS com JSON válido:
 Categorias: alimentação, transporte, moradia, saúde, educação, lazer, outros
 Responda SOMENTE com o JSON.'''
             
-            response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            response = response_obj.text
+            response = await call_llm(prompt, f"budget_{user.user_id}")
             
             try:
                 clean_response = response.strip()
