@@ -807,10 +807,6 @@ Orçamentos Definidos: {len(budgets)}"""
         budget_keywords = ['orçamento', 'orcamento', 'limite', 'meta de gasto', 'definir limite',
                           'criar orçamento', 'criar orcamento', 'estabelecer limite']
         
-        category_keywords = ['categoria', 'categorias', 'classificar', 'classificação', 'tipo de gasto']
-        
-        delete_keywords = ['deletar', 'remover', 'excluir', 'apagar', 'cancelar transação', 'desfazer']
-        
         list_keywords = ['listar', 'mostrar', 'ver transações', 'ver gastos', 'ver receitas', 
                         'últimas transações', 'ultimas transacoes']
         
