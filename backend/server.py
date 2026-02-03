@@ -2086,6 +2086,419 @@ Responda em português, de forma objetiva e prática."""
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========== WORKOUT ENDPOINTS ==========
+@api_router.get("/workout-plans")
+async def get_workout_plans(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    plans = await db.workout_plans.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    for plan in plans:
+        if isinstance(plan['created_at'], str):
+            plan['created_at'] = datetime.fromisoformat(plan['created_at'])
+    return plans
+
+@api_router.post("/workout-plans")
+async def create_workout_plan(request: Request, plan_data: WorkoutPlanCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+    plan_doc = {
+        "plan_id": plan_id,
+        "user_id": user.user_id,
+        "name": plan_data.name,
+        "description": plan_data.description,
+        "exercises": plan_data.exercises,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.workout_plans.insert_one(plan_doc)
+    plan_doc['created_at'] = datetime.fromisoformat(plan_doc['created_at'])
+    return WorkoutPlan(**plan_doc)
+
+@api_router.patch("/workout-plans/{plan_id}")
+async def update_workout_plan(request: Request, plan_id: str, plan_data: WorkoutPlanCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_data = {
+        "name": plan_data.name,
+        "description": plan_data.description,
+        "exercises": plan_data.exercises
+    }
+    
+    result = await db.workout_plans.update_one(
+        {"plan_id": plan_id, "user_id": user.user_id},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Workout plan not found")
+    return {"message": "Workout plan updated"}
+
+@api_router.delete("/workout-plans/{plan_id}")
+async def delete_workout_plan(request: Request, plan_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.workout_plans.delete_one({"plan_id": plan_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Workout plan not found")
+    return {"message": "Workout plan deleted"}
+
+@api_router.get("/workouts")
+async def get_workouts(request: Request, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if date:
+        query["date"] = date
+    
+    workouts = await db.workout_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for workout in workouts:
+        if isinstance(workout['created_at'], str):
+            workout['created_at'] = datetime.fromisoformat(workout['created_at'])
+    return workouts
+
+@api_router.post("/workouts")
+async def log_workout(request: Request, workout_data: WorkoutLogCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Calcular XP baseado no tipo de atividade e duração
+    base_xp = 20
+    duration_bonus = (workout_data.duration_minutes // 15) * 5  # +5 XP a cada 15 min
+    xp_earned = base_xp + duration_bonus
+    
+    log_id = f"workout_{uuid.uuid4().hex[:12]}"
+    workout_doc = {
+        "log_id": log_id,
+        "user_id": user.user_id,
+        "plan_id": workout_data.plan_id,
+        "activity_type": workout_data.activity_type,
+        "name": workout_data.name,
+        "duration_minutes": workout_data.duration_minutes,
+        "distance_km": workout_data.distance_km,
+        "calories": workout_data.calories,
+        "exercises_completed": workout_data.exercises_completed,
+        "notes": workout_data.notes,
+        "xp_earned": xp_earned,
+        "completed": True,
+        "date": workout_data.date,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.workout_logs.insert_one(workout_doc)
+    
+    # Award XP to user
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    workout_doc['created_at'] = datetime.fromisoformat(workout_doc['created_at'])
+    return {**workout_doc, "new_xp": new_xp, "new_rank": new_rank}
+
+@api_router.patch("/workouts/{log_id}/toggle")
+async def toggle_workout(request: Request, log_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    workout = await db.workout_logs.find_one({"log_id": log_id, "user_id": user.user_id}, {"_id": 0})
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    
+    new_completed = not workout['completed']
+    xp_change = workout['xp_earned'] if new_completed else -workout['xp_earned']
+    
+    await db.workout_logs.update_one(
+        {"log_id": log_id},
+        {"$set": {"completed": new_completed}}
+    )
+    
+    # Update user XP
+    new_xp = max(0, user.xp + xp_change)
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    return {
+        "message": "Workout toggled",
+        "completed": new_completed,
+        "xp_change": xp_change,
+        "new_xp": new_xp,
+        "new_rank": new_rank
+    }
+
+@api_router.delete("/workouts/{log_id}")
+async def delete_workout(request: Request, log_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    workout = await db.workout_logs.find_one({"log_id": log_id, "user_id": user.user_id}, {"_id": 0})
+    if not workout:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    
+    # Deduct XP if was completed
+    if workout['completed']:
+        new_xp = max(0, user.xp - workout['xp_earned'])
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    await db.workout_logs.delete_one({"log_id": log_id})
+    return {"message": "Workout deleted"}
+
+@api_router.get("/workout-stats")
+async def get_workout_stats(request: Request, period: str = "week", session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Calculate date range
+    today = datetime.now(timezone.utc)
+    if period == "week":
+        start_date = (today - timedelta(days=7)).strftime("%Y-%m-%d")
+    elif period == "month":
+        start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    else:
+        start_date = (today - timedelta(days=365)).strftime("%Y-%m-%d")
+    
+    workouts = await db.workout_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start_date},
+        "completed": True
+    }, {"_id": 0}).to_list(1000)
+    
+    total_workouts = len(workouts)
+    total_duration = sum([w.get('duration_minutes', 0) for w in workouts])
+    total_distance = sum([w.get('distance_km', 0) or 0 for w in workouts])
+    total_calories = sum([w.get('calories', 0) or 0 for w in workouts])
+    total_xp = sum([w.get('xp_earned', 0) for w in workouts])
+    
+    # Count by activity type
+    by_type = {}
+    for w in workouts:
+        t = w['activity_type']
+        by_type[t] = by_type.get(t, 0) + 1
+    
+    return {
+        "period": period,
+        "total_workouts": total_workouts,
+        "total_duration_minutes": total_duration,
+        "total_distance_km": round(total_distance, 2),
+        "total_calories": total_calories,
+        "total_xp_earned": total_xp,
+        "by_activity_type": by_type
+    }
+
+# ========== NOTIFICATION ENDPOINTS ==========
+@api_router.get("/notifications")
+async def get_notifications(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notifications = await db.notifications.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    for notif in notifications:
+        if isinstance(notif['created_at'], str):
+            notif['created_at'] = datetime.fromisoformat(notif['created_at'])
+    return notifications
+
+@api_router.post("/notifications")
+async def create_notification(request: Request, notif_data: NotificationCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notification_id = f"notif_{uuid.uuid4().hex[:12]}"
+    notification_doc = {
+        "notification_id": notification_id,
+        "user_id": user.user_id,
+        "title": notif_data.title,
+        "message": notif_data.message,
+        "type": notif_data.type,
+        "category": notif_data.category,
+        "scheduled_time": notif_data.scheduled_time,
+        "repeat": notif_data.repeat,
+        "repeat_days": notif_data.repeat_days,
+        "enabled": True,
+        "channels": notif_data.channels,
+        "last_sent": None,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notification_doc)
+    notification_doc['created_at'] = datetime.fromisoformat(notification_doc['created_at'])
+    return Notification(**notification_doc)
+
+@api_router.patch("/notifications/{notification_id}")
+async def update_notification(request: Request, notification_id: str, notif_data: NotificationCreate, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_data = {
+        "title": notif_data.title,
+        "message": notif_data.message,
+        "type": notif_data.type,
+        "category": notif_data.category,
+        "scheduled_time": notif_data.scheduled_time,
+        "repeat": notif_data.repeat,
+        "repeat_days": notif_data.repeat_days,
+        "channels": notif_data.channels
+    }
+    
+    result = await db.notifications.update_one(
+        {"notification_id": notification_id, "user_id": user.user_id},
+        {"$set": update_data}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"message": "Notification updated"}
+
+@api_router.patch("/notifications/{notification_id}/toggle")
+async def toggle_notification(request: Request, notification_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notif = await db.notifications.find_one({"notification_id": notification_id, "user_id": user.user_id}, {"_id": 0})
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    new_enabled = not notif['enabled']
+    await db.notifications.update_one(
+        {"notification_id": notification_id},
+        {"$set": {"enabled": new_enabled}}
+    )
+    return {"message": "Notification toggled", "enabled": new_enabled}
+
+@api_router.delete("/notifications/{notification_id}")
+async def delete_notification(request: Request, notification_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.notifications.delete_one({"notification_id": notification_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    return {"message": "Notification deleted"}
+
+@api_router.get("/notifications/pending")
+async def get_pending_notifications(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get notifications that should be triggered now"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    current_time = datetime.now(timezone.utc).strftime("%H:%M")
+    current_day = datetime.now(timezone.utc).strftime("%A").lower()
+    
+    # Find enabled notifications for current time
+    notifications = await db.notifications.find({
+        "user_id": user.user_id,
+        "enabled": True,
+        "scheduled_time": current_time
+    }, {"_id": 0}).to_list(100)
+    
+    pending = []
+    for notif in notifications:
+        should_send = False
+        if notif['repeat'] == "none":
+            should_send = True
+        elif notif['repeat'] == "daily":
+            should_send = True
+        elif notif['repeat'] == "weekly":
+            if current_day in [d.lower() for d in notif.get('repeat_days', [])]:
+                should_send = True
+        elif notif['repeat'] == "custom":
+            if current_day in [d.lower() for d in notif.get('repeat_days', [])]:
+                should_send = True
+        
+        if should_send:
+            pending.append(notif)
+    
+    return pending
+
+@api_router.post("/notifications/{notification_id}/send")
+async def mark_notification_sent(request: Request, notification_id: str, channel: str, session_token: Optional[str] = Cookie(None)):
+    """Mark a notification as sent and log it"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Update last_sent timestamp
+    await db.notifications.update_one(
+        {"notification_id": notification_id, "user_id": user.user_id},
+        {"$set": {"last_sent": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Log the notification send
+    log_id = f"nlog_{uuid.uuid4().hex[:12]}"
+    log_doc = {
+        "log_id": log_id,
+        "notification_id": notification_id,
+        "user_id": user.user_id,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "channel": channel,
+        "status": "sent"
+    }
+    await db.notification_logs.insert_one(log_doc)
+    
+    return {"message": "Notification marked as sent", "log_id": log_id}
+
+# ========== NOTIFICATION TEMPLATES ==========
+@api_router.get("/notification-templates")
+async def get_notification_templates():
+    """Get predefined notification templates"""
+    templates = [
+        {
+            "id": "hydration",
+            "title": "💧 Hora de Beber Água",
+            "message": "Lembre-se de se manter hidratado! Beba um copo de água.",
+            "category": "hydration",
+            "suggested_times": ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"],
+            "repeat": "daily"
+        },
+        {
+            "id": "workout",
+            "title": "💪 Hora do Treino",
+            "message": "Não esqueça do seu treino de hoje! Bora mover o corpo!",
+            "category": "workout",
+            "suggested_times": ["06:00", "07:00", "18:00", "19:00"],
+            "repeat": "custom"
+        },
+        {
+            "id": "morning_tasks",
+            "title": "📋 Revisão Matinal",
+            "message": "Bom dia! Hora de revisar suas tarefas do dia.",
+            "category": "task",
+            "suggested_times": ["07:00", "08:00"],
+            "repeat": "daily"
+        },
+        {
+            "id": "evening_review",
+            "title": "🌙 Revisão Noturna",
+            "message": "Como foi seu dia? Hora de revisar o progresso e planejar amanhã.",
+            "category": "task",
+            "suggested_times": ["21:00", "22:00"],
+            "repeat": "daily"
+        },
+        {
+            "id": "habit_check",
+            "title": "✅ Verificar Hábitos",
+            "message": "Já completou seus hábitos de hoje?",
+            "category": "habit",
+            "suggested_times": ["20:00"],
+            "repeat": "daily"
+        },
+        {
+            "id": "stretch",
+            "title": "🧘 Hora de Alongar",
+            "message": "Faça uma pausa e alongue-se por 5 minutos.",
+            "category": "workout",
+            "suggested_times": ["10:00", "15:00"],
+            "repeat": "daily"
+        },
+        {
+            "id": "posture",
+            "title": "🪑 Verificar Postura",
+            "message": "Corrija sua postura! Costas retas, ombros relaxados.",
+            "category": "custom",
+            "suggested_times": ["09:00", "11:00", "14:00", "16:00"],
+            "repeat": "daily"
+        }
+    ]
+    return templates
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 
