@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
-from google import genai
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 import aiofiles
 import base64
 import requests
@@ -23,8 +23,24 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Initialize Google Gemini client
-google_ai_client = genai.Client(api_key=os.environ.get('GOOGLE_AI_KEY', ''))
+# Initialize Emergent LLM client
+EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+
+async def call_llm(prompt: str, session_id: str = "default") -> str:
+    """Helper function to call LLM using Emergent Integration"""
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=session_id,
+            system_message="Você é um assistente financeiro inteligente."
+        ).with_model("gemini", "gemini-2.5-flash")
+        
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+        return response
+    except Exception as e:
+        logging.error(f"LLM call failed: {e}")
+        raise e
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
