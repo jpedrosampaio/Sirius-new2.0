@@ -758,20 +758,35 @@ async def send_chat_message(request: Request, message_data: ChatMessageCreate, s
         
         context = f"Contexto financeiro do usuário este mês: Receitas R$ {total_income:.2f}, Despesas R$ {total_expense:.2f}, Saldo R$ {total_income - total_expense:.2f}"
         
-        is_transaction_query = any(word in content.lower() for word in ['gastei', 'ganhei', 'recebi', 'paguei', 'comprei', 'r$', 'reais'])
-        is_report_query = any(word in content.lower() for word in ['relatório', 'relatorio', 'resumo', 'analise', 'análise', 'como está', 'como estão'])
+        # Expanded keywords for transaction detection
+        income_keywords = ['ganhei', 'recebi', 'entrou', 'salário', 'salario', 'renda', 'recebimento', 'depósito', 'deposito', 'transferência recebida', 'pix recebido', 'crédito', 'credito']
+        expense_keywords = ['gastei', 'paguei', 'comprei', 'compra', 'gasto', 'despesa', 'conta', 'boleto', 'parcela']
+        amount_keywords = ['r$', 'reais', 'real', '1000', '500', '100', '200', '300', '50', '150']
+        
+        is_income_transaction = any(word in content.lower() for word in income_keywords)
+        is_expense_transaction = any(word in content.lower() for word in expense_keywords)
+        has_amount = any(word in content.lower() for word in amount_keywords)
+        is_transaction_query = (is_income_transaction or is_expense_transaction) and has_amount
+        
+        is_report_query = any(word in content.lower() for word in ['relatório', 'relatorio', 'resumo', 'analise', 'análise', 'como está', 'como estão', 'situação'])
         
         if is_transaction_query:
-            prompt = f'''Analise a mensagem do usuário e extraia informações de transação financeira.
+            trans_type = "income" if is_income_transaction else "expense"
+            prompt = f'''Você é um assistente financeiro. Extraia os dados da transação financeira da mensagem do usuário.
 
 Mensagem: "{content}"
 
-Se for uma transação, responda APENAS com JSON no formato:
-{{"type": "expense", "amount": 50.0, "category": "alimentação", "description": "descrição curta"}}
+IMPORTANTE: Responda APENAS com um JSON válido, sem texto adicional, no formato:
+{{"type": "{trans_type}", "amount": 1000.0, "category": "outros", "description": "descrição curta"}}
 
-Categorias válidas: alimentação, transporte, moradia, saúde, educação, lazer, outros
+Para type, use:
+- "income" para receitas (recebimentos, salário, ganhos, depósitos, pix recebido)
+- "expense" para despesas (gastos, pagamentos, compras)
 
-Se NÃO for uma transação clara, responda com texto normal oferecendo ajuda.'''
+Categorias válidas: alimentação, transporte, moradia, saúde, educação, lazer, salário, outros
+
+Extraia o valor numérico da mensagem. Se não houver valor claro, use 0.
+Responda SOMENTE com o JSON, nada mais.'''
         
         elif is_report_query:
             prompt = f'''O usuário pediu um resumo/relatório financeiro.
@@ -814,23 +829,44 @@ Responda de forma útil. Se ele pedir ajuda sobre finanças, ofereça insights. 
         transaction_data = None
         if is_transaction_query:
             try:
-                transaction_data = json.loads(response)
-                if "type" in transaction_data and "amount" in transaction_data:
-                    transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
-                    transaction_doc = {
-                        "transaction_id": transaction_id,
-                        "user_id": user.user_id,
-                        "type": transaction_data["type"],
-                        "amount": float(transaction_data["amount"]),
-                        "category": transaction_data.get("category", "outros"),
-                        "description": transaction_data.get("description", ""),
-                        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                        "created_at": datetime.now(timezone.utc).isoformat()
-                    }
-                    await db.transactions.insert_one(transaction_doc)
-                    ai_message["transaction_data"] = transaction_data
-                    ai_message["content"] = f"✓ Transação registrada: {transaction_data['type']} de R$ {transaction_data['amount']:.2f} em {transaction_data['category']}"
-            except:
+                # Clean response - extract JSON from response
+                clean_response = response.strip()
+                # Remove markdown code blocks if present
+                if clean_response.startswith("```"):
+                    clean_response = clean_response.split("```")[1]
+                    if clean_response.startswith("json"):
+                        clean_response = clean_response[4:]
+                    clean_response = clean_response.strip()
+                
+                # Find JSON in response
+                start_idx = clean_response.find('{')
+                end_idx = clean_response.rfind('}') + 1
+                if start_idx != -1 and end_idx > start_idx:
+                    json_str = clean_response[start_idx:end_idx]
+                    transaction_data = json.loads(json_str)
+                    
+                    if "type" in transaction_data and "amount" in transaction_data and float(transaction_data["amount"]) > 0:
+                        transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
+                        transaction_doc = {
+                            "transaction_id": transaction_id,
+                            "user_id": user.user_id,
+                            "type": transaction_data["type"],
+                            "amount": float(transaction_data["amount"]),
+                            "category": transaction_data.get("category", "outros"),
+                            "description": transaction_data.get("description", ""),
+                            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await db.transactions.insert_one(transaction_doc)
+                        ai_message["transaction_data"] = transaction_data
+                        
+                        tipo_str = "Receita" if transaction_data["type"] == "income" else "Despesa"
+                        ai_message["content"] = f"✓ {tipo_str} registrada: R$ {float(transaction_data['amount']):.2f} em {transaction_data.get('category', 'outros')}"
+                        if transaction_data.get("description"):
+                            ai_message["content"] += f" - {transaction_data['description']}"
+            except Exception as parse_error:
+                # If parsing fails, keep the original response
+                logging.error(f"Failed to parse transaction: {parse_error}")
                 pass
         
         await db.chat_messages.insert_one(ai_message.copy())
