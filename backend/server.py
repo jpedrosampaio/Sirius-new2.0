@@ -1186,12 +1186,8 @@ Metas: {data['goals']} total, {data['goals_progress']:.1f}% progresso médio
 
 Forneça insights, padrões identificados e sugestões de otimização em português."""
         
-        # Use Google Gemini API
-        response_obj = google_ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        insights = response_obj.text
+        # Use Emergent LLM API
+        insights = await call_llm(prompt, f"report_{user.user_id}")
         
         report_id = f"report_{uuid.uuid4().hex[:12]}"
         report_doc = {
