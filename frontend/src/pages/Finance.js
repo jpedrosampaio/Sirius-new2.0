@@ -873,22 +873,51 @@ export default function Finance() {
                             
                             {/* Installments (only show when parcelado) */}
                             {newCharge.payment_type === 'parcelado' && (
-                              <div>
-                                <Label>Número de Parcelas</Label>
-                                <Input
-                                  type="number"
-                                  min="2"
-                                  max="24"
-                                  value={newCharge.installments}
-                                  onChange={(e) => setNewCharge({...newCharge, installments: e.target.value})}
-                                  className="bg-[#121212] border-[#27272A] text-white"
-                                />
-                                {newCharge.amount && newCharge.installments >= 2 && (
-                                  <p className="text-sm text-[#A1A1AA] mt-2">
-                                    {newCharge.installments}x de R$ {(parseFloat(newCharge.amount) / parseInt(newCharge.installments)).toFixed(2)}
+                              <>
+                                <div>
+                                  <Label>Número de Parcelas</Label>
+                                  <Input
+                                    type="number"
+                                    min="2"
+                                    max="24"
+                                    value={newCharge.installments}
+                                    onChange={(e) => setNewCharge({...newCharge, installments: e.target.value})}
+                                    className="bg-[#121212] border-[#27272A] text-white"
+                                  />
+                                  {newCharge.amount && newCharge.installments >= 2 && (
+                                    <p className="text-sm text-[#A1A1AA] mt-2">
+                                      {newCharge.installments}x de R$ {(parseFloat(newCharge.amount) / parseInt(newCharge.installments)).toFixed(2)}
+                                    </p>
+                                  )}
+                                </div>
+                                
+                                <div>
+                                  <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Primeira Parcela</Label>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => setNewCharge({...newCharge, start_month: 'current'})}
+                                      className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors ${
+                                        newCharge.start_month === 'current' ? 'bg-[#22C55E] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                                      }`}
+                                    >
+                                      Mês Atual
+                                    </button>
+                                    <button
+                                      onClick={() => setNewCharge({...newCharge, start_month: 'next'})}
+                                      className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs transition-colors ${
+                                        newCharge.start_month === 'next' ? 'bg-[#F59E0B] text-white' : 'bg-[#121212] text-[#A1A1AA]'
+                                      }`}
+                                    >
+                                      Próximo Mês
+                                    </button>
+                                  </div>
+                                  <p className="text-xs text-[#52525B] mt-1">
+                                    {newCharge.start_month === 'current' 
+                                      ? 'A primeira parcela será cobrada neste mês' 
+                                      : 'A primeira parcela será cobrada no próximo mês'}
                                   </p>
-                                )}
-                              </div>
+                                </div>
+                              </>
                             )}
                             
                             <Button onClick={handleChargeCard} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs">
