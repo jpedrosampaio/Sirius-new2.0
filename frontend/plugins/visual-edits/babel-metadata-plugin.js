@@ -976,9 +976,11 @@ const babelMetadataPlugin = ({ types: t }) => {
       }
     } else if (t.isMemberExpression(arrayNode)) {
       // Handle cases like data.items.map(...)
+      // Pass skipArrayContext: true to prevent infinite recursion
       const memberInfo = analyzeMemberExpression(
         callExprParent.get("callee.object"),
-        state
+        state,
+        { skipArrayContext: true }
       );
       if (memberInfo) {
         arrayVar = memberInfo.varName;
