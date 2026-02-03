@@ -56,18 +56,45 @@ export default function Notifications() {
     channels: ["in_app"]
   });
 
+  const checkBrowserPermission = useCallback(() => {
+    if ("Notification" in window) {
+      setBrowserPermission(Notification.permission);
+    }
+  }, []);
+
+  const fetchUser = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      setUser(res.data);
+    } catch (error) {
+      toast.error("Erro ao carregar usuário");
+    }
+  }, []);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/notifications`, { withCredentials: true });
+      setNotifications(res.data);
+    } catch (error) {
+      toast.error("Erro ao carregar notificações");
+    }
+  }, []);
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/notification-templates`, { withCredentials: true });
+      setTemplates(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar templates");
+    }
+  }, []);
+
   useEffect(() => {
     fetchUser();
     fetchNotifications();
     fetchTemplates();
     checkBrowserPermission();
-  }, []);
-
-  const checkBrowserPermission = () => {
-    if ("Notification" in window) {
-      setBrowserPermission(Notification.permission);
-    }
-  };
+  }, [fetchUser, fetchNotifications, fetchTemplates, checkBrowserPermission]);
 
   const requestBrowserPermission = async () => {
     if ("Notification" in window) {
@@ -76,33 +103,6 @@ export default function Notifications() {
       if (permission === "granted") {
         toast.success("Notificações do navegador ativadas!");
       }
-    }
-  };
-
-  const fetchUser = async () => {
-    try {
-      const res = await axios.get(`${API}/auth/me`, { withCredentials: true });
-      setUser(res.data);
-    } catch (error) {
-      toast.error("Erro ao carregar usuário");
-    }
-  };
-
-  const fetchNotifications = async () => {
-    try {
-      const res = await axios.get(`${API}/notifications`, { withCredentials: true });
-      setNotifications(res.data);
-    } catch (error) {
-      toast.error("Erro ao carregar notificações");
-    }
-  };
-
-  const fetchTemplates = async () => {
-    try {
-      const res = await axios.get(`${API}/notification-templates`, { withCredentials: true });
-      setTemplates(res.data);
-    } catch (error) {
-      console.error("Erro ao carregar templates");
     }
   };
 
