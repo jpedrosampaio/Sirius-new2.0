@@ -1094,7 +1094,7 @@ Seja direto e objetivo. Foque em dicas acionáveis."""
                 response_obj = google_ai_client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
                 insights = response_obj.text
                 ai_response += f"\n💡 **Insights:**\n{insights}"
-            except:
+            except Exception:
                 pass
         
         # GENERAL CONVERSATION - Use AI
