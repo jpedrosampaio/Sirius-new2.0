@@ -42,7 +42,7 @@ class SiriusBackendTester:
         register_data = {
             "email": TEST_EMAIL,
             "password": TEST_PASSWORD,
-            "name": "Test Sirius User"
+            "name": TEST_NAME
         }
         
         try:
