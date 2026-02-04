@@ -376,30 +376,45 @@ class DailyWorkoutStatus(BaseModel):
     updated_at: datetime
 
 async def get_current_user(authorization: Optional[str] = None, session_token: Optional[str] = Cookie(None)) -> User:
+    """Get current user from session token - MySQL version"""
     token = session_token or (authorization.replace("Bearer ", "") if authorization else None)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=401, detail="Invalid session")
-    
-    expires_at = session["expires_at"]
-    if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Session expired")
-    
-    user_doc = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
-    if not user_doc:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    if isinstance(user_doc['created_at'], str):
-        user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
-    
-    return User(**user_doc)
+    async with async_session() as session:
+        # Get session
+        result = await session.execute(
+            select(UserSessionModel).where(UserSessionModel.session_token == token)
+        )
+        user_session = result.scalar_one_or_none()
+        
+        if not user_session:
+            raise HTTPException(status_code=401, detail="Invalid session")
+        
+        expires_at = user_session.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=401, detail="Session expired")
+        
+        # Get user
+        result = await session.execute(
+            select(UserModel).where(UserModel.user_id == user_session.user_id)
+        )
+        user_doc = result.scalar_one_or_none()
+        
+        if not user_doc:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return User(
+            user_id=user_doc.user_id,
+            email=user_doc.email,
+            name=user_doc.name,
+            picture=user_doc.picture,
+            xp=user_doc.xp,
+            rank=user_doc.rank,
+            created_at=user_doc.created_at
+        )
 
 @api_router.get("/")
 async def root():
@@ -407,67 +422,81 @@ async def root():
 
 @api_router.post("/auth/register")
 async def register(user_data: UserCreate, response: Response):
-    existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    hashed_password = bcrypt.hashpw(user_data.password.encode('utf-8'), bcrypt.gensalt())
-    user_id = f"user_{uuid.uuid4().hex[:12]}"
-    
-    user_doc = {
-        "user_id": user_id,
-        "email": user_data.email,
-        "name": user_data.name,
-        "password": hashed_password.decode('utf-8'),
-        "picture": None,
-        "xp": 0,
-        "rank": "Recruta",
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.users.insert_one(user_doc)
-    
-    session_token = f"session_{uuid.uuid4().hex}"
-    session_doc = {
-        "user_id": user_id,
-        "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.user_sessions.insert_one(session_doc)
-    
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-        max_age=7*24*60*60
-    )
-    
-    return {"session_token": session_token, "user": {"user_id": user_id, "email": user_data.email, "name": user_data.name}}
+    async with async_session() as session:
+        # Check if email exists
+        result = await session.execute(
+            select(UserModel).where(UserModel.email == user_data.email)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        hashed_password = bcrypt.hashpw(user_data.password.encode('utf-8'), bcrypt.gensalt())
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        
+        # Create user
+        new_user = UserModel(
+            user_id=user_id,
+            email=user_data.email,
+            name=user_data.name,
+            password_hash=hashed_password.decode('utf-8'),
+            picture=None,
+            xp=0,
+            rank="Recruta",
+            created_at=datetime.now(timezone.utc)
+        )
+        session.add(new_user)
+        
+        # Create session
+        session_token = f"session_{uuid.uuid4().hex}"
+        new_session = UserSessionModel(
+            session_token=session_token,
+            user_id=user_id,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            created_at=datetime.now(timezone.utc)
+        )
+        session.add(new_session)
+        
+        await session.commit()
+        
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            path="/",
+            max_age=7*24*60*60
+        )
+        
+        return {"session_token": session_token, "user": {"user_id": user_id, "email": user_data.email, "name": user_data.name}}
 
 @api_router.post("/auth/login")
 async def login(credentials: UserLogin, response: Response):
-    user_doc = await db.users.find_one({"email": credentials.email}, {"_id": 0})
-    if not user_doc:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    if not bcrypt.checkpw(credentials.password.encode('utf-8'), user_doc['password'].encode('utf-8')):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    
-    session_token = f"session_{uuid.uuid4().hex}"
-    session_doc = {
-        "user_id": user_doc["user_id"],
-        "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-    await db.user_sessions.insert_one(session_doc)
-    
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
+    async with async_session() as session:
+        result = await session.execute(
+            select(UserModel).where(UserModel.email == credentials.email)
+        )
+        user_doc = result.scalar_one_or_none()
+        
+        if not user_doc:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        if not bcrypt.checkpw(credentials.password.encode('utf-8'), user_doc.password_hash.encode('utf-8')):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        session_token = f"session_{uuid.uuid4().hex}"
+        new_session = UserSessionModel(
+            session_token=session_token,
+            user_id=user_doc.user_id,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            created_at=datetime.now(timezone.utc)
+        )
+        session.add(new_session)
+        await session.commit()
+        
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
         httponly=True,
         secure=True,
         samesite="none",
