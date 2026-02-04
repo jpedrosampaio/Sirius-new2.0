@@ -11,7 +11,8 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import aiofiles
 import base64
 import requests
@@ -25,16 +26,18 @@ db = client[os.environ['DB_NAME']]
 
 # Initialize Google Gemini client
 GOOGLE_GEMINI_API_KEY = os.environ.get('GOOGLE_GEMINI_API_KEY', '')
-genai.configure(api_key=GOOGLE_GEMINI_API_KEY)
+gemini_client = genai.Client(api_key=GOOGLE_GEMINI_API_KEY)
 
 async def call_llm(prompt: str, session_id: str = "default", system_message: str = "Você é um assistente financeiro inteligente.") -> str:
     """Helper function to call LLM using Google Gemini"""
     try:
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=system_message
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_message
+            )
         )
-        response = await model.generate_content_async(prompt)
         return response.text
     except Exception as e:
         logging.error(f"LLM call failed: {e}")
