@@ -433,6 +433,112 @@ class SiriusBackendTester:
             self.log(f"❌ AI insights error: {str(e)}", "ERROR")
             return False
     
+    def test_gemini_chat_integration(self):
+        """Test Google Gemini AI integration via chat endpoint"""
+        self.log("🤖 Testing Google Gemini AI chat integration...")
+        
+        # Test with the specific message requested
+        chat_data = {
+            "content": "Olá, como você pode me ajudar?"
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                ai_message = data.get('ai_message', {})
+                ai_content = ai_message.get('content', '')
+                
+                if ai_content and len(ai_content) > 50:  # Check for meaningful response
+                    self.log("✅ Google Gemini chat integration working")
+                    self.log(f"   Response length: {len(ai_content)} characters")
+                    self.log(f"   Sample response: {ai_content[:100]}...")
+                    return True
+                else:
+                    self.log("❌ Gemini chat response too short or empty", "ERROR")
+                    self.log(f"   Response: {ai_content}", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Gemini chat failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Gemini chat error: {str(e)}", "ERROR")
+            return False
+
+    def test_gemini_projections_insights(self):
+        """Test Google Gemini AI integration for projections insights"""
+        self.log("📊 Testing Google Gemini AI projections insights...")
+        
+        # First create some projection data to analyze
+        projection_data = {
+            "description": "Aluguel",
+            "amount": 1500.00,
+            "category": "moradia",
+            "month": "2025-08",
+            "is_fixed": True
+        }
+        
+        try:
+            # Create a projection first
+            proj_response = self.session.post(f"{API_BASE}/projections", json=projection_data)
+            if proj_response.status_code != 200:
+                self.log("⚠️ Could not create test projection, proceeding with insights test anyway")
+            
+            # Test insights generation
+            response = self.session.post(f"{API_BASE}/projections/insights?month=2025-08")
+            
+            if response.status_code == 200:
+                data = response.json()
+                insights = data.get('insights', '')
+                
+                if insights and len(insights) > 100:  # Check for meaningful insights
+                    self.log("✅ Google Gemini projections insights working")
+                    self.log(f"   Insights length: {len(insights)} characters")
+                    self.log(f"   Sample insights: {insights[:150]}...")
+                    return True
+                else:
+                    self.log("❌ Gemini insights response too short or empty", "ERROR")
+                    self.log(f"   Response: {insights}", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Gemini insights failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Gemini insights error: {str(e)}", "ERROR")
+            return False
+
+    def test_motivational_quote_endpoint(self):
+        """Test motivational quote endpoint (if it exists)"""
+        self.log("💪 Testing motivational quote endpoint...")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/motivational-quote")
+            
+            if response.status_code == 200:
+                data = response.json()
+                quote = data.get('quote', '')
+                
+                if quote and len(quote) > 10:
+                    self.log("✅ Motivational quote endpoint working")
+                    self.log(f"   Quote: {quote}")
+                    return True
+                else:
+                    self.log("❌ Motivational quote response empty", "ERROR")
+                    return False
+            elif response.status_code == 404:
+                self.log("ℹ️ Motivational quote endpoint not found (not implemented)")
+                return True  # Not a failure if endpoint doesn't exist
+            else:
+                self.log(f"❌ Motivational quote failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Motivational quote error: {str(e)}", "ERROR")
+            return False
+
     def test_ai_chat(self):
         """Test AI chat integration"""
         self.log("💬 Testing AI chat endpoint...")
