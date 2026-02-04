@@ -11,7 +11,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+import google.generativeai as genai
 import aiofiles
 import base64
 import requests
@@ -23,21 +23,19 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Initialize Emergent LLM client
-EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+# Initialize Google Gemini client
+GOOGLE_GEMINI_API_KEY = os.environ.get('GOOGLE_GEMINI_API_KEY', '')
+genai.configure(api_key=GOOGLE_GEMINI_API_KEY)
 
-async def call_llm(prompt: str, session_id: str = "default") -> str:
-    """Helper function to call LLM using Emergent Integration"""
+async def call_llm(prompt: str, session_id: str = "default", system_message: str = "Você é um assistente financeiro inteligente.") -> str:
+    """Helper function to call LLM using Google Gemini"""
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=session_id,
-            system_message="Você é um assistente financeiro inteligente."
-        ).with_model("gemini", "gemini-2.5-flash")
-        
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
-        return response
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=system_message
+        )
+        response = await model.generate_content_async(prompt)
+        return response.text
     except Exception as e:
         logging.error(f"LLM call failed: {e}")
         raise e
