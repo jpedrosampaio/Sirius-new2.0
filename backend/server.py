@@ -2947,14 +2947,11 @@ REGRAS:
 Responda APENAS com a frase, sem explicações."""
 
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
+        response = await call_llm(
+            prompt=prompt,
             session_id=f"motivation_{user.user_id}_{datetime.now().minute}",
             system_message="Você é um mestre motivacional que combina sabedoria filosófica, mentalidade de elite atlética e coaching de alta performance. Suas frases são impactantes, únicas e memoráveis."
-        ).with_model("gemini", "gemini-2.5-flash")
-        
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        )
         
         return {
             "quote": response.strip(),
