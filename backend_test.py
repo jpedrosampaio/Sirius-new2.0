@@ -18,9 +18,10 @@ load_dotenv('/app/frontend/.env')
 BACKEND_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://ai-tool-switch.preview.emergentagent.com')
 API_BASE = f"{BACKEND_URL}/api"
 
-# Test credentials
-TEST_EMAIL = "testsirius@test.com"
+# Test credentials for Gemini integration testing
+TEST_EMAIL = "testegemini@test.com"
 TEST_PASSWORD = "Test123!"
+TEST_NAME = "Teste Gemini"
 
 class SiriusBackendTester:
     def __init__(self):
