@@ -29,7 +29,7 @@ GOOGLE_GEMINI_API_KEY = os.environ.get('GOOGLE_GEMINI_API_KEY', '')
 gemini_client = genai.Client(api_key=GOOGLE_GEMINI_API_KEY)
 
 # Model to use - can be changed if quota issues occur
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 async def call_llm(prompt: str, session_id: str = "default", system_message: str = "Você é um assistente financeiro inteligente.") -> str:
     """Helper function to call LLM using Google Gemini"""
