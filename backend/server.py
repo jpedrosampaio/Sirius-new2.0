@@ -2757,10 +2757,7 @@ async def analyze_pdf_measurement(
     
     # Use Gemini to analyze the PDF
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"pdf_analysis_{user.user_id}",
-            system_message="""Você é um especialista em análise de avaliações físicas e bioimpedância.
+        system_message = """Você é um especialista em análise de avaliações físicas e bioimpedância.
             Analise o documento e extraia TODOS os dados disponíveis.
             Responda APENAS em formato JSON válido com os campos encontrados.
             Use os seguintes nomes de campos (deixe null se não encontrado):
@@ -2771,19 +2768,32 @@ async def analyze_pdf_measurement(
             - left_thigh_cm, right_thigh_cm, left_calf_cm, right_calf_cm
             - date (formato YYYY-MM-DD), notes (observações relevantes)
             - recommendations (array de recomendações baseadas nos dados)"""
-        ).with_model("gemini", "gemini-2.5-flash")
         
-        user_message = UserMessage(
-            text="Analise este documento de avaliação física/bioimpedância e extraia todos os dados em JSON:",
-            files=[{"mime_type": "application/pdf", "data": file_base64}]
+        model = genai.GenerativeModel(
+            model_name="gemini-2.0-flash",
+            system_instruction=system_message
         )
         
-        response = await chat.send_message(user_message)
+        # Upload file for Gemini
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
+        
+        response = await model.generate_content_async([
+            "Analise este documento de avaliação física/bioimpedância e extraia todos os dados em JSON:",
+            uploaded_file
+        ])
+        
+        # Clean up temp file
+        os.unlink(tmp_path)
         
         # Try to parse JSON from response
         try:
             # Remove markdown code blocks if present
-            json_str = response.strip()
+            json_str = response.text.strip()
             if json_str.startswith("```json"):
                 json_str = json_str[7:]
             if json_str.startswith("```"):
@@ -2794,7 +2804,7 @@ async def analyze_pdf_measurement(
             extracted_data = json.loads(json_str.strip())
         except json.JSONDecodeError:
             # If JSON parsing fails, return raw analysis
-            extracted_data = {"raw_analysis": response, "parse_error": True}
+            extracted_data = {"raw_analysis": response.text, "parse_error": True}
         
         return {
             "success": True,
