@@ -864,50 +864,28 @@ class SiriusBackendTester:
             self.log(f"❌ Task toggle XP error: {str(e)}", "ERROR")
             return False
     
-    def run_all_tests(self):
-        """Run all backend tests"""
-        self.log("🚀 Starting Sirius Backend Tests")
+    def run_gemini_integration_tests(self):
+        """Run focused Google Gemini AI integration tests"""
+        self.log("🚀 Starting Google Gemini AI Integration Tests")
         self.log(f"Backend URL: {BACKEND_URL}")
         
         results = {}
         
-        # Authentication
+        # Authentication with Gemini test user
         results['login'] = self.login()
         
         if not results['login']:
             self.log("❌ Cannot proceed without authentication", "ERROR")
             return results
         
-        # Enhanced Chat Functionality Tests
-        results['chat_register_income'] = self.test_chat_register_income()
-        results['chat_register_expense'] = self.test_chat_register_expense()
-        results['chat_reports'] = self.test_chat_reports()
-        results['chat_help'] = self.test_chat_help()
-        results['chat_create_budget'] = self.test_chat_create_budget()
-        
-        # XP Toggle Tests
-        results['habit_toggle_xp'] = self.test_habit_toggle_xp()
-        results['task_toggle_xp'] = self.test_task_toggle_xp()
-        
-        # Credit Card Tests
-        results['credit_card_creation'] = self.test_credit_card_creation()
-        results['credit_card_charge_installments'] = self.test_credit_card_charge_installments()
-        
-        # Projections Tests
-        results['projections_get'] = self.test_projections_get()
-        results['installment_projections_verification'] = self.test_installment_projections_verification()
-        results['projections_summary'] = self.test_projections_summary()
-        results['projections_create'] = self.test_projections_create()
-        results['projections_update'] = self.test_projections_update()
-        results['projections_delete'] = self.test_projections_delete()
-        
-        # AI Integration Tests
-        results['ai_insights'] = self.test_ai_insights()
-        results['ai_chat'] = self.test_ai_chat()
+        # Google Gemini AI Integration Tests
+        results['gemini_chat_integration'] = self.test_gemini_chat_integration()
+        results['gemini_projections_insights'] = self.test_gemini_projections_insights()
+        results['motivational_quote_endpoint'] = self.test_motivational_quote_endpoint()
         
         # Summary
         self.log("\n" + "="*60)
-        self.log("📋 TEST RESULTS SUMMARY")
+        self.log("📋 GEMINI INTEGRATION TEST RESULTS")
         self.log("="*60)
         
         passed = 0
@@ -922,7 +900,7 @@ class SiriusBackendTester:
         self.log(f"\nOverall: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
         
         if passed == total:
-            self.log("🎉 All tests passed!")
+            self.log("🎉 All Gemini integration tests passed!")
         else:
             self.log(f"⚠️ {total - passed} test(s) failed")
         
