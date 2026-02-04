@@ -1,7 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, File, UploadFile, Form, Cookie, Response, Request
+from fastapi import FastAPI, APIRouter, HTTPException, File, UploadFile, Form, Cookie, Response, Request, Depends
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 import json
@@ -17,12 +16,24 @@ import aiofiles
 import base64
 import requests
 
+# SQLAlchemy imports
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update, delete, and_, or_, func
+from sqlalchemy.orm import selectinload
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Database configuration - MySQL
+from database import (
+    async_session, init_db, get_db,
+    UserModel, UserSessionModel, TaskModel, TaskInstanceModel,
+    HabitModel, TransactionModel, BudgetModel, GoalModel,
+    ChallengeModel, AchievementModel, ChatMessageModel, ReportModel,
+    WorkoutPlanModel, WorkoutLogModel, NotificationModel, NotificationLogModel,
+    BodyMeasurementModel, DailyWorkoutStatusModel, CreditCardModel,
+    InvoiceModel, ProjectionModel, HabitLogModel
+)
 
 # Initialize Google Gemini client
 GOOGLE_GEMINI_API_KEY = os.environ.get('GOOGLE_GEMINI_API_KEY', '')
@@ -48,6 +59,10 @@ async def call_llm(prompt: str, session_id: str = "default", system_message: str
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+
+@app.on_event("startup")
+async def startup():
+    await init_db()
 
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
