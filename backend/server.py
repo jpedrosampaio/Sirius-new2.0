@@ -2784,7 +2784,7 @@ async def analyze_pdf_measurement(
         uploaded_file = gemini_client.files.upload(file=tmp_path)
         
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=GEMINI_MODEL,
             contents=[
                 types.Part.from_uri(file_uri=uploaded_file.uri, mime_type="application/pdf"),
                 "Analise este documento de avaliação física/bioimpedância e extraia todos os dados em JSON:"
