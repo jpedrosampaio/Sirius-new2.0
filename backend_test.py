@@ -907,9 +907,9 @@ class SiriusBackendTester:
         return results
 
 def main():
-    """Main test execution"""
+    """Main test execution for Google Gemini AI integration"""
     tester = SiriusBackendTester()
-    results = tester.run_all_tests()
+    results = tester.run_gemini_integration_tests()
     
     # Return exit code based on results
     all_passed = all(results.values())
