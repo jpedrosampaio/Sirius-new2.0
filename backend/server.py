@@ -2864,14 +2864,11 @@ Forneça:
 Responda em português de forma direta e motivadora."""
 
     try:
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
+        response = await call_llm(
+            prompt=prompt,
             session_id=f"recommendations_{user.user_id}",
             system_message="Você é um personal trainer e nutricionista experiente. Forneça recomendações práticas e motivadoras."
-        ).with_model("gemini", "gemini-2.5-flash")
-        
-        user_message = UserMessage(text=prompt)
-        response = await chat.send_message(user_message)
+        )
         
         return {
             "recommendations": response,
