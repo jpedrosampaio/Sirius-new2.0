@@ -2772,23 +2772,24 @@ async def analyze_pdf_measurement(
             - date (formato YYYY-MM-DD), notes (observações relevantes)
             - recommendations (array de recomendações baseadas nos dados)"""
         
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=system_message
-        )
-        
-        # Upload file for Gemini
+        # Upload file for Gemini using new SDK
         import tempfile
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
             tmp_file.write(content)
             tmp_path = tmp_file.name
         
-        uploaded_file = genai.upload_file(tmp_path, mime_type="application/pdf")
+        uploaded_file = gemini_client.files.upload(file=tmp_path)
         
-        response = await model.generate_content_async([
-            "Analise este documento de avaliação física/bioimpedância e extraia todos os dados em JSON:",
-            uploaded_file
-        ])
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_file.uri, mime_type="application/pdf"),
+                "Analise este documento de avaliação física/bioimpedância e extraia todos os dados em JSON:"
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_message
+            )
+        )
         
         # Clean up temp file
         os.unlink(tmp_path)
