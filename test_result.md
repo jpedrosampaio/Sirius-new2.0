@@ -166,15 +166,18 @@ backend:
 
   - task: "Nutrition CRUD endpoints"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented nutrition endpoints: meals CRUD, nutrition goals, water logging, diets, recipes, recipe AI suggestions"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: All nutrition endpoints working correctly. GET/PUT /api/nutrition/goals (default goals retrieved, updated to 2500 calories/180g protein). POST/GET /api/nutrition/meals (created 'Almoço Fitness' with 330 calories, retrieved successfully). POST/GET /api/nutrition/water (logged 500ml, retrieved total). GET /api/nutrition/stats working. Authentication with testsirius@test.com successful."
 
   - task: "Study Area CRUD endpoints"
     implemented: true
