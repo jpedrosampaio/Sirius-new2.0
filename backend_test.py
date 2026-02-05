@@ -30,6 +30,11 @@ class SiriusBackendTester:
         self.user_id = None
         self.test_card_id = None
         self.test_projection_id = None
+        self.test_area_id = None
+        self.test_notebook_id = None
+        self.test_note_id = None
+        self.test_task_id = None
+        self.test_flashcard_id = None
         
     def log(self, message, level="INFO"):
         timestamp = datetime.now().strftime("%H:%M:%S")
