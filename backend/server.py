@@ -740,10 +740,12 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
         completions.sort()
         
         streak = calculate_streak(completions)
+        # Recalculate best_streak from all completions
+        best_streak = calculate_best_streak(completions)
         
         await db.habits.update_one(
             {"habit_id": habit_id},
-            {"$set": {"completions": completions, "streak": streak}}
+            {"$set": {"completions": completions, "streak": streak, "best_streak": best_streak}}
         )
         
         # Deduct XP
@@ -751,14 +753,14 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
         new_rank = calculate_rank(new_xp)
         await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
         
-        return {"message": "Habit uncompleted", "streak": streak, "xp_earned": -15, "new_xp": new_xp, "uncompleted": True}
+        return {"message": "Habit uncompleted", "streak": streak, "best_streak": best_streak, "xp_earned": -15, "new_xp": new_xp, "uncompleted": True}
     
     # Complete - add date and award XP
     completions = habit['completions'] + [date]
     completions.sort()
     
     streak = calculate_streak(completions)
-    best_streak = max(habit['best_streak'], streak)
+    best_streak = max(habit.get('best_streak', 0), streak)
     
     await db.habits.update_one(
         {"habit_id": habit_id},
@@ -769,7 +771,7 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
     new_rank = calculate_rank(new_xp)
     await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
     
-    return {"message": "Habit completed", "streak": streak, "xp_earned": 15, "new_xp": new_xp, "uncompleted": False}
+    return {"message": "Habit completed", "streak": streak, "best_streak": best_streak, "xp_earned": 15, "new_xp": new_xp, "uncompleted": False}
 
 @api_router.delete("/habits/{habit_id}")
 async def delete_habit(request: Request, habit_id: str, session_token: Optional[str] = Cookie(None)):
