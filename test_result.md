@@ -353,8 +353,10 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Credit card charge with installments UI"
-    - "Projections tab UI"
+    - "Nutrition CRUD endpoints"
+    - "Study Area CRUD endpoints"
+    - "Flashcards with Spaced Repetition"
+    - "AI-generated flashcards and quizzes"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -397,6 +399,57 @@ agent_communication:
       - Habit XP deduction on uncomplete: WORKING (+15/-15 XP)
       - Task XP deduction on uncomplete: WORKING (+20/-20 XP)
       - Only failure: API rate limit (429) - temporary issue, not code problem
+      
+  - agent: "main"
+    message: |
+      NEW FEATURES IMPLEMENTED:
+      
+      ## 1. Nutrition/Alimentação Module
+      Backend endpoints:
+      - GET/POST/DELETE /api/nutrition/meals - Meal tracking with foods, macros
+      - GET/PUT /api/nutrition/goals - Daily nutrition goals (calories, protein, carbs, fat, water)
+      - GET/POST /api/nutrition/water - Water intake logging
+      - GET/POST/DELETE /api/nutrition/diets - Diet plans
+      - GET/DELETE /api/nutrition/recipes - Saved recipes
+      - POST /api/nutrition/recipes/suggest - AI recipe suggestions with Google Gemini
+      - GET /api/nutrition/stats - Daily nutrition statistics
+      
+      Frontend:
+      - New Nutrition page with tabs for Overview, Meals, Recipes, Diets
+      - Calorie/macro tracking with progress bars
+      - Water intake tracker
+      - AI recipe generation with preferences
+      
+      ## 2. Studies Module
+      Backend endpoints:
+      - GET/POST/DELETE /api/study/areas - Study areas (Faculdade, Concursos, etc.)
+      - GET/POST/PATCH/DELETE /api/study/notebooks - Notebooks/subjects
+      - GET/POST/PATCH/DELETE /api/study/notes - Study notes with tags and links
+      - POST /api/study/notes/{id}/upload - File attachments
+      - GET/POST/PATCH/DELETE /api/study/tasks - Study tasks with deadlines
+      - GET/POST /api/study/sessions - Study session logging
+      - GET/POST/DELETE /api/study/schedule - Weekly study schedule
+      - GET/POST/DELETE /api/study/flashcards - Flashcards
+      - POST /api/study/flashcards/{id}/review - SM-2 spaced repetition
+      - POST /api/study/flashcards/generate - AI flashcard generation
+      - GET/POST/DELETE /api/study/quizzes - Quizzes
+      - POST /api/study/quizzes/generate - AI quiz generation
+      - POST /api/study/quizzes/{id}/attempt - Quiz submission
+      - GET /api/study/streak - Study streak tracking
+      - GET /api/study/stats - Comprehensive study statistics
+      - POST /api/study/ai-suggestions - AI study suggestions
+      
+      Frontend:
+      - Full Studies page with 6 tabs
+      - Study areas and notebooks organization
+      - Note taking with tags and links
+      - Task management with priorities and deadlines
+      - Flashcard review with spaced repetition UI
+      - Quiz taking with results
+      - Weekly schedule view
+      - Gamification (XP, streaks, progress tracking)
+      
+      Please test all new nutrition and study endpoints.
   - agent: "testing"
     message: |
       ✅ BACKEND TESTING COMPLETE - ALL TESTS PASSED (11/11)
