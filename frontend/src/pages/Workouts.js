@@ -1109,6 +1109,132 @@ export default function Workouts() {
               </div>
             </TabsContent>
 
+            {/* Stats Tab - Gráficos e IA */}
+            <TabsContent value="stats">
+              <div className="space-y-6">
+                {/* Consistency - Better Design */}
+                {detailedStats && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="font-heading text-xl mb-1">CONSISTÊNCIA</h3>
+                        <p className="text-sm text-[#A1A1AA]">Últimos 30 dias de treino</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-data text-4xl text-[#00F0FF]">{detailedStats.consistency_percentage}%</span>
+                        <p className="text-xs text-[#A1A1AA]">{detailedStats.trained_days} de 30 dias</p>
+                      </div>
+                    </div>
+                    
+                    {/* Calendar-style grid - 6 weeks x 7 days */}
+                    <div className="grid grid-cols-7 gap-2">
+                      {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
+                        <div key={day} className="text-center text-xs text-[#52525B] pb-2">{day}</div>
+                      ))}
+                      {detailedStats.daily_data?.map((day, idx) => {
+                        const dayOfWeek = new Date(day.date).getDay();
+                        return (
+                          <div
+                            key={idx}
+                            className={`aspect-square rounded-lg flex items-center justify-center transition-all hover:scale-105 cursor-pointer ${
+                              day.count > 0 ? 'bg-[#00F0FF]' : 'bg-[#1a1a1a] border border-[#27272A]'
+                            }`}
+                            style={{
+                              opacity: day.count > 0 ? Math.min(0.5 + (day.duration / 60) * 0.5, 1) : 1,
+                              gridColumn: idx === 0 ? dayOfWeek + 1 : undefined
+                            }}
+                            title={`${day.date}: ${day.count > 0 ? `${day.duration}min, ${day.calories}cal` : 'Sem treino'}`}
+                          >
+                            {day.count > 0 && <Check className="w-4 h-4 text-black" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Stats Grid */}
+                {detailedStats && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <Flame className="w-8 h-8 text-[#F59E0B] mx-auto mb-2" />
+                      <div className="font-data text-3xl text-[#F59E0B]">{detailedStats.current_streak}</div>
+                      <div className="text-xs text-[#A1A1AA] uppercase">Streak Atual</div>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <TrendingUp className="w-8 h-8 text-[#22C55E] mx-auto mb-2" />
+                      <div className="font-data text-3xl text-[#22C55E]">{detailedStats.best_streak}</div>
+                      <div className="text-xs text-[#A1A1AA] uppercase">Melhor Streak</div>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <Timer className="w-8 h-8 text-[#A855F7] mx-auto mb-2" />
+                      <div className="font-data text-3xl text-[#A855F7]">{detailedStats.avg_duration_minutes}</div>
+                      <div className="text-xs text-[#A1A1AA] uppercase">Min/Treino</div>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <Flame className="w-8 h-8 text-[#EF4444] mx-auto mb-2" />
+                      <div className="font-data text-3xl text-[#EF4444]">{detailedStats.avg_calories || 0}</div>
+                      <div className="text-xs text-[#A1A1AA] uppercase">Cal/Treino</div>
+                    </Card>
+                  </div>
+                )}
+
+                {/* AI Suggestions */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="font-heading text-xl mb-1 flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-[#A855F7]" />
+                        SUGESTÕES DE TREINO
+                      </h3>
+                      <p className="text-sm text-[#A1A1AA]">Recomendações personalizadas por IA</p>
+                    </div>
+                    <Button
+                      onClick={getAiSuggestions}
+                      disabled={loadingSuggestions}
+                      className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white"
+                    >
+                      {loadingSuggestions ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 mr-2" />
+                          Gerar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  {aiSuggestions ? (
+                    <div className="mt-4">
+                      <div className="bg-[#121212] rounded-lg p-4 border border-[#27272A]">
+                        <p className="text-[#A1A1AA] whitespace-pre-wrap text-sm leading-relaxed">
+                          {aiSuggestions.suggestions}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex justify-between items-center">
+                        <span className="text-xs text-[#52525B]">
+                          Baseado em {aiSuggestions.based_on?.total_workouts || 0} treinos
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAiSuggestions(null)}
+                          className="text-xs text-[#52525B] hover:text-white"
+                        >
+                          Limpar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-[#52525B] text-center py-4">
+                      Clique em "Gerar" para receber sugestões personalizadas
+                    </p>
+                  )}
+                </Card>
+              </div>
+            </TabsContent>
+
             <TabsContent value="evolution">
               <div className="grid gap-6">
                 {/* Header com botões */}
