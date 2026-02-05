@@ -270,31 +270,35 @@ export default function Habits() {
             </div>
           </div>
 
-          {/* Stats Overview */}
+          {/* Stats Overview - Compact horizontal */}
           {showStats && habits.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="text-xs text-[#A1A1AA] uppercase tracking-wider mb-1">Total Hábitos</div>
-                <div className="font-data text-3xl text-[#007AFF]">{habits.length}</div>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="text-xs text-[#A1A1AA] uppercase tracking-wider mb-1">Completações</div>
-                <div className="font-data text-3xl text-[#39FF14]">{totalCompletions}</div>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="text-xs text-[#A1A1AA] uppercase tracking-wider mb-1">Média Streak</div>
-                <div className="font-data text-3xl text-[#FF9500]">{avgStreak} dias</div>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="text-xs text-[#A1A1AA] uppercase tracking-wider mb-1">Melhor Streak</div>
-                <div className="font-data text-3xl text-[#FF3B30]">{bestOverallStreak} dias</div>
-              </Card>
+            <div className="flex items-center gap-6 mb-6 p-4 bg-[#0A0A0A] border border-[#27272A] rounded-lg">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#A1A1AA] uppercase">Total</span>
+                <span className="font-data text-xl text-[#007AFF]">{habits.length}</span>
+              </div>
+              <div className="h-6 w-px bg-[#27272A]" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#A1A1AA] uppercase">Completações</span>
+                <span className="font-data text-xl text-[#39FF14]">{totalCompletions}</span>
+              </div>
+              <div className="h-6 w-px bg-[#27272A]" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#A1A1AA] uppercase">Média Streak</span>
+                <span className="font-data text-xl text-[#FF9500]">{avgStreak}</span>
+              </div>
+              <div className="h-6 w-px bg-[#27272A]" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#A1A1AA] uppercase">Melhor</span>
+                <span className="font-data text-xl text-[#FF3B30]">{bestOverallStreak}</span>
+              </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Habits List - Compact horizontal cards */}
+          <div className="space-y-3">
             {habits.length === 0 ? (
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center col-span-full">
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
                 <TrendingUp className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
                 <p className="text-[#A1A1AA]">Nenhum hábito criado</p>
               </Card>
@@ -304,66 +308,73 @@ export default function Habits() {
                 return (
                   <Card
                     key={habit.habit_id}
-                    className="habit-card bg-[#0A0A0A] border-[#27272A] p-6 relative overflow-hidden"
-                    style={{ borderTopColor: habit.color, borderTopWidth: '3px' }}
+                    className="habit-card bg-[#0A0A0A] border-[#27272A] p-4 relative overflow-hidden"
+                    style={{ borderLeftColor: habit.color, borderLeftWidth: '4px' }}
                   >
-                    <div className="absolute top-2 right-2 flex space-x-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openReminderDialog(habit)}
-                        className="text-[#52525B] hover:text-[#007AFF] hover:bg-[#007AFF]/10"
-                        title="Configurar lembrete"
-                      >
-                        <Bell className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteHabit(habit.habit_id)}
-                        className="text-[#52525B] hover:text-[#FF3B30] hover:bg-[#FF3B30]/10"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    <h3 className="font-heading text-xl mb-2">{habit.name}</h3>
-                    {habit.description && (
-                      <p className="text-sm text-[#A1A1AA] mb-4">{habit.description}</p>
-                    )}
-                    
-                    {/* Streak Display */}
-                    <StreakDisplay 
-                      streak={habit.streak} 
-                      bestStreak={habit.best_streak} 
-                      color={habit.color} 
-                    />
-                    
-                    {/* Consistency Chart */}
-                    {showStats && (
-                      <ConsistencyChart 
-                        completions={habit.completions} 
-                        color={habit.color} 
-                      />
-                    )}
-                    
-                    <Button
-                      data-testid={`habit-complete-${habit.habit_id}`}
-                      onClick={() => handleCompleteHabit(habit.habit_id)}
-                      className={`w-full mt-4 uppercase text-xs tracking-widest transition-all ${
-                        completedToday
-                          ? 'bg-[#39FF14]/20 text-[#39FF14] hover:bg-[#FF3B30]/20 hover:text-[#FF3B30]'
-                          : 'bg-[#007AFF] hover:bg-[#0062CC]'
-                      }`}
-                    >
-                      {completedToday ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 mr-2" />
-                          Concluído (clique para desmarcar)
-                        </>
-                      ) : (
-                        'Marcar Hoje'
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Left: Name and description */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3">
+                          <h3 className="font-heading text-lg truncate">{habit.name}</h3>
+                          <CompactStreakDisplay 
+                            streak={habit.streak} 
+                            bestStreak={habit.best_streak} 
+                            color={habit.color} 
+                          />
+                        </div>
+                        {habit.description && (
+                          <p className="text-xs text-[#52525B] truncate mt-1">{habit.description}</p>
+                        )}
+                      </div>
+                      
+                      {/* Center: Mini consistency chart */}
+                      {showStats && (
+                        <MiniConsistencyChart 
+                          completions={habit.completions} 
+                          color={habit.color} 
+                        />
                       )}
+                      
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          data-testid={`habit-complete-${habit.habit_id}`}
+                          onClick={() => handleCompleteHabit(habit.habit_id)}
+                          size="sm"
+                          className={`uppercase text-xs tracking-widest transition-all ${
+                            completedToday
+                              ? 'bg-[#39FF14]/20 text-[#39FF14] hover:bg-[#FF3B30]/20 hover:text-[#FF3B30]'
+                              : 'bg-[#007AFF] hover:bg-[#0062CC]'
+                          }`}
+                        >
+                          {completedToday ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : (
+                            'Marcar'
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openReminderDialog(habit)}
+                          className="text-[#52525B] hover:text-[#007AFF] hover:bg-[#007AFF]/10 h-8 w-8"
+                        >
+                          <Bell className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteHabit(habit.habit_id)}
+                          className="text-[#52525B] hover:text-[#FF3B30] hover:bg-[#FF3B30]/10 h-8 w-8"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })
+            )}
                     </Button>
                   </Card>
                 );
