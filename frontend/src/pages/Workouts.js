@@ -147,6 +147,19 @@ export default function Workouts() {
     }
   };
 
+  const getAiSuggestions = async () => {
+    setLoadingSuggestions(true);
+    try {
+      const res = await axios.post(`${API}/workout-suggestions`, {}, { withCredentials: true });
+      setAiSuggestions(res.data);
+      toast.success("Sugestões geradas com sucesso!");
+    } catch (error) {
+      toast.error("Erro ao gerar sugestões. Tente novamente.");
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
   const toggleDailyExercise = async (planId, exerciseIdx) => {
     try {
       const res = await axios.post(`${API}/daily-workout-status/${planId}/toggle/${exerciseIdx}`, {}, { withCredentials: true });
