@@ -31,6 +31,7 @@ export default function Workouts() {
   const [workouts, setWorkouts] = useState([]);
   const [plans, setPlans] = useState([]);
   const [stats, setStats] = useState(null);
+  const [detailedStats, setDetailedStats] = useState(null);
   const [openLog, setOpenLog] = useState(false);
   const [openPlan, setOpenPlan] = useState(false);
   const [openEditPlan, setOpenEditPlan] = useState(false);
@@ -43,6 +44,8 @@ export default function Workouts() {
   const [measurements, setMeasurements] = useState([]);
   const [latestMeasurement, setLatestMeasurement] = useState(null);
   const [recommendations, setRecommendations] = useState(null);
+  const [aiSuggestions, setAiSuggestions] = useState(null);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [openMeasurement, setOpenMeasurement] = useState(false);
   const [openCompleteWorkout, setOpenCompleteWorkout] = useState(false);
   const [completingPlan, setCompletingPlan] = useState(null);
