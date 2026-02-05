@@ -2416,6 +2416,152 @@ async def get_workout_stats(request: Request, period: str = "week", session_toke
         "by_activity_type": by_type
     }
 
+@api_router.get("/workout-stats/detailed")
+async def get_detailed_workout_stats(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get detailed workout statistics for charts"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get last 30 days of workouts
+    today = datetime.now(timezone.utc)
+    start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    
+    workouts = await db.workout_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start_date},
+        "completed": True
+    }, {"_id": 0}).sort("date", 1).to_list(1000)
+    
+    # Daily workout data for chart
+    daily_data = {}
+    for i in range(30):
+        date = (today - timedelta(days=29-i)).strftime("%Y-%m-%d")
+        daily_data[date] = {"duration": 0, "calories": 0, "count": 0}
+    
+    for w in workouts:
+        date = w['date']
+        if date in daily_data:
+            daily_data[date]['duration'] += w.get('duration_minutes', 0)
+            daily_data[date]['calories'] += w.get('calories', 0) or 0
+            daily_data[date]['count'] += 1
+    
+    # Calculate streak
+    current_streak = 0
+    best_streak = 0
+    temp_streak = 0
+    
+    for i in range(30):
+        date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+        if daily_data.get(date, {}).get('count', 0) > 0:
+            temp_streak += 1
+            if i == 0 or (i > 0 and temp_streak > 0):
+                current_streak = temp_streak
+            best_streak = max(best_streak, temp_streak)
+        else:
+            if i == 0:
+                current_streak = 0
+            temp_streak = 0
+    
+    # Weekly consistency (how many days trained per week)
+    weekly_consistency = {}
+    for date, data in daily_data.items():
+        week = datetime.strptime(date, "%Y-%m-%d").isocalendar()[1]
+        if week not in weekly_consistency:
+            weekly_consistency[week] = 0
+        if data['count'] > 0:
+            weekly_consistency[week] += 1
+    
+    # Calculate averages
+    trained_days = sum(1 for d in daily_data.values() if d['count'] > 0)
+    avg_duration = sum(d['duration'] for d in daily_data.values()) / max(trained_days, 1)
+    avg_calories = sum(d['calories'] for d in daily_data.values()) / max(trained_days, 1)
+    
+    return {
+        "daily_data": [{"date": k, **v} for k, v in sorted(daily_data.items())],
+        "current_streak": current_streak,
+        "best_streak": best_streak,
+        "trained_days": trained_days,
+        "total_days": 30,
+        "consistency_percentage": round((trained_days / 30) * 100, 1),
+        "avg_duration_minutes": round(avg_duration, 1),
+        "avg_calories": round(avg_calories, 1),
+        "weekly_consistency": weekly_consistency
+    }
+
+@api_router.post("/workout-suggestions")
+async def get_ai_workout_suggestions(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get AI-powered workout suggestions based on user's history and goals"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get recent workouts
+    today = datetime.now(timezone.utc)
+    start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    
+    workouts = await db.workout_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start_date}
+    }, {"_id": 0}).to_list(100)
+    
+    # Get body measurements
+    measurements = await db.body_measurements.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).sort("date", -1).limit(1).to_list(1)
+    
+    latest_measurement = measurements[0] if measurements else None
+    
+    # Build prompt
+    workout_summary = {}
+    for w in workouts:
+        t = w['activity_type']
+        workout_summary[t] = workout_summary.get(t, 0) + 1
+    
+    prompt = f"""Com base no histórico de treinos e dados do usuário, sugira um plano de treino personalizado.
+
+HISTÓRICO DE TREINOS (últimos 30 dias):
+- Total de treinos: {len(workouts)}
+- Por tipo: {json.dumps(workout_summary, indent=2)}
+
+"""
+    
+    if latest_measurement:
+        prompt += f"""MEDIDAS CORPORAIS:
+- Peso: {latest_measurement.get('weight_kg', 'N/A')} kg
+- Altura: {latest_measurement.get('height_cm', 'N/A')} cm
+- Gordura corporal: {latest_measurement.get('body_fat_percentage', 'N/A')}%
+- Massa muscular: {latest_measurement.get('muscle_mass_kg', 'N/A')} kg
+
+"""
+    
+    prompt += """Por favor, forneça:
+1. Análise do perfil de treino atual
+2. Sugestão de treino para a próxima semana (com exercícios específicos)
+3. Dicas de intensidade e progressão
+4. Recomendações de descanso e recuperação
+5. Sugestões de nutrição pré e pós-treino
+
+Responda em português de forma prática e motivadora."""
+
+    try:
+        response = await call_llm(
+            prompt=prompt,
+            session_id=f"workout_suggestions_{user.user_id}",
+            system_message="Você é um personal trainer experiente e nutricionista esportivo. Forneça sugestões personalizadas e práticas."
+        )
+        
+        return {
+            "suggestions": response,
+            "based_on": {
+                "total_workouts": len(workouts),
+                "workout_types": workout_summary,
+                "has_measurements": latest_measurement is not None
+            }
+        }
+        
+    except Exception as e:
+        logging.error(f"Workout suggestions failed: {e}")
+        raise HTTPException(status_code=500, detail="Não foi possível gerar sugestões. Tente novamente.")
+
 # ========== NOTIFICATION ENDPOINTS ==========
 @api_router.get("/notifications")
 async def get_notifications(request: Request, session_token: Optional[str] = Cookie(None)):
