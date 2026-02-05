@@ -110,6 +110,10 @@ user_problem_statement: |
   - Despesas fixas ou temporárias com repetição
   - Insights e sugestões com IA (usando Google Gemini)
   - Substituir Emergent LLM por Google Gemini AI
+  
+  NOVA SOLICITAÇÃO:
+  - Aba de controle de alimentação (dietas, controle calórico, dicas de receita com IA)
+  - Área de estudos integrada com IA (áreas de estudo, cadernos, notas, flashcards, quizzes, repetição espaçada)
 
 backend:
   - task: "Charge to card with installments"
@@ -159,6 +163,54 @@ backend:
       - working: true
         agent: "testing"
         comment: "✅ RE-TESTED: Google Gemini AI integration confirmed working. Successfully tested with testegemini@test.com user. /api/chat/send responds correctly with 712-character response to 'Olá, como você pode me ajudar?'. /api/motivational-quote endpoint working (generates quotes). /api/projections/insights temporarily failing due to API quota exhaustion (429 errors) - this is a rate limit issue, not a functional problem. Integration is properly implemented and functional."
+
+  - task: "Nutrition CRUD endpoints"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented nutrition endpoints: meals CRUD, nutrition goals, water logging, diets, recipes, recipe AI suggestions"
+
+  - task: "Study Area CRUD endpoints"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented study endpoints: areas, notebooks, notes, tasks, sessions, flashcards, quizzes, schedule, streak tracking, AI suggestions"
+
+  - task: "Flashcards with Spaced Repetition"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented SM-2 algorithm for spaced repetition, flashcard review with ease factor and interval calculation"
+
+  - task: "AI-generated flashcards and quizzes"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented AI generation for flashcards from notes and quiz generation from notebook content using Google Gemini"
 
   - task: "Enhanced chat - register income"
     implemented: true
