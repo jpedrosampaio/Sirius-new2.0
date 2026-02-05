@@ -151,17 +151,58 @@ export default function Habits() {
   const handleCompleteHabit = async (habitId) => {
     try {
       const res = await axios.post(`${API}/habits/${habitId}/complete?date=${today}`, {}, { withCredentials: true });
-      if (res.data.xp_earned) {
-        toast.success(`+${res.data.xp_earned} XP! Sequência: ${res.data.streak} dias`);
-      } else {
-        toast.info(res.data.message);
+      if (res.data.uncompleted) {
+        toast.warning(`${res.data.xp_earned} XP! Hábito desmarcado`);
+      } else if (res.data.xp_earned > 0) {
+        toast.success(`+${res.data.xp_earned} XP! Sequência: ${res.data.streak} dias 🔥`);
       }
       fetchHabits();
       fetchUser();
     } catch (error) {
-      toast.error("Erro ao completar hábito");
+      toast.error("Erro ao atualizar hábito");
     }
   };
+
+  const handleSetReminder = async () => {
+    if (!selectedHabit) return;
+    
+    try {
+      await axios.post(`${API}/notifications`, {
+        title: `Lembrete: ${selectedHabit.name}`,
+        message: `Não esqueça de completar seu hábito "${selectedHabit.name}"!`,
+        type: "reminder",
+        category: "habit",
+        scheduled_time: reminderTime,
+        repeat: "custom",
+        repeat_days: reminderDays,
+        channels: ["in_app", "browser"]
+      }, { withCredentials: true });
+      
+      toast.success("Lembrete configurado!");
+      setReminderOpen(false);
+      setSelectedHabit(null);
+    } catch (error) {
+      toast.error("Erro ao configurar lembrete");
+    }
+  };
+
+  const toggleReminderDay = (day) => {
+    if (reminderDays.includes(day)) {
+      setReminderDays(reminderDays.filter(d => d !== day));
+    } else {
+      setReminderDays([...reminderDays, day]);
+    }
+  };
+
+  const openReminderDialog = (habit) => {
+    setSelectedHabit(habit);
+    setReminderOpen(true);
+  };
+
+  // Calculate overall stats
+  const totalCompletions = habits.reduce((acc, h) => acc + h.completions.length, 0);
+  const avgStreak = habits.length > 0 ? Math.round(habits.reduce((acc, h) => acc + h.streak, 0) / habits.length) : 0;
+  const bestOverallStreak = habits.length > 0 ? Math.max(...habits.map(h => h.best_streak)) : 0;
 
   const handleDeleteHabit = async (habitId) => {
     try {
