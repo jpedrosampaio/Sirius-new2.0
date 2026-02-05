@@ -3334,6 +3334,1677 @@ async def reset_daily_workout(request: Request, plan_id: str, session_token: Opt
     
     return {"message": "Daily workout status reset", "date": today}
 
+# ========== NUTRITION MODELS ==========
+class Meal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    meal_id: str
+    user_id: str
+    name: str
+    meal_type: str  # breakfast, lunch, dinner, snack
+    foods: List[Dict[str, Any]] = []  # [{name, calories, protein, carbs, fat, quantity, unit}]
+    total_calories: int = 0
+    total_protein: float = 0
+    total_carbs: float = 0
+    total_fat: float = 0
+    date: str
+    notes: Optional[str] = None
+    created_at: datetime
+
+class MealCreate(BaseModel):
+    name: str
+    meal_type: str
+    foods: List[Dict[str, Any]] = []
+    date: str
+    notes: Optional[str] = None
+
+class NutritionGoal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    goal_id: str
+    user_id: str
+    daily_calories: int = 2000
+    daily_protein: float = 150
+    daily_carbs: float = 250
+    daily_fat: float = 65
+    water_goal_ml: int = 2000
+    created_at: datetime
+    updated_at: datetime
+
+class NutritionGoalCreate(BaseModel):
+    daily_calories: int = 2000
+    daily_protein: float = 150
+    daily_carbs: float = 250
+    daily_fat: float = 65
+    water_goal_ml: int = 2000
+
+class WaterLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    log_id: str
+    user_id: str
+    amount_ml: int
+    date: str
+    created_at: datetime
+
+class Diet(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    diet_id: str
+    user_id: str
+    name: str
+    description: Optional[str] = None
+    diet_type: str  # cutting, bulking, maintenance, keto, low_carb, etc.
+    meals_plan: List[Dict[str, Any]] = []  # [{meal_type, suggested_foods, target_calories}]
+    active: bool = True
+    start_date: str
+    end_date: Optional[str] = None
+    created_at: datetime
+
+class DietCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    diet_type: str
+    meals_plan: List[Dict[str, Any]] = []
+    start_date: str
+    end_date: Optional[str] = None
+
+class Recipe(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    recipe_id: str
+    user_id: str
+    name: str
+    description: Optional[str] = None
+    ingredients: List[Dict[str, Any]] = []  # [{name, quantity, unit}]
+    instructions: List[str] = []
+    prep_time_minutes: int = 0
+    cook_time_minutes: int = 0
+    servings: int = 1
+    calories_per_serving: int = 0
+    protein_per_serving: float = 0
+    carbs_per_serving: float = 0
+    fat_per_serving: float = 0
+    tags: List[str] = []  # healthy, quick, high-protein, etc.
+    ai_generated: bool = False
+    created_at: datetime
+
+# ========== STUDY MODELS ==========
+class StudyArea(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    area_id: str
+    user_id: str
+    name: str  # Faculdade, Concursos, Trabalho, Outros
+    description: Optional[str] = None
+    color: str = "#007AFF"
+    icon: str = "book"
+    order: int = 0
+    created_at: datetime
+
+class StudyAreaCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    color: str = "#007AFF"
+    icon: str = "book"
+
+class Notebook(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    notebook_id: str
+    user_id: str
+    area_id: str
+    name: str  # Matéria/Assunto
+    description: Optional[str] = None
+    color: str = "#007AFF"
+    tags: List[str] = []
+    total_study_time_minutes: int = 0
+    created_at: datetime
+
+class NotebookCreate(BaseModel):
+    area_id: str
+    name: str
+    description: Optional[str] = None
+    color: str = "#007AFF"
+    tags: List[str] = []
+
+class StudyNote(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    note_id: str
+    user_id: str
+    notebook_id: str
+    title: str
+    content: str
+    tags: List[str] = []
+    links: List[Dict[str, str]] = []  # [{title, url}]
+    attachments: List[Dict[str, Any]] = []  # [{name, type, url/data}]
+    created_at: datetime
+    updated_at: datetime
+
+class StudyNoteCreate(BaseModel):
+    notebook_id: str
+    title: str
+    content: str
+    tags: List[str] = []
+    links: List[Dict[str, str]] = []
+
+class StudyTask(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    task_id: str
+    user_id: str
+    notebook_id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    task_type: str  # reading, exercise, review, project, exam
+    deadline: Optional[str] = None
+    reminder: Optional[str] = None
+    completed: bool = False
+    completed_at: Optional[str] = None
+    priority: str = "medium"
+    estimated_minutes: int = 30
+    actual_minutes: int = 0
+    notes: Optional[str] = None
+    xp_reward: int = 20
+    created_at: datetime
+
+class StudyTaskCreate(BaseModel):
+    notebook_id: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    task_type: str = "reading"
+    deadline: Optional[str] = None
+    reminder: Optional[str] = None
+    priority: str = "medium"
+    estimated_minutes: int = 30
+
+class StudySession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    session_id: str
+    user_id: str
+    notebook_id: str
+    duration_minutes: int
+    date: str
+    notes: Optional[str] = None
+    xp_earned: int = 0
+    created_at: datetime
+
+class StudySessionCreate(BaseModel):
+    notebook_id: str
+    duration_minutes: int
+    date: str
+    notes: Optional[str] = None
+
+class StudySchedule(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    schedule_id: str
+    user_id: str
+    notebook_id: str
+    day_of_week: str  # monday, tuesday, etc.
+    start_time: str  # HH:MM
+    end_time: str  # HH:MM
+    repeat: bool = True
+    created_at: datetime
+
+class StudyScheduleCreate(BaseModel):
+    notebook_id: str
+    day_of_week: str
+    start_time: str
+    end_time: str
+    repeat: bool = True
+
+class Flashcard(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    flashcard_id: str
+    user_id: str
+    notebook_id: str
+    deck_name: str
+    front: str  # Question
+    back: str  # Answer
+    tags: List[str] = []
+    # Spaced Repetition Fields
+    ease_factor: float = 2.5
+    interval_days: int = 1
+    repetitions: int = 0
+    next_review: str  # Date
+    last_review: Optional[str] = None
+    created_at: datetime
+
+class FlashcardCreate(BaseModel):
+    notebook_id: str
+    deck_name: str
+    front: str
+    back: str
+    tags: List[str] = []
+
+class FlashcardReview(BaseModel):
+    quality: int  # 0-5 (0=forgot, 5=perfect)
+
+class Quiz(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    quiz_id: str
+    user_id: str
+    notebook_id: str
+    title: str
+    questions: List[Dict[str, Any]] = []  # [{question, options, correct_answer, explanation}]
+    ai_generated: bool = False
+    created_at: datetime
+
+class QuizCreate(BaseModel):
+    notebook_id: str
+    title: str
+    questions: List[Dict[str, Any]] = []
+
+class QuizAttempt(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    attempt_id: str
+    user_id: str
+    quiz_id: str
+    score: float
+    answers: List[Dict[str, Any]] = []  # [{question_idx, selected_answer, correct}]
+    completed_at: datetime
+
+class StudyStreak(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    streak_id: str
+    user_id: str
+    current_streak: int = 0
+    best_streak: int = 0
+    last_study_date: Optional[str] = None
+    total_study_days: int = 0
+    created_at: datetime
+
+class StudyStats(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    stats_id: str
+    user_id: str
+    notebook_id: str
+    total_time_minutes: int = 0
+    sessions_count: int = 0
+    flashcards_reviewed: int = 0
+    quizzes_completed: int = 0
+    average_quiz_score: float = 0
+    tasks_completed: int = 0
+
+# ========== NUTRITION ENDPOINTS ==========
+
+@api_router.get("/nutrition/meals")
+async def get_meals(request: Request, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get meals for a specific date or all meals"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if date:
+        query["date"] = date
+    
+    meals = await db.meals.find(query, {"_id": 0}).to_list(1000)
+    return meals
+
+@api_router.post("/nutrition/meals")
+async def create_meal(request: Request, meal_data: MealCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a new meal"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Calculate totals from foods
+    total_calories = sum(f.get("calories", 0) * f.get("quantity", 1) for f in meal_data.foods)
+    total_protein = sum(f.get("protein", 0) * f.get("quantity", 1) for f in meal_data.foods)
+    total_carbs = sum(f.get("carbs", 0) * f.get("quantity", 1) for f in meal_data.foods)
+    total_fat = sum(f.get("fat", 0) * f.get("quantity", 1) for f in meal_data.foods)
+    
+    meal_id = f"meal_{uuid.uuid4().hex[:12]}"
+    meal_doc = {
+        "meal_id": meal_id,
+        "user_id": user.user_id,
+        "name": meal_data.name,
+        "meal_type": meal_data.meal_type,
+        "foods": meal_data.foods,
+        "total_calories": int(total_calories),
+        "total_protein": round(total_protein, 1),
+        "total_carbs": round(total_carbs, 1),
+        "total_fat": round(total_fat, 1),
+        "date": meal_data.date,
+        "notes": meal_data.notes,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.meals.insert_one(meal_doc)
+    meal_doc.pop('_id', None)
+    return meal_doc
+
+@api_router.delete("/nutrition/meals/{meal_id}")
+async def delete_meal(request: Request, meal_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a meal"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.meals.delete_one({"meal_id": meal_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return {"message": "Meal deleted"}
+
+@api_router.get("/nutrition/goals")
+async def get_nutrition_goals(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get user's nutrition goals"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not goals:
+        # Create default goals
+        goal_id = f"ngoal_{uuid.uuid4().hex[:12]}"
+        goals = {
+            "goal_id": goal_id,
+            "user_id": user.user_id,
+            "daily_calories": 2000,
+            "daily_protein": 150,
+            "daily_carbs": 250,
+            "daily_fat": 65,
+            "water_goal_ml": 2000,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.nutrition_goals.insert_one(goals)
+        goals.pop('_id', None)
+    return goals
+
+@api_router.put("/nutrition/goals")
+async def update_nutrition_goals(request: Request, goal_data: NutritionGoalCreate, session_token: Optional[str] = Cookie(None)):
+    """Update user's nutrition goals"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    existing = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    if existing:
+        await db.nutrition_goals.update_one(
+            {"user_id": user.user_id},
+            {"$set": {
+                "daily_calories": goal_data.daily_calories,
+                "daily_protein": goal_data.daily_protein,
+                "daily_carbs": goal_data.daily_carbs,
+                "daily_fat": goal_data.daily_fat,
+                "water_goal_ml": goal_data.water_goal_ml,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+    else:
+        goal_id = f"ngoal_{uuid.uuid4().hex[:12]}"
+        await db.nutrition_goals.insert_one({
+            "goal_id": goal_id,
+            "user_id": user.user_id,
+            **goal_data.model_dump(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
+    
+    updated = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/nutrition/water")
+async def get_water_logs(request: Request, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get water logs for a date"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    
+    logs = await db.water_logs.find({"user_id": user.user_id, "date": date}, {"_id": 0}).to_list(100)
+    total = sum(log.get("amount_ml", 0) for log in logs)
+    return {"logs": logs, "total_ml": total, "date": date}
+
+@api_router.post("/nutrition/water")
+async def log_water(request: Request, amount_ml: int, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Log water intake"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    
+    log_id = f"water_{uuid.uuid4().hex[:12]}"
+    log_doc = {
+        "log_id": log_id,
+        "user_id": user.user_id,
+        "amount_ml": amount_ml,
+        "date": date,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.water_logs.insert_one(log_doc)
+    log_doc.pop('_id', None)
+    return log_doc
+
+@api_router.get("/nutrition/stats")
+async def get_nutrition_stats(request: Request, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get nutrition statistics for a date"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Get meals for the date
+    meals = await db.meals.find({"user_id": user.user_id, "date": date}, {"_id": 0}).to_list(100)
+    
+    # Calculate totals
+    total_calories = sum(m.get("total_calories", 0) for m in meals)
+    total_protein = sum(m.get("total_protein", 0) for m in meals)
+    total_carbs = sum(m.get("total_carbs", 0) for m in meals)
+    total_fat = sum(m.get("total_fat", 0) for m in meals)
+    
+    # Get water
+    water_data = await db.water_logs.find({"user_id": user.user_id, "date": date}, {"_id": 0}).to_list(100)
+    total_water = sum(w.get("amount_ml", 0) for w in water_data)
+    
+    # Get goals
+    goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not goals:
+        goals = {"daily_calories": 2000, "daily_protein": 150, "daily_carbs": 250, "daily_fat": 65, "water_goal_ml": 2000}
+    
+    return {
+        "date": date,
+        "consumed": {
+            "calories": total_calories,
+            "protein": round(total_protein, 1),
+            "carbs": round(total_carbs, 1),
+            "fat": round(total_fat, 1),
+            "water_ml": total_water
+        },
+        "goals": goals,
+        "meals_count": len(meals),
+        "remaining": {
+            "calories": goals.get("daily_calories", 2000) - total_calories,
+            "protein": round(goals.get("daily_protein", 150) - total_protein, 1),
+            "carbs": round(goals.get("daily_carbs", 250) - total_carbs, 1),
+            "fat": round(goals.get("daily_fat", 65) - total_fat, 1),
+            "water_ml": goals.get("water_goal_ml", 2000) - total_water
+        }
+    }
+
+@api_router.get("/nutrition/diets")
+async def get_diets(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get user's diets"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    diets = await db.diets.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    return diets
+
+@api_router.post("/nutrition/diets")
+async def create_diet(request: Request, diet_data: DietCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a new diet plan"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    diet_id = f"diet_{uuid.uuid4().hex[:12]}"
+    diet_doc = {
+        "diet_id": diet_id,
+        "user_id": user.user_id,
+        "name": diet_data.name,
+        "description": diet_data.description,
+        "diet_type": diet_data.diet_type,
+        "meals_plan": diet_data.meals_plan,
+        "active": True,
+        "start_date": diet_data.start_date,
+        "end_date": diet_data.end_date,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.diets.insert_one(diet_doc)
+    diet_doc.pop('_id', None)
+    return diet_doc
+
+@api_router.delete("/nutrition/diets/{diet_id}")
+async def delete_diet(request: Request, diet_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a diet"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.diets.delete_one({"diet_id": diet_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Diet not found")
+    return {"message": "Diet deleted"}
+
+@api_router.get("/nutrition/recipes")
+async def get_recipes(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get user's saved recipes"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    recipes = await db.recipes.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    return recipes
+
+@api_router.post("/nutrition/recipes/suggest")
+async def suggest_recipe(request: Request, preferences: dict, session_token: Optional[str] = Cookie(None)):
+    """Get AI-suggested recipe based on preferences"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get user's nutrition goals for context
+    goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    goal_info = ""
+    if goals:
+        goal_info = f"""
+Metas nutricionais do usuário:
+- Calorias diárias: {goals.get('daily_calories', 2000)} kcal
+- Proteína: {goals.get('daily_protein', 150)}g
+- Carboidratos: {goals.get('daily_carbs', 250)}g
+- Gordura: {goals.get('daily_fat', 65)}g
+"""
+    
+    diet_type = preferences.get("diet_type", "")
+    meal_type = preferences.get("meal_type", "")
+    ingredients = preferences.get("available_ingredients", [])
+    restrictions = preferences.get("restrictions", [])
+    cuisine = preferences.get("cuisine", "")
+    max_time = preferences.get("max_prep_time_minutes", 60)
+    
+    prompt = f"""Sugira uma receita saudável com as seguintes preferências:
+{goal_info}
+- Tipo de refeição: {meal_type or 'qualquer'}
+- Tipo de dieta: {diet_type or 'balanceada'}
+- Ingredientes disponíveis: {', '.join(ingredients) if ingredients else 'qualquer'}
+- Restrições alimentares: {', '.join(restrictions) if restrictions else 'nenhuma'}
+- Culinária preferida: {cuisine or 'qualquer'}
+- Tempo máximo de preparo: {max_time} minutos
+
+Forneça a resposta em formato JSON com a seguinte estrutura:
+{{
+    "name": "Nome da Receita",
+    "description": "Breve descrição",
+    "ingredients": [{{"name": "ingrediente", "quantity": "quantidade", "unit": "unidade"}}],
+    "instructions": ["Passo 1", "Passo 2"],
+    "prep_time_minutes": 15,
+    "cook_time_minutes": 30,
+    "servings": 4,
+    "calories_per_serving": 350,
+    "protein_per_serving": 25,
+    "carbs_per_serving": 40,
+    "fat_per_serving": 12,
+    "tags": ["saudável", "rápido"],
+    "tips": "Dica extra"
+}}"""
+    
+    try:
+        response = await call_llm(
+            prompt,
+            session_id=user.user_id,
+            system_message="Você é um nutricionista e chef experiente. Forneça receitas saudáveis e práticas. Sempre responda em JSON válido."
+        )
+        
+        # Parse JSON from response
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response)
+        if json_match:
+            recipe_data = json.loads(json_match.group())
+            
+            # Save recipe
+            recipe_id = f"recipe_{uuid.uuid4().hex[:12]}"
+            recipe_doc = {
+                "recipe_id": recipe_id,
+                "user_id": user.user_id,
+                "name": recipe_data.get("name", "Receita Sugerida"),
+                "description": recipe_data.get("description", ""),
+                "ingredients": recipe_data.get("ingredients", []),
+                "instructions": recipe_data.get("instructions", []),
+                "prep_time_minutes": recipe_data.get("prep_time_minutes", 0),
+                "cook_time_minutes": recipe_data.get("cook_time_minutes", 0),
+                "servings": recipe_data.get("servings", 1),
+                "calories_per_serving": recipe_data.get("calories_per_serving", 0),
+                "protein_per_serving": recipe_data.get("protein_per_serving", 0),
+                "carbs_per_serving": recipe_data.get("carbs_per_serving", 0),
+                "fat_per_serving": recipe_data.get("fat_per_serving", 0),
+                "tags": recipe_data.get("tags", []),
+                "ai_generated": True,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.recipes.insert_one(recipe_doc)
+            recipe_doc.pop('_id', None)
+            recipe_doc["tips"] = recipe_data.get("tips", "")
+            return recipe_doc
+        else:
+            return {"message": response, "ai_generated": True}
+    except Exception as e:
+        logging.error(f"Recipe suggestion failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate recipe: {str(e)}")
+
+@api_router.delete("/nutrition/recipes/{recipe_id}")
+async def delete_recipe(request: Request, recipe_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a recipe"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.recipes.delete_one({"recipe_id": recipe_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return {"message": "Recipe deleted"}
+
+# ========== STUDY ENDPOINTS ==========
+
+@api_router.get("/study/areas")
+async def get_study_areas(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get all study areas"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    areas = await db.study_areas.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    
+    # Create default areas if none exist
+    if not areas:
+        default_areas = [
+            {"name": "Faculdade", "color": "#007AFF", "icon": "graduation-cap", "order": 0},
+            {"name": "Concursos", "color": "#10B981", "icon": "file-text", "order": 1},
+            {"name": "Trabalho", "color": "#F59E0B", "icon": "briefcase", "order": 2},
+            {"name": "Outros", "color": "#8B5CF6", "icon": "folder", "order": 3}
+        ]
+        for i, area in enumerate(default_areas):
+            area_id = f"area_{uuid.uuid4().hex[:12]}"
+            area_doc = {
+                "area_id": area_id,
+                "user_id": user.user_id,
+                **area,
+                "description": None,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.study_areas.insert_one(area_doc)
+            area_doc.pop('_id', None)
+            areas.append(area_doc)
+    
+    return areas
+
+@api_router.post("/study/areas")
+async def create_study_area(request: Request, area_data: StudyAreaCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a new study area"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get max order
+    existing = await db.study_areas.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    max_order = max([a.get("order", 0) for a in existing], default=-1) + 1
+    
+    area_id = f"area_{uuid.uuid4().hex[:12]}"
+    area_doc = {
+        "area_id": area_id,
+        "user_id": user.user_id,
+        "name": area_data.name,
+        "description": area_data.description,
+        "color": area_data.color,
+        "icon": area_data.icon,
+        "order": max_order,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.study_areas.insert_one(area_doc)
+    area_doc.pop('_id', None)
+    return area_doc
+
+@api_router.delete("/study/areas/{area_id}")
+async def delete_study_area(request: Request, area_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a study area"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.study_areas.delete_one({"area_id": area_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Area not found")
+    
+    # Also delete related notebooks
+    await db.notebooks.delete_many({"area_id": area_id, "user_id": user.user_id})
+    
+    return {"message": "Area deleted"}
+
+@api_router.get("/study/notebooks")
+async def get_notebooks(request: Request, area_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get notebooks, optionally filtered by area"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if area_id:
+        query["area_id"] = area_id
+    
+    notebooks = await db.notebooks.find(query, {"_id": 0}).to_list(1000)
+    return notebooks
+
+@api_router.post("/study/notebooks")
+async def create_notebook(request: Request, notebook_data: NotebookCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a new notebook/subject"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notebook_id = f"notebook_{uuid.uuid4().hex[:12]}"
+    notebook_doc = {
+        "notebook_id": notebook_id,
+        "user_id": user.user_id,
+        "area_id": notebook_data.area_id,
+        "name": notebook_data.name,
+        "description": notebook_data.description,
+        "color": notebook_data.color,
+        "tags": notebook_data.tags,
+        "total_study_time_minutes": 0,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notebooks.insert_one(notebook_doc)
+    notebook_doc.pop('_id', None)
+    return notebook_doc
+
+@api_router.patch("/study/notebooks/{notebook_id}")
+async def update_notebook(request: Request, notebook_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Update a notebook"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_fields = {}
+    for field in ["name", "description", "color", "tags", "area_id"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    if update_fields:
+        await db.notebooks.update_one(
+            {"notebook_id": notebook_id, "user_id": user.user_id},
+            {"$set": update_fields}
+        )
+    
+    updated = await db.notebooks.find_one({"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/study/notebooks/{notebook_id}")
+async def delete_notebook(request: Request, notebook_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a notebook"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.notebooks.delete_one({"notebook_id": notebook_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    
+    # Delete related notes, flashcards, etc.
+    await db.study_notes.delete_many({"notebook_id": notebook_id, "user_id": user.user_id})
+    await db.flashcards.delete_many({"notebook_id": notebook_id, "user_id": user.user_id})
+    await db.quizzes.delete_many({"notebook_id": notebook_id, "user_id": user.user_id})
+    
+    return {"message": "Notebook deleted"}
+
+@api_router.get("/study/notes")
+async def get_notes(request: Request, notebook_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get study notes"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    
+    notes = await db.study_notes.find(query, {"_id": 0}).to_list(1000)
+    return notes
+
+@api_router.post("/study/notes")
+async def create_note(request: Request, note_data: StudyNoteCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a new study note"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    note_id = f"note_{uuid.uuid4().hex[:12]}"
+    note_doc = {
+        "note_id": note_id,
+        "user_id": user.user_id,
+        "notebook_id": note_data.notebook_id,
+        "title": note_data.title,
+        "content": note_data.content,
+        "tags": note_data.tags,
+        "links": note_data.links,
+        "attachments": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.study_notes.insert_one(note_doc)
+    note_doc.pop('_id', None)
+    return note_doc
+
+@api_router.patch("/study/notes/{note_id}")
+async def update_note(request: Request, note_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Update a note"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_fields = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in ["title", "content", "tags", "links"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    await db.study_notes.update_one(
+        {"note_id": note_id, "user_id": user.user_id},
+        {"$set": update_fields}
+    )
+    
+    updated = await db.study_notes.find_one({"note_id": note_id, "user_id": user.user_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/study/notes/{note_id}")
+async def delete_note(request: Request, note_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a note"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.study_notes.delete_one({"note_id": note_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return {"message": "Note deleted"}
+
+@api_router.post("/study/notes/{note_id}/upload")
+async def upload_attachment(
+    request: Request,
+    note_id: str,
+    file: UploadFile = File(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Upload an attachment to a note"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Check note exists
+    note = await db.study_notes.find_one({"note_id": note_id, "user_id": user.user_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    # Allowed types
+    allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp",
+                    "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"]
+    
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="File type not allowed. Use PDF, images, or presentations.")
+    
+    # Read and encode
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(status_code=400, detail="File size must be less than 10MB")
+    
+    file_base64 = base64.b64encode(content).decode('utf-8')
+    
+    attachment = {
+        "attachment_id": f"att_{uuid.uuid4().hex[:12]}",
+        "name": file.filename,
+        "type": file.content_type,
+        "data": f"data:{file.content_type};base64,{file_base64}",
+        "size": len(content),
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.study_notes.update_one(
+        {"note_id": note_id, "user_id": user.user_id},
+        {"$push": {"attachments": attachment}}
+    )
+    
+    return {"message": "Attachment uploaded", "attachment": {**attachment, "data": "[base64 data]"}}
+
+@api_router.get("/study/tasks")
+async def get_study_tasks(request: Request, notebook_id: Optional[str] = None, completed: Optional[bool] = None, session_token: Optional[str] = Cookie(None)):
+    """Get study tasks"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    if completed is not None:
+        query["completed"] = completed
+    
+    tasks = await db.study_tasks.find(query, {"_id": 0}).to_list(1000)
+    return tasks
+
+@api_router.post("/study/tasks")
+async def create_study_task(request: Request, task_data: StudyTaskCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a study task"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    xp_reward = 10 if task_data.priority == "low" else 20 if task_data.priority == "medium" else 30
+    
+    task_id = f"stask_{uuid.uuid4().hex[:12]}"
+    task_doc = {
+        "task_id": task_id,
+        "user_id": user.user_id,
+        "notebook_id": task_data.notebook_id,
+        "title": task_data.title,
+        "description": task_data.description,
+        "task_type": task_data.task_type,
+        "deadline": task_data.deadline,
+        "reminder": task_data.reminder,
+        "completed": False,
+        "completed_at": None,
+        "priority": task_data.priority,
+        "estimated_minutes": task_data.estimated_minutes,
+        "actual_minutes": 0,
+        "notes": None,
+        "xp_reward": xp_reward,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.study_tasks.insert_one(task_doc)
+    task_doc.pop('_id', None)
+    return task_doc
+
+@api_router.patch("/study/tasks/{task_id}")
+async def update_study_task(request: Request, task_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Update a study task"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    task = await db.study_tasks.find_one({"task_id": task_id, "user_id": user.user_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    update_fields = {}
+    for field in ["title", "description", "deadline", "reminder", "priority", "estimated_minutes", "actual_minutes", "notes"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    # Handle completion toggle
+    if "completed" in data:
+        new_completed = data["completed"]
+        was_completed = task.get("completed", False)
+        
+        if new_completed and not was_completed:
+            # Completing task - award XP
+            update_fields["completed"] = True
+            update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
+            
+            xp = task.get("xp_reward", 20)
+            new_xp = user.xp + xp
+            new_rank = calculate_rank(new_xp)
+            await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+            
+            # Update study streak
+            await update_study_streak(user.user_id)
+            
+        elif not new_completed and was_completed:
+            # Uncompleting task - deduct XP
+            update_fields["completed"] = False
+            update_fields["completed_at"] = None
+            
+            xp = task.get("xp_reward", 20)
+            new_xp = max(0, user.xp - xp)
+            new_rank = calculate_rank(new_xp)
+            await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    if update_fields:
+        await db.study_tasks.update_one(
+            {"task_id": task_id, "user_id": user.user_id},
+            {"$set": update_fields}
+        )
+    
+    updated = await db.study_tasks.find_one({"task_id": task_id, "user_id": user.user_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/study/tasks/{task_id}")
+async def delete_study_task(request: Request, task_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a study task"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.study_tasks.delete_one({"task_id": task_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted"}
+
+@api_router.get("/study/sessions")
+async def get_study_sessions(request: Request, notebook_id: Optional[str] = None, date: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get study sessions"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    if date:
+        query["date"] = date
+    
+    sessions = await db.study_sessions.find(query, {"_id": 0}).to_list(1000)
+    return sessions
+
+@api_router.post("/study/sessions")
+async def create_study_session(request: Request, session_data: StudySessionCreate, session_token: Optional[str] = Cookie(None)):
+    """Log a study session"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Calculate XP based on duration
+    xp_earned = (session_data.duration_minutes // 15) * 10  # 10 XP per 15 minutes
+    
+    session_id = f"ssession_{uuid.uuid4().hex[:12]}"
+    session_doc = {
+        "session_id": session_id,
+        "user_id": user.user_id,
+        "notebook_id": session_data.notebook_id,
+        "duration_minutes": session_data.duration_minutes,
+        "date": session_data.date,
+        "notes": session_data.notes,
+        "xp_earned": xp_earned,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.study_sessions.insert_one(session_doc)
+    
+    # Update notebook study time
+    await db.notebooks.update_one(
+        {"notebook_id": session_data.notebook_id, "user_id": user.user_id},
+        {"$inc": {"total_study_time_minutes": session_data.duration_minutes}}
+    )
+    
+    # Award XP
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    # Update study streak
+    await update_study_streak(user.user_id)
+    
+    session_doc.pop('_id', None)
+    session_doc["new_xp"] = new_xp
+    session_doc["new_rank"] = new_rank
+    return session_doc
+
+async def update_study_streak(user_id: str):
+    """Update user's study streak"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    streak = await db.study_streaks.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not streak:
+        streak_id = f"streak_{uuid.uuid4().hex[:12]}"
+        streak = {
+            "streak_id": streak_id,
+            "user_id": user_id,
+            "current_streak": 1,
+            "best_streak": 1,
+            "last_study_date": today,
+            "total_study_days": 1,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.study_streaks.insert_one(streak)
+        return
+    
+    last_date = streak.get("last_study_date")
+    
+    if last_date == today:
+        return  # Already studied today
+    
+    if last_date == yesterday:
+        # Continue streak
+        new_streak = streak.get("current_streak", 0) + 1
+        best_streak = max(streak.get("best_streak", 0), new_streak)
+        await db.study_streaks.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "current_streak": new_streak,
+                "best_streak": best_streak,
+                "last_study_date": today,
+                "total_study_days": streak.get("total_study_days", 0) + 1
+            }}
+        )
+    else:
+        # Streak broken, start new
+        await db.study_streaks.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "current_streak": 1,
+                "last_study_date": today,
+                "total_study_days": streak.get("total_study_days", 0) + 1
+            }}
+        )
+
+@api_router.get("/study/streak")
+async def get_study_streak(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get user's study streak"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    streak = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not streak:
+        return {"current_streak": 0, "best_streak": 0, "total_study_days": 0}
+    return streak
+
+@api_router.get("/study/schedule")
+async def get_study_schedule(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get study schedule"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    schedules = await db.study_schedules.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    return schedules
+
+@api_router.post("/study/schedule")
+async def create_study_schedule(request: Request, schedule_data: StudyScheduleCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a study schedule entry"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    schedule_id = f"sched_{uuid.uuid4().hex[:12]}"
+    schedule_doc = {
+        "schedule_id": schedule_id,
+        "user_id": user.user_id,
+        "notebook_id": schedule_data.notebook_id,
+        "day_of_week": schedule_data.day_of_week,
+        "start_time": schedule_data.start_time,
+        "end_time": schedule_data.end_time,
+        "repeat": schedule_data.repeat,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.study_schedules.insert_one(schedule_doc)
+    schedule_doc.pop('_id', None)
+    return schedule_doc
+
+@api_router.delete("/study/schedule/{schedule_id}")
+async def delete_study_schedule(request: Request, schedule_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a schedule entry"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.study_schedules.delete_one({"schedule_id": schedule_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return {"message": "Schedule deleted"}
+
+@api_router.get("/study/flashcards")
+async def get_flashcards(request: Request, notebook_id: Optional[str] = None, deck_name: Optional[str] = None, due_only: bool = False, session_token: Optional[str] = Cookie(None)):
+    """Get flashcards"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    if deck_name:
+        query["deck_name"] = deck_name
+    if due_only:
+        today = datetime.now().strftime("%Y-%m-%d")
+        query["next_review"] = {"$lte": today}
+    
+    flashcards = await db.flashcards.find(query, {"_id": 0}).to_list(1000)
+    return flashcards
+
+@api_router.post("/study/flashcards")
+async def create_flashcard(request: Request, card_data: FlashcardCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a flashcard"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    flashcard_id = f"flash_{uuid.uuid4().hex[:12]}"
+    card_doc = {
+        "flashcard_id": flashcard_id,
+        "user_id": user.user_id,
+        "notebook_id": card_data.notebook_id,
+        "deck_name": card_data.deck_name,
+        "front": card_data.front,
+        "back": card_data.back,
+        "tags": card_data.tags,
+        "ease_factor": 2.5,
+        "interval_days": 1,
+        "repetitions": 0,
+        "next_review": today,
+        "last_review": None,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.flashcards.insert_one(card_doc)
+    card_doc.pop('_id', None)
+    return card_doc
+
+@api_router.post("/study/flashcards/{flashcard_id}/review")
+async def review_flashcard(request: Request, flashcard_id: str, review: FlashcardReview, session_token: Optional[str] = Cookie(None)):
+    """Review a flashcard using SM-2 algorithm for spaced repetition"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    card = await db.flashcards.find_one({"flashcard_id": flashcard_id, "user_id": user.user_id}, {"_id": 0})
+    if not card:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+    
+    quality = review.quality
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # SM-2 Algorithm
+    ease_factor = card.get("ease_factor", 2.5)
+    interval = card.get("interval_days", 1)
+    repetitions = card.get("repetitions", 0)
+    
+    if quality < 3:
+        # Failed - reset
+        repetitions = 0
+        interval = 1
+    else:
+        if repetitions == 0:
+            interval = 1
+        elif repetitions == 1:
+            interval = 6
+        else:
+            interval = int(interval * ease_factor)
+        
+        repetitions += 1
+    
+    # Update ease factor
+    ease_factor = ease_factor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
+    ease_factor = max(1.3, ease_factor)  # Minimum 1.3
+    
+    next_review = (datetime.now() + timedelta(days=interval)).strftime("%Y-%m-%d")
+    
+    await db.flashcards.update_one(
+        {"flashcard_id": flashcard_id, "user_id": user.user_id},
+        {"$set": {
+            "ease_factor": ease_factor,
+            "interval_days": interval,
+            "repetitions": repetitions,
+            "next_review": next_review,
+            "last_review": today
+        }}
+    )
+    
+    # Award XP for reviewing
+    xp_earned = 5 if quality >= 3 else 2
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    return {
+        "message": "Card reviewed",
+        "next_review": next_review,
+        "interval_days": interval,
+        "ease_factor": ease_factor,
+        "xp_earned": xp_earned,
+        "new_xp": new_xp
+    }
+
+@api_router.delete("/study/flashcards/{flashcard_id}")
+async def delete_flashcard(request: Request, flashcard_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a flashcard"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.flashcards.delete_one({"flashcard_id": flashcard_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Flashcard not found")
+    return {"message": "Flashcard deleted"}
+
+@api_router.post("/study/flashcards/generate")
+async def generate_flashcards(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Generate flashcards from a note using AI"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    note_id = data.get("note_id")
+    count = data.get("count", 5)
+    
+    note = await db.study_notes.find_one({"note_id": note_id, "user_id": user.user_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    prompt = f"""Com base no seguinte conteúdo de estudo, gere {count} flashcards para memorização.
+    
+Conteúdo:
+{note.get('title', '')}
+{note.get('content', '')}
+
+Gere flashcards no seguinte formato JSON:
+[
+    {{"front": "Pergunta ou conceito", "back": "Resposta ou explicação"}},
+    ...
+]
+
+Regras:
+- Foque nos conceitos mais importantes
+- Perguntas devem ser claras e objetivas
+- Respostas devem ser concisas mas completas
+- Use a técnica de perguntas ativas (não apenas definições)
+"""
+    
+    try:
+        response = await call_llm(
+            prompt,
+            session_id=user.user_id,
+            system_message="Você é um especialista em técnicas de memorização e aprendizado. Crie flashcards efetivos para estudo."
+        )
+        
+        import re
+        json_match = re.search(r'\[[\s\S]*\]', response)
+        if json_match:
+            cards_data = json.loads(json_match.group())
+            
+            created_cards = []
+            today = datetime.now().strftime("%Y-%m-%d")
+            
+            for card in cards_data:
+                flashcard_id = f"flash_{uuid.uuid4().hex[:12]}"
+                card_doc = {
+                    "flashcard_id": flashcard_id,
+                    "user_id": user.user_id,
+                    "notebook_id": note.get("notebook_id"),
+                    "deck_name": note.get("title", "AI Generated"),
+                    "front": card.get("front", ""),
+                    "back": card.get("back", ""),
+                    "tags": ["ai-generated"],
+                    "ease_factor": 2.5,
+                    "interval_days": 1,
+                    "repetitions": 0,
+                    "next_review": today,
+                    "last_review": None,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.flashcards.insert_one(card_doc)
+                card_doc.pop('_id', None)
+                created_cards.append(card_doc)
+            
+            return {"message": f"{len(created_cards)} flashcards created", "flashcards": created_cards}
+        else:
+            return {"message": response}
+    except Exception as e:
+        logging.error(f"Flashcard generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/study/quizzes")
+async def get_quizzes(request: Request, notebook_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get quizzes"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    
+    quizzes = await db.quizzes.find(query, {"_id": 0}).to_list(100)
+    return quizzes
+
+@api_router.post("/study/quizzes")
+async def create_quiz(request: Request, quiz_data: QuizCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a quiz"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    quiz_id = f"quiz_{uuid.uuid4().hex[:12]}"
+    quiz_doc = {
+        "quiz_id": quiz_id,
+        "user_id": user.user_id,
+        "notebook_id": quiz_data.notebook_id,
+        "title": quiz_data.title,
+        "questions": quiz_data.questions,
+        "ai_generated": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.quizzes.insert_one(quiz_doc)
+    quiz_doc.pop('_id', None)
+    return quiz_doc
+
+@api_router.post("/study/quizzes/generate")
+async def generate_quiz(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Generate a quiz from notes using AI"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notebook_id = data.get("notebook_id")
+    question_count = data.get("count", 5)
+    
+    # Get notes from notebook
+    notes = await db.study_notes.find({"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0}).to_list(50)
+    
+    if not notes:
+        raise HTTPException(status_code=404, detail="No notes found in this notebook")
+    
+    content = "\n\n".join([f"## {n.get('title', '')}\n{n.get('content', '')}" for n in notes])
+    
+    prompt = f"""Com base no seguinte conteúdo, gere {question_count} perguntas de múltipla escolha para um quiz.
+
+Conteúdo:
+{content[:5000]}
+
+Gere no seguinte formato JSON:
+[
+    {{
+        "question": "Pergunta aqui",
+        "options": ["A) opção 1", "B) opção 2", "C) opção 3", "D) opção 4"],
+        "correct_answer": "A",
+        "explanation": "Explicação da resposta correta"
+    }},
+    ...
+]
+
+Regras:
+- Perguntas devem testar compreensão, não apenas memorização
+- Todas as opções devem ser plausíveis
+- Explicações devem ser educativas
+"""
+    
+    try:
+        response = await call_llm(
+            prompt,
+            session_id=user.user_id,
+            system_message="Você é um professor experiente. Crie questões que avaliem compreensão profunda do conteúdo."
+        )
+        
+        import re
+        json_match = re.search(r'\[[\s\S]*\]', response)
+        if json_match:
+            questions = json.loads(json_match.group())
+            
+            # Get notebook info
+            notebook = await db.notebooks.find_one({"notebook_id": notebook_id}, {"_id": 0})
+            
+            quiz_id = f"quiz_{uuid.uuid4().hex[:12]}"
+            quiz_doc = {
+                "quiz_id": quiz_id,
+                "user_id": user.user_id,
+                "notebook_id": notebook_id,
+                "title": f"Quiz: {notebook.get('name', 'Matéria')}",
+                "questions": questions,
+                "ai_generated": True,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.quizzes.insert_one(quiz_doc)
+            quiz_doc.pop('_id', None)
+            return quiz_doc
+        else:
+            return {"message": response}
+    except Exception as e:
+        logging.error(f"Quiz generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/study/quizzes/{quiz_id}/attempt")
+async def submit_quiz_attempt(request: Request, quiz_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Submit a quiz attempt"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    quiz = await db.quizzes.find_one({"quiz_id": quiz_id, "user_id": user.user_id}, {"_id": 0})
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    
+    answers = data.get("answers", [])  # [{question_idx, selected_answer}]
+    
+    # Calculate score
+    correct = 0
+    results = []
+    for ans in answers:
+        q_idx = ans.get("question_idx", 0)
+        selected = ans.get("selected_answer", "")
+        
+        if q_idx < len(quiz.get("questions", [])):
+            question = quiz["questions"][q_idx]
+            is_correct = selected.upper() == question.get("correct_answer", "").upper()
+            if is_correct:
+                correct += 1
+            results.append({
+                "question_idx": q_idx,
+                "selected_answer": selected,
+                "correct": is_correct,
+                "correct_answer": question.get("correct_answer"),
+                "explanation": question.get("explanation")
+            })
+    
+    total = len(quiz.get("questions", []))
+    score = (correct / total * 100) if total > 0 else 0
+    
+    # Save attempt
+    attempt_id = f"attempt_{uuid.uuid4().hex[:12]}"
+    attempt_doc = {
+        "attempt_id": attempt_id,
+        "user_id": user.user_id,
+        "quiz_id": quiz_id,
+        "score": score,
+        "answers": results,
+        "completed_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.quiz_attempts.insert_one(attempt_doc)
+    
+    # Award XP based on score
+    xp_earned = int(score / 10) * 3  # Up to 30 XP for perfect score
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    # Update study streak
+    await update_study_streak(user.user_id)
+    
+    attempt_doc.pop('_id', None)
+    attempt_doc["correct_count"] = correct
+    attempt_doc["total_questions"] = total
+    attempt_doc["xp_earned"] = xp_earned
+    attempt_doc["new_xp"] = new_xp
+    return attempt_doc
+
+@api_router.delete("/study/quizzes/{quiz_id}")
+async def delete_quiz(request: Request, quiz_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a quiz"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.quizzes.delete_one({"quiz_id": quiz_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+    return {"message": "Quiz deleted"}
+
+@api_router.get("/study/stats")
+async def get_study_stats(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get comprehensive study statistics"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get notebooks with study time
+    notebooks = await db.notebooks.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    
+    # Get sessions for last 30 days
+    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    sessions = await db.study_sessions.find({
+        "user_id": user.user_id,
+        "date": {"$gte": thirty_days_ago}
+    }, {"_id": 0}).to_list(1000)
+    
+    # Get streak
+    streak = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    # Get flashcard stats
+    flashcards = await db.flashcards.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+    due_flashcards = [f for f in flashcards if f.get("next_review", "") <= datetime.now().strftime("%Y-%m-%d")]
+    
+    # Get quiz attempts
+    attempts = await db.quiz_attempts.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    avg_score = sum(a.get("score", 0) for a in attempts) / len(attempts) if attempts else 0
+    
+    # Get completed tasks
+    tasks = await db.study_tasks.find({"user_id": user.user_id, "completed": True}, {"_id": 0}).to_list(1000)
+    
+    # Calculate time by notebook
+    time_by_notebook = {}
+    for nb in notebooks:
+        time_by_notebook[nb.get("name", "Unknown")] = nb.get("total_study_time_minutes", 0)
+    
+    # Daily study time for last 7 days
+    daily_time = {}
+    for s in sessions:
+        date = s.get("date", "")
+        daily_time[date] = daily_time.get(date, 0) + s.get("duration_minutes", 0)
+    
+    total_time = sum(nb.get("total_study_time_minutes", 0) for nb in notebooks)
+    
+    return {
+        "total_study_time_minutes": total_time,
+        "total_study_time_hours": round(total_time / 60, 1),
+        "notebooks_count": len(notebooks),
+        "time_by_notebook": time_by_notebook,
+        "daily_time_last_7_days": daily_time,
+        "streak": {
+            "current": streak.get("current_streak", 0) if streak else 0,
+            "best": streak.get("best_streak", 0) if streak else 0,
+            "total_days": streak.get("total_study_days", 0) if streak else 0
+        },
+        "flashcards": {
+            "total": len(flashcards),
+            "due_today": len(due_flashcards),
+            "mastered": len([f for f in flashcards if f.get("interval_days", 0) > 21])
+        },
+        "quizzes": {
+            "total_attempts": len(attempts),
+            "average_score": round(avg_score, 1)
+        },
+        "tasks_completed": len(tasks)
+    }
+
+@api_router.post("/study/ai-suggestions")
+async def get_ai_study_suggestions(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get AI suggestions for study improvement based on spaced repetition"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Gather user's study data
+    stats = await get_study_stats(request, session_token)
+    
+    # Get due flashcards
+    today = datetime.now().strftime("%Y-%m-%d")
+    due_flashcards = await db.flashcards.find({
+        "user_id": user.user_id,
+        "next_review": {"$lte": today}
+    }, {"_id": 0}).to_list(100)
+    
+    # Get pending tasks
+    pending_tasks = await db.study_tasks.find({
+        "user_id": user.user_id,
+        "completed": False
+    }, {"_id": 0}).to_list(50)
+    
+    # Get notebooks needing attention (least studied)
+    notebooks = await db.notebooks.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    notebooks_sorted = sorted(notebooks, key=lambda x: x.get("total_study_time_minutes", 0))
+    
+    prompt = f"""Com base nos dados de estudo do usuário, forneça sugestões personalizadas:
+
+ESTATÍSTICAS:
+- Tempo total de estudo: {stats.get('total_study_time_hours', 0)} horas
+- Streak atual: {stats.get('streak', {}).get('current', 0)} dias
+- Flashcards para revisar hoje: {len(due_flashcards)}
+- Tarefas pendentes: {len(pending_tasks)}
+- Média nos quizzes: {stats.get('quizzes', {}).get('average_score', 0)}%
+
+MATÉRIAS MENOS ESTUDADAS:
+{', '.join([f"{nb.get('name')} ({nb.get('total_study_time_minutes', 0)} min)" for nb in notebooks_sorted[:3]])}
+
+TAREFAS PENDENTES COM DEADLINE PRÓXIMO:
+{[f"{t.get('title')} - {t.get('deadline', 'Sem prazo')}" for t in pending_tasks[:5]]}
+
+Forneça:
+1. Uma análise breve do progresso
+2. 3-5 sugestões práticas para melhorar
+3. Quais matérias precisam de mais atenção
+4. Dicas de repetição espaçada baseadas nos dados
+5. Motivação personalizada
+
+Responda de forma concisa e motivadora em português."""
+
+    try:
+        response = await call_llm(
+            prompt,
+            session_id=user.user_id,
+            system_message="Você é um coach de estudos especializado em técnicas de aprendizado eficiente e repetição espaçada. Seja motivador e prático."
+        )
+        
+        return {
+            "suggestions": response,
+            "due_flashcards_count": len(due_flashcards),
+            "pending_tasks_count": len(pending_tasks),
+            "least_studied_notebooks": [nb.get("name") for nb in notebooks_sorted[:3]]
+        }
+    except Exception as e:
+        logging.error(f"AI suggestions failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 
