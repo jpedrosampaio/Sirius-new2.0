@@ -903,7 +903,7 @@ export default function Workouts() {
           </Dialog>
 
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
                 <div className="flex items-center gap-3">
                   <Dumbbell className="w-8 h-8 text-[#00F0FF]" />
@@ -941,6 +941,120 @@ export default function Workouts() {
                 </div>
               </Card>
             </div>
+          )}
+
+          {/* Detailed Stats with Charts */}
+          {detailedStats && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {/* Consistency Chart - Last 30 days */}
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider">Consistência (30 dias)</h3>
+                  <span className="text-lg font-data text-[#00F0FF]">{detailedStats.consistency_percentage}%</span>
+                </div>
+                <div className="grid grid-cols-15 gap-1 mb-4">
+                  {detailedStats.daily_data?.map((day, idx) => (
+                    <div
+                      key={idx}
+                      className="w-full aspect-square rounded-sm transition-all hover:scale-110"
+                      style={{
+                        backgroundColor: day.count > 0 ? '#00F0FF' : '#27272A',
+                        opacity: day.count > 0 ? Math.min(0.4 + (day.duration / 60) * 0.6, 1) : 0.3
+                      }}
+                      title={`${day.date}: ${day.count > 0 ? `${day.duration}min` : 'Sem treino'}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between text-xs text-[#52525B]">
+                  <span>30 dias atrás</span>
+                  <span>Hoje</span>
+                </div>
+              </Card>
+
+              {/* Streak and Stats */}
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider mb-4">Streaks & Médias</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Flame className="w-5 h-5 text-[#F59E0B]" />
+                      <span className="text-sm text-[#A1A1AA]">Streak Atual</span>
+                    </div>
+                    <span className="font-data text-xl text-[#F59E0B]">{detailedStats.current_streak} dias</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-[#22C55E]" />
+                      <span className="text-sm text-[#A1A1AA]">Melhor Streak</span>
+                    </div>
+                    <span className="font-data text-xl text-[#22C55E]">{detailedStats.best_streak} dias</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-[#00F0FF]" />
+                      <span className="text-sm text-[#A1A1AA]">Dias Treinados</span>
+                    </div>
+                    <span className="font-data text-xl text-[#00F0FF]">{detailedStats.trained_days}/30</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Timer className="w-5 h-5 text-[#A855F7]" />
+                      <span className="text-sm text-[#A1A1AA]">Média por Treino</span>
+                    </div>
+                    <span className="font-data text-xl text-[#A855F7]">{detailedStats.avg_duration_minutes}min</span>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* AI Suggestions Button */}
+          <div className="flex justify-end mb-6">
+            <Button
+              onClick={getAiSuggestions}
+              disabled={loadingSuggestions}
+              className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white uppercase text-xs tracking-widest"
+            >
+              {loadingSuggestions ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Gerando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Sugestões de Treino com IA
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* AI Suggestions Display */}
+          {aiSuggestions && (
+            <Card className="bg-[#0A0A0A] border-[#27272A] p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-heading text-xl flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-[#A855F7]" />
+                  Sugestões Personalizadas
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAiSuggestions(null)}
+                  className="text-[#52525B] hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="prose prose-invert max-w-none">
+                <p className="text-[#A1A1AA] whitespace-pre-wrap text-sm leading-relaxed">
+                  {aiSuggestions.suggestions}
+                </p>
+              </div>
+              <div className="mt-4 pt-4 border-t border-[#27272A] text-xs text-[#52525B]">
+                Baseado em {aiSuggestions.based_on?.total_workouts || 0} treinos registrados
+              </div>
+            </Card>
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
