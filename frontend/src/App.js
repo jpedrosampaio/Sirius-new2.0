@@ -41,6 +41,8 @@ function AppRouter() {
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/workouts" element={<ProtectedRoute><Workouts /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+      <Route path="/nutrition" element={<ProtectedRoute><Nutrition /></ProtectedRoute>} />
+      <Route path="/studies" element={<ProtectedRoute><Studies /></ProtectedRoute>} />
     </Routes>
   );
 }
