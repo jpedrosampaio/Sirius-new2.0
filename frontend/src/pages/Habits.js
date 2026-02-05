@@ -375,11 +375,6 @@ export default function Habits() {
                 );
               })
             )}
-                    </Button>
-                  </Card>
-                );
-              })
-            )}
           </div>
         </div>
       </div>
