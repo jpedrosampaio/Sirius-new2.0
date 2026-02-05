@@ -15,6 +15,8 @@ import Reports from "@/pages/Reports";
 import Profile from "@/pages/Profile";
 import Workouts from "@/pages/Workouts";
 import Notifications from "@/pages/Notifications";
+import Nutrition from "@/pages/Nutrition";
+import Studies from "@/pages/Studies";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
