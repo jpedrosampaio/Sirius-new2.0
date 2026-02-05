@@ -196,15 +196,18 @@ backend:
 
   - task: "Flashcards with Spaced Repetition"
     implemented: true
-    working: "NA"
+    working: true
     file: "backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Implemented SM-2 algorithm for spaced repetition, flashcard review with ease factor and interval calculation"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Flashcards with spaced repetition working correctly. POST /api/study/flashcards (created 'Vocabulário' deck with 'serendipity' flashcard). POST /api/study/flashcards/{id}/review (reviewed with quality=4, next_review date updated to 2026-02-06). Spaced repetition algorithm functioning - next review date properly calculated and updated."
 
   - task: "AI-generated flashcards and quizzes"
     implemented: true
