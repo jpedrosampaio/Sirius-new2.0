@@ -6,12 +6,86 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { TrendingUp, Plus, Trash2, Flame, CheckCircle2 } from "lucide-react";
+import { TrendingUp, Plus, Trash2, Flame, CheckCircle2, BarChart3, Calendar, Bell, X } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// Simple chart component for consistency
+const ConsistencyChart = ({ completions, color }) => {
+  const last30Days = [];
+  const today = new Date();
+  
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    last30Days.push({
+      date: dateStr,
+      completed: completions.includes(dateStr),
+      dayOfWeek: date.getDay()
+    });
+  }
+  
+  const completedCount = last30Days.filter(d => d.completed).length;
+  const percentage = Math.round((completedCount / 30) * 100);
+  
+  return (
+    <div className="mt-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-[#A1A1AA] uppercase tracking-wider">Últimos 30 dias</span>
+        <span className="text-xs font-data" style={{ color }}>{percentage}% consistência</span>
+      </div>
+      <div className="grid grid-cols-15 gap-1">
+        {last30Days.map((day, idx) => (
+          <div
+            key={idx}
+            className="w-3 h-3 rounded-sm transition-all"
+            style={{
+              backgroundColor: day.completed ? color : '#27272A',
+              opacity: day.completed ? 1 : 0.5
+            }}
+            title={`${day.date}: ${day.completed ? 'Completo' : 'Não feito'}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Streak visualization component
+const StreakDisplay = ({ streak, bestStreak, color }) => {
+  const streakBars = Math.min(streak, 30);
+  
+  return (
+    <div className="flex items-center space-x-4 mb-4">
+      <div className="flex items-center space-x-2">
+        <Flame className="w-6 h-6" style={{ color: streak > 0 ? color : '#52525B' }} />
+        <div>
+          <span className="font-data text-2xl" style={{ color: streak > 0 ? color : '#A1A1AA' }}>{streak}</span>
+          <span className="text-xs text-[#A1A1AA] ml-1">dias</span>
+        </div>
+      </div>
+      <div className="flex-1">
+        <div className="h-2 bg-[#27272A] rounded-full overflow-hidden">
+          <div 
+            className="h-full rounded-full transition-all duration-500"
+            style={{ 
+              width: `${(streakBars / 30) * 100}%`,
+              backgroundColor: color
+            }}
+          />
+        </div>
+      </div>
+      <div className="text-right">
+        <span className="text-xs text-[#A1A1AA]">Recorde</span>
+        <span className="font-data text-lg ml-2" style={{ color }}>{bestStreak}</span>
+      </div>
+    </div>
+  );
+};
 
 export default function Habits() {
   const [user, setUser] = useState(null);
