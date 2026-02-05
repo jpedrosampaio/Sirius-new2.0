@@ -902,122 +902,44 @@ export default function Workouts() {
             </DialogContent>
           </Dialog>
 
+          {/* Stats Summary - Compact */}
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="flex items-center gap-3">
-                  <Dumbbell className="w-8 h-8 text-[#00F0FF]" />
-                  <div>
-                    <p className="text-xs text-[#A1A1AA] uppercase">Treinos</p>
-                    <p className="font-heading text-2xl">{stats.total_workouts}</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="flex items-center gap-3">
-                  <Timer className="w-8 h-8 text-[#F59E0B]" />
-                  <div>
-                    <p className="text-xs text-[#A1A1AA] uppercase">Minutos</p>
-                    <p className="font-heading text-2xl">{stats.total_duration_minutes}</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="flex items-center gap-3">
-                  <Flame className="w-8 h-8 text-[#EF4444]" />
-                  <div>
-                    <p className="text-xs text-[#A1A1AA] uppercase">Calorias</p>
-                    <p className="font-heading text-2xl">{stats.total_calories}</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="flex items-center gap-3">
-                  <TrendingUp className="w-8 h-8 text-[#22C55E]" />
-                  <div>
-                    <p className="text-xs text-[#A1A1AA] uppercase">XP Ganho</p>
-                    <p className="font-heading text-2xl">{stats.total_xp_earned}</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* Detailed Stats with Charts */}
-          {detailedStats && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Consistency Chart - Last 30 days */}
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider">Consistência (30 dias)</h3>
-                  <span className="text-lg font-data text-[#00F0FF]">{detailedStats.consistency_percentage}%</span>
-                </div>
-                <div className="grid grid-cols-15 gap-1 mb-4">
-                  {detailedStats.daily_data?.map((day, idx) => (
-                    <div
-                      key={idx}
-                      className="w-full aspect-square rounded-sm transition-all hover:scale-110"
-                      style={{
-                        backgroundColor: day.count > 0 ? '#00F0FF' : '#27272A',
-                        opacity: day.count > 0 ? Math.min(0.4 + (day.duration / 60) * 0.6, 1) : 0.3
-                      }}
-                      title={`${day.date}: ${day.count > 0 ? `${day.duration}min` : 'Sem treino'}`}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-[#52525B]">
-                  <span>30 dias atrás</span>
-                  <span>Hoje</span>
-                </div>
-              </Card>
-
-              {/* Streak and Stats */}
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
-                <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider mb-4">Streaks & Médias</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-[#F59E0B]" />
-                      <span className="text-sm text-[#A1A1AA]">Streak Atual</span>
-                    </div>
-                    <span className="font-data text-xl text-[#F59E0B]">{detailedStats.current_streak} dias</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5 text-[#22C55E]" />
-                      <span className="text-sm text-[#A1A1AA]">Melhor Streak</span>
-                    </div>
-                    <span className="font-data text-xl text-[#22C55E]">{detailedStats.best_streak} dias</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-[#00F0FF]" />
-                      <span className="text-sm text-[#A1A1AA]">Dias Treinados</span>
-                    </div>
-                    <span className="font-data text-xl text-[#00F0FF]">{detailedStats.trained_days}/30</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Timer className="w-5 h-5 text-[#A855F7]" />
-                      <span className="text-sm text-[#A1A1AA]">Média por Treino</span>
-                    </div>
-                    <span className="font-data text-xl text-[#A855F7]">{detailedStats.avg_duration_minutes}min</span>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* AI Suggestions Button */}
-          <div className="flex justify-end mb-6">
-            <Button
-              onClick={getAiSuggestions}
-              disabled={loadingSuggestions}
-              className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white uppercase text-xs tracking-widest"
-            >
-              {loadingSuggestions ? (
+            <div className="flex items-center gap-6 p-4 bg-[#0A0A0A] border border-[#27272A] rounded-lg mb-6">
+              <div className="flex items-center gap-2">
+                <Dumbbell className="w-5 h-5 text-[#00F0FF]" />
+                <span className="text-xs text-[#A1A1AA] uppercase">Treinos</span>
+                <span className="font-heading text-xl">{stats.total_workouts}</span>
+              </div>
+              <div className="h-6 w-px bg-[#27272A]" />
+              <div className="flex items-center gap-2">
+                <Timer className="w-5 h-5 text-[#F59E0B]" />
+                <span className="text-xs text-[#A1A1AA] uppercase">Min</span>
+                <span className="font-heading text-xl">{stats.total_duration_minutes}</span>
+              </div>
+              <div className="h-6 w-px bg-[#27272A]" />
+              <div className="flex items-center gap-2">
+                <Flame className="w-5 h-5 text-[#EF4444]" />
+                <span className="text-xs text-[#A1A1AA] uppercase">Cal</span>
+                <span className="font-heading text-xl">{stats.total_calories}</span>
+              </div>
+              <div className="h-6 w-px bg-[#27272A]" />
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-[#22C55E]" />
+                <span className="text-xs text-[#A1A1AA] uppercase">XP</span>
+                <span className="font-heading text-xl">{stats.total_xp_earned}</span>
+              </div>
+              {detailedStats && (
                 <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  <div className="h-6 w-px bg-[#27272A]" />
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-[#F59E0B]" />
+                    <span className="text-xs text-[#A1A1AA] uppercase">Streak</span>
+                    <span className="font-heading text-xl text-[#F59E0B]">{detailedStats.current_streak}</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
                   Gerando...
                 </>
               ) : (
