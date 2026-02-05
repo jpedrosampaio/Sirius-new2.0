@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell } from "lucide-react";
+import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell, Apple, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState } from "react";
