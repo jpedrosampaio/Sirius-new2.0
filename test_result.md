@@ -360,15 +360,11 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Nutrition CRUD endpoints"
-    - "Study Area CRUD endpoints"
-    - "Flashcards with Spaced Repetition"
-    - "AI-generated flashcards and quizzes"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
