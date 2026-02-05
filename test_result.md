@@ -321,6 +321,30 @@ frontend:
         agent: "main"
         comment: "Created new Projections tab with month selector, summary cards, projections list, AI insights button"
 
+  - task: "Nutrition page"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Nutrition.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created full nutrition page with meals tracking, calorie/macro counters, water tracking, AI recipe suggestions"
+
+  - task: "Studies page"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Studies.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Created comprehensive studies page with areas, notebooks, notes, tasks, flashcards, quizzes, schedule, streak tracking, AI suggestions"
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
