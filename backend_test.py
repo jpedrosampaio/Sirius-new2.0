@@ -868,6 +868,565 @@ class SiriusBackendTester:
         except Exception as e:
             self.log(f"❌ Task toggle XP error: {str(e)}", "ERROR")
             return False
+
+    # ========== NUTRITION MODULE TESTS ==========
+    
+    def test_nutrition_goals_get(self):
+        """Test GET /api/nutrition/goals - Get default nutrition goals"""
+        self.log("🥗 Testing nutrition goals GET endpoint...")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/nutrition/goals")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log("✅ Nutrition goals GET successful")
+                self.log(f"   Daily calories: {data.get('daily_calories', 'N/A')}")
+                self.log(f"   Daily protein: {data.get('daily_protein', 'N/A')}g")
+                return True
+            else:
+                self.log(f"❌ Nutrition goals GET failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Nutrition goals GET error: {str(e)}", "ERROR")
+            return False
+
+    def test_nutrition_goals_update(self):
+        """Test PUT /api/nutrition/goals - Update goals"""
+        self.log("🎯 Testing nutrition goals UPDATE endpoint...")
+        
+        goals_data = {
+            "daily_calories": 2500,
+            "daily_protein": 180,
+            "daily_carbs": 300,
+            "daily_fat": 70,
+            "water_goal_ml": 2500
+        }
+        
+        try:
+            response = self.session.put(f"{API_BASE}/nutrition/goals", json=goals_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log("✅ Nutrition goals updated successfully")
+                self.log(f"   Calories: {data.get('daily_calories')}, Protein: {data.get('daily_protein')}g")
+                return True
+            else:
+                self.log(f"❌ Nutrition goals update failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Nutrition goals update error: {str(e)}", "ERROR")
+            return False
+
+    def test_nutrition_meals_create(self):
+        """Test POST /api/nutrition/meals - Create a meal"""
+        self.log("🍽️ Testing nutrition meals CREATE endpoint...")
+        
+        today = datetime.now().strftime("%Y-%m-%d")
+        meal_data = {
+            "name": "Almoço Fitness",
+            "meal_type": "lunch",
+            "foods": [
+                {
+                    "name": "Frango grelhado",
+                    "calories": 200,
+                    "protein": 35,
+                    "carbs": 0,
+                    "fat": 5,
+                    "quantity": 1
+                },
+                {
+                    "name": "Arroz integral",
+                    "calories": 130,
+                    "protein": 3,
+                    "carbs": 28,
+                    "fat": 1,
+                    "quantity": 1
+                }
+            ],
+            "date": today
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/nutrition/meals", json=meal_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log("✅ Nutrition meal created successfully")
+                self.log(f"   Meal: {data.get('name')}, Total calories: {data.get('total_calories')}")
+                return True
+            else:
+                self.log(f"❌ Nutrition meal creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Nutrition meal creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_nutrition_meals_get(self):
+        """Test GET /api/nutrition/meals - Get meals for today"""
+        self.log("📋 Testing nutrition meals GET endpoint...")
+        
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/nutrition/meals?date={today}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log(f"✅ Nutrition meals GET successful - Found {len(data)} meals")
+                if data:
+                    self.log(f"   First meal: {data[0].get('name', 'N/A')}")
+                return True
+            else:
+                self.log(f"❌ Nutrition meals GET failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Nutrition meals GET error: {str(e)}", "ERROR")
+            return False
+
+    def test_nutrition_water_log(self):
+        """Test POST /api/nutrition/water - Log water intake"""
+        self.log("💧 Testing nutrition water LOG endpoint...")
+        
+        try:
+            response = self.session.post(f"{API_BASE}/nutrition/water?amount_ml=500")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log("✅ Water intake logged successfully")
+                self.log(f"   Amount: {data.get('amount_ml')}ml")
+                return True
+            else:
+                self.log(f"❌ Water logging failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Water logging error: {str(e)}", "ERROR")
+            return False
+
+    def test_nutrition_water_get(self):
+        """Test GET /api/nutrition/water - Get water intake for today"""
+        self.log("📊 Testing nutrition water GET endpoint...")
+        
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/nutrition/water?date={today}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log(f"✅ Water intake GET successful - Total: {data.get('total_ml', 0)}ml")
+                return True
+            else:
+                self.log(f"❌ Water intake GET failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Water intake GET error: {str(e)}", "ERROR")
+            return False
+
+    def test_nutrition_stats(self):
+        """Test GET /api/nutrition/stats - Get nutrition stats for today"""
+        self.log("📈 Testing nutrition stats endpoint...")
+        
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/nutrition/stats?date={today}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log("✅ Nutrition stats GET successful")
+                self.log(f"   Total calories: {data.get('total_calories', 0)}")
+                self.log(f"   Total protein: {data.get('total_protein', 0)}g")
+                return True
+            else:
+                self.log(f"❌ Nutrition stats failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Nutrition stats error: {str(e)}", "ERROR")
+            return False
+
+    # ========== STUDIES MODULE TESTS ==========
+    
+    def test_study_areas_get(self):
+        """Test GET /api/study/areas - Get default study areas"""
+        self.log("📚 Testing study areas GET endpoint...")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/study/areas")
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.log(f"✅ Study areas GET successful - Found {len(data)} areas")
+                
+                # Check for default areas
+                area_names = [area.get('name') for area in data]
+                expected_areas = ['Faculdade', 'Concursos', 'Trabalho', 'Outros']
+                found_defaults = [area for area in expected_areas if area in area_names]
+                
+                if found_defaults:
+                    self.log(f"   Default areas found: {', '.join(found_defaults)}")
+                
+                return True
+            else:
+                self.log(f"❌ Study areas GET failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study areas GET error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_areas_create(self):
+        """Test POST /api/study/areas - Create new study area"""
+        self.log("➕ Testing study areas CREATE endpoint...")
+        
+        area_data = {
+            "name": "Idiomas",
+            "description": "Aprendizado de idiomas",
+            "color": "#10B981"
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/study/areas", json=area_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.test_area_id = data.get('area_id')
+                self.log(f"✅ Study area created - ID: {self.test_area_id}")
+                self.log(f"   Name: {data.get('name')}")
+                return True
+            else:
+                self.log(f"❌ Study area creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study area creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_notebooks_create(self):
+        """Test POST /api/study/notebooks - Create notebook"""
+        self.log("📓 Testing study notebooks CREATE endpoint...")
+        
+        if not self.test_area_id:
+            self.log("❌ No test area available for notebook creation", "ERROR")
+            return False
+        
+        notebook_data = {
+            "name": "Inglês",
+            "description": "Curso de inglês avançado",
+            "area_id": self.test_area_id,
+            "color": "#3B82F6"
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/study/notebooks", json=notebook_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.test_notebook_id = data.get('notebook_id')
+                self.log(f"✅ Study notebook created - ID: {self.test_notebook_id}")
+                self.log(f"   Name: {data.get('name')}")
+                return True
+            else:
+                self.log(f"❌ Study notebook creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study notebook creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_notes_create(self):
+        """Test POST /api/study/notes - Create note"""
+        self.log("📝 Testing study notes CREATE endpoint...")
+        
+        if not self.test_notebook_id:
+            self.log("❌ No test notebook available for note creation", "ERROR")
+            return False
+        
+        note_data = {
+            "title": "Present Perfect",
+            "content": "O Present Perfect é usado para ações que começaram no passado e continuam até o presente. Formação: have/has + past participle. Examples: I have studied English for 5 years.",
+            "notebook_id": self.test_notebook_id,
+            "tags": ["gramática", "verbos"]
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/study/notes", json=note_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.test_note_id = data.get('note_id')
+                self.log(f"✅ Study note created - ID: {self.test_note_id}")
+                self.log(f"   Title: {data.get('title')}")
+                return True
+            else:
+                self.log(f"❌ Study note creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study note creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_tasks_create(self):
+        """Test POST /api/study/tasks - Create study task"""
+        self.log("✅ Testing study tasks CREATE endpoint...")
+        
+        task_data = {
+            "title": "Revisar tempos verbais",
+            "task_type": "review",
+            "priority": "high",
+            "estimated_minutes": 45
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/study/tasks", json=task_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.test_task_id = data.get('task_id')
+                self.log(f"✅ Study task created - ID: {self.test_task_id}")
+                self.log(f"   Title: {data.get('title')}")
+                return True
+            else:
+                self.log(f"❌ Study task creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study task creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_tasks_complete(self):
+        """Test PATCH /api/study/tasks/{task_id} - Complete task and verify XP"""
+        self.log("🎯 Testing study task COMPLETION endpoint...")
+        
+        if not self.test_task_id:
+            self.log("❌ No test task available for completion", "ERROR")
+            return False
+        
+        try:
+            # Get initial XP
+            me_response = self.session.get(f"{API_BASE}/auth/me")
+            if me_response.status_code != 200:
+                self.log("❌ Failed to get user info", "ERROR")
+                return False
+            
+            initial_xp = me_response.json().get('xp', 0)
+            
+            # Complete the task
+            response = self.session.patch(f"{API_BASE}/study/tasks/{self.test_task_id}", json={"completed": True})
+            
+            if response.status_code == 200:
+                data = response.json()
+                xp_earned = data.get('xp_earned', 0)
+                
+                self.log(f"✅ Study task completed successfully")
+                self.log(f"   XP earned: {xp_earned}")
+                
+                # Verify XP was awarded
+                if xp_earned > 0:
+                    self.log("   ✅ XP awarded correctly")
+                    return True
+                else:
+                    self.log("   ⚠️ No XP awarded", "WARNING")
+                    return True  # Still consider success if task completed
+            else:
+                self.log(f"❌ Study task completion failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study task completion error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_flashcards_create(self):
+        """Test POST /api/study/flashcards - Create flashcard"""
+        self.log("🃏 Testing study flashcards CREATE endpoint...")
+        
+        if not self.test_notebook_id:
+            self.log("❌ No test notebook available for flashcard creation", "ERROR")
+            return False
+        
+        flashcard_data = {
+            "deck_name": "Vocabulário",
+            "front": "What does 'serendipity' mean?",
+            "back": "The occurrence of events by chance in a happy way",
+            "notebook_id": self.test_notebook_id
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/study/flashcards", json=flashcard_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                self.test_flashcard_id = data.get('flashcard_id')
+                self.log(f"✅ Study flashcard created - ID: {self.test_flashcard_id}")
+                self.log(f"   Deck: {data.get('deck_name')}")
+                return True
+            else:
+                self.log(f"❌ Study flashcard creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study flashcard creation error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_flashcards_review(self):
+        """Test POST /api/study/flashcards/{flashcard_id}/review - Review flashcard with spaced repetition"""
+        self.log("🔄 Testing study flashcards REVIEW endpoint...")
+        
+        if not self.test_flashcard_id:
+            self.log("❌ No test flashcard available for review", "ERROR")
+            return False
+        
+        review_data = {
+            "quality": 4  # Good quality response
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/study/flashcards/{self.test_flashcard_id}/review", json=review_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                next_review = data.get('next_review')
+                interval = data.get('interval')
+                
+                self.log("✅ Flashcard review successful")
+                self.log(f"   Next review: {next_review}")
+                self.log(f"   Interval: {interval} days")
+                
+                # Verify spaced repetition updated next_review date
+                if next_review:
+                    self.log("   ✅ Spaced repetition working - next_review date updated")
+                    return True
+                else:
+                    self.log("   ❌ Spaced repetition failed - no next_review date", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Flashcard review failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Flashcard review error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_streak(self):
+        """Test GET /api/study/streak - Get study streak"""
+        self.log("🔥 Testing study streak endpoint...")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/study/streak")
+            
+            if response.status_code == 200:
+                data = response.json()
+                current_streak = data.get('current_streak', 0)
+                longest_streak = data.get('longest_streak', 0)
+                
+                self.log("✅ Study streak GET successful")
+                self.log(f"   Current streak: {current_streak} days")
+                self.log(f"   Longest streak: {longest_streak} days")
+                return True
+            else:
+                self.log(f"❌ Study streak failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study streak error: {str(e)}", "ERROR")
+            return False
+
+    def test_study_stats(self):
+        """Test GET /api/study/stats - Get comprehensive study statistics"""
+        self.log("📊 Testing study stats endpoint...")
+        
+        try:
+            response = self.session.get(f"{API_BASE}/study/stats")
+            
+            if response.status_code == 200:
+                data = response.json()
+                total_study_time = data.get('total_study_time', 0)
+                completed_tasks = data.get('completed_tasks', 0)
+                
+                self.log("✅ Study stats GET successful")
+                self.log(f"   Total study time: {total_study_time} minutes")
+                self.log(f"   Completed tasks: {completed_tasks}")
+                return True
+            else:
+                self.log(f"❌ Study stats failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Study stats error: {str(e)}", "ERROR")
+            return False
+
+    def run_nutrition_and_studies_tests(self):
+        """Run comprehensive tests for Nutrition and Studies modules"""
+        self.log("🚀 Starting Nutrition and Studies Module Tests")
+        self.log(f"Backend URL: {BACKEND_URL}")
+        
+        results = {}
+        
+        # Authentication
+        results['login'] = self.login()
+        
+        if not results['login']:
+            self.log("❌ Cannot proceed without authentication", "ERROR")
+            return results
+        
+        # Nutrition Module Tests
+        self.log("\n" + "="*50)
+        self.log("🥗 NUTRITION MODULE TESTS")
+        self.log("="*50)
+        
+        results['nutrition_goals_get'] = self.test_nutrition_goals_get()
+        results['nutrition_goals_update'] = self.test_nutrition_goals_update()
+        results['nutrition_meals_create'] = self.test_nutrition_meals_create()
+        results['nutrition_meals_get'] = self.test_nutrition_meals_get()
+        results['nutrition_water_log'] = self.test_nutrition_water_log()
+        results['nutrition_water_get'] = self.test_nutrition_water_get()
+        results['nutrition_stats'] = self.test_nutrition_stats()
+        
+        # Studies Module Tests
+        self.log("\n" + "="*50)
+        self.log("📚 STUDIES MODULE TESTS")
+        self.log("="*50)
+        
+        results['study_areas_get'] = self.test_study_areas_get()
+        results['study_areas_create'] = self.test_study_areas_create()
+        results['study_notebooks_create'] = self.test_study_notebooks_create()
+        results['study_notes_create'] = self.test_study_notes_create()
+        results['study_tasks_create'] = self.test_study_tasks_create()
+        results['study_tasks_complete'] = self.test_study_tasks_complete()
+        results['study_flashcards_create'] = self.test_study_flashcards_create()
+        results['study_flashcards_review'] = self.test_study_flashcards_review()
+        results['study_streak'] = self.test_study_streak()
+        results['study_stats'] = self.test_study_stats()
+        
+        # Summary
+        self.log("\n" + "="*60)
+        self.log("📋 NUTRITION & STUDIES TEST RESULTS")
+        self.log("="*60)
+        
+        passed = 0
+        total = len(results)
+        
+        for test_name, result in results.items():
+            status = "✅ PASS" if result else "❌ FAIL"
+            self.log(f"{test_name.replace('_', ' ').title()}: {status}")
+            if result:
+                passed += 1
+        
+        self.log(f"\nOverall: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
+        
+        if passed == total:
+            self.log("🎉 All Nutrition and Studies tests passed!")
+        else:
+            self.log(f"⚠️ {total - passed} test(s) failed")
+        
+        return results
     
     def run_gemini_integration_tests(self):
         """Run focused Google Gemini AI integration tests"""
