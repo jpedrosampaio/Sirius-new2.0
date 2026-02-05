@@ -99,11 +99,12 @@ export default function Workouts() {
 
   const loadData = useCallback(async () => {
     try {
-      const [userRes, workoutsRes, plansRes, statsRes, measurementsRes, latestRes, quoteRes] = await Promise.all([
+      const [userRes, workoutsRes, plansRes, statsRes, detailedStatsRes, measurementsRes, latestRes, quoteRes] = await Promise.all([
         axios.get(`${API}/auth/me`, { withCredentials: true }),
         axios.get(`${API}/workouts`, { withCredentials: true }),
         axios.get(`${API}/workout-plans`, { withCredentials: true }),
         axios.get(`${API}/workout-stats?period=week`, { withCredentials: true }),
+        axios.get(`${API}/workout-stats/detailed`, { withCredentials: true }),
         axios.get(`${API}/body-measurements?limit=30`, { withCredentials: true }),
         axios.get(`${API}/body-measurements/latest`, { withCredentials: true }),
         axios.get(`${API}/motivational-quote`, { withCredentials: true })
@@ -112,6 +113,7 @@ export default function Workouts() {
       setWorkouts(workoutsRes.data);
       setPlans(plansRes.data);
       setStats(statsRes.data);
+      setDetailedStats(detailedStatsRes.data);
       setMeasurements(measurementsRes.data);
       setLatestMeasurement(latestRes.data);
       setMotivationalQuote(quoteRes.data);
