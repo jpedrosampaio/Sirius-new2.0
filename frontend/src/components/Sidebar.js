@@ -66,6 +66,8 @@ export default function Sidebar({ user }) {
     { icon: CheckSquare, label: "Tarefas", path: "/tasks" },
     { icon: TrendingUp, label: "Hábitos", path: "/habits" },
     { icon: Dumbbell, label: "Treinos", path: "/workouts" },
+    { icon: Apple, label: "Alimentação", path: "/nutrition" },
+    { icon: BookOpen, label: "Estudos", path: "/studies" },
     { icon: DollarSign, label: "Finanças", path: "/finance" },
     { icon: Target, label: "Metas", path: "/goals" },
     { icon: MessageSquare, label: "Chat", path: "/chat" },
