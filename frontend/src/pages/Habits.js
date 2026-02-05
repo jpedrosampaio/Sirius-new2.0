@@ -91,8 +91,23 @@ export default function Habits() {
   const [user, setUser] = useState(null);
   const [habits, setHabits] = useState([]);
   const [open, setOpen] = useState(false);
+  const [reminderOpen, setReminderOpen] = useState(false);
+  const [selectedHabit, setSelectedHabit] = useState(null);
+  const [reminderTime, setReminderTime] = useState("08:00");
+  const [reminderDays, setReminderDays] = useState(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
   const [newHabit, setNewHabit] = useState({ name: "", description: "", color: "#007AFF" });
+  const [showStats, setShowStats] = useState(true);
   const today = new Date().toISOString().split('T')[0];
+
+  const weekDays = [
+    { key: "monday", label: "Seg" },
+    { key: "tuesday", label: "Ter" },
+    { key: "wednesday", label: "Qua" },
+    { key: "thursday", label: "Qui" },
+    { key: "friday", label: "Sex" },
+    { key: "saturday", label: "Sáb" },
+    { key: "sunday", label: "Dom" }
+  ];
 
   useEffect(() => {
     fetchUser();
