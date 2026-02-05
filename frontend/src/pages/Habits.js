@@ -69,9 +69,6 @@ const CompactStreakDisplay = ({ streak, bestStreak, color }) => (
     </div>
   </div>
 );
-    </div>
-  );
-};
 
 export default function Habits() {
   const [user, setUser] = useState(null);
