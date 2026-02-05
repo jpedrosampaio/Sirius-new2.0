@@ -1651,6 +1651,28 @@ def calculate_streak(completions: List[str]) -> int:
             break
     return streak
 
+def calculate_best_streak(completions: List[str]) -> int:
+    """Calculate the longest streak ever from all completions"""
+    if not completions:
+        return 0
+    
+    completions_dates = sorted([datetime.fromisoformat(d).date() for d in completions])
+    
+    if len(completions_dates) == 1:
+        return 1
+    
+    best_streak = 1
+    current_streak = 1
+    
+    for i in range(1, len(completions_dates)):
+        if completions_dates[i] - completions_dates[i-1] == timedelta(days=1):
+            current_streak += 1
+            best_streak = max(best_streak, current_streak)
+        else:
+            current_streak = 1
+    
+    return best_streak
+
 @api_router.get("/finance/stats")
 async def get_finance_stats(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
