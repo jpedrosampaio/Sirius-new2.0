@@ -82,46 +82,46 @@ export default function Dashboard() {
 
           {stats && (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <CheckSquare className="w-8 h-8 text-[#007AFF]" />
-                    <span className="font-data text-2xl">{stats.tasks_completed_today ?? 0}/{stats.tasks_today ?? 0}</span>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center justify-between mb-2 md:mb-4">
+                    <CheckSquare className="w-6 h-6 md:w-8 md:h-8 text-[#007AFF]" />
+                    <span className="font-data text-lg md:text-2xl">{stats.tasks_completed_today ?? 0}/{stats.tasks_today ?? 0}</span>
                   </div>
-                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Tarefas Hoje</p>
+                  <p className="text-[#A1A1AA] uppercase text-[10px] md:text-xs tracking-wider">Tarefas</p>
                 </Card>
 
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <TrendingUp className="w-8 h-8 text-[#39FF14]" />
-                    <span className="font-data text-2xl">{stats.habits_completed_today ?? 0}/{stats.habits_total ?? 0}</span>
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center justify-between mb-2 md:mb-4">
+                    <TrendingUp className="w-6 h-6 md:w-8 md:h-8 text-[#39FF14]" />
+                    <span className="font-data text-lg md:text-2xl">{stats.habits_completed_today ?? 0}/{stats.habits_total ?? 0}</span>
                   </div>
-                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Hábitos Hoje</p>
+                  <p className="text-[#A1A1AA] uppercase text-[10px] md:text-xs tracking-wider">Hábitos</p>
                 </Card>
 
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <DollarSign className="w-8 h-8 text-[#FF9500]" />
-                    <span className="font-data text-2xl">R$ {(stats.balance ?? 0).toFixed(0)}</span>
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center justify-between mb-2 md:mb-4">
+                    <DollarSign className="w-6 h-6 md:w-8 md:h-8 text-[#FF9500]" />
+                    <span className="font-data text-lg md:text-2xl">R$ {(stats.balance ?? 0).toFixed(0)}</span>
                   </div>
-                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Saldo Mês</p>
+                  <p className="text-[#A1A1AA] uppercase text-[10px] md:text-xs tracking-wider">Saldo</p>
                 </Card>
 
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <Target className="w-8 h-8 text-[#00F0FF]" />
-                    <span className="font-data text-2xl">{(stats.goals_avg_progress ?? 0).toFixed(0)}%</span>
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center justify-between mb-2 md:mb-4">
+                    <Target className="w-6 h-6 md:w-8 md:h-8 text-[#00F0FF]" />
+                    <span className="font-data text-lg md:text-2xl">{(stats.goals_avg_progress ?? 0).toFixed(0)}%</span>
                   </div>
-                  <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Progresso Metas</p>
+                  <p className="text-[#A1A1AA] uppercase text-[10px] md:text-xs tracking-wider">Metas</p>
                 </Card>
               </div>
 
               {/* Treino, Nutrição e Estudos */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
                 {/* Card de Treino */}
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center space-x-4 mb-4">
-                    <Dumbbell className="w-10 h-10 text-[#FF6B6B]" />
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center space-x-3 md:space-x-4 mb-3 md:mb-4">
+                    <Dumbbell className="w-8 h-8 md:w-10 md:h-10 text-[#FF6B6B]" />
                     <div>
                       <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Treinos</p>
                       <p className="font-heading text-2xl">Esta Semana</p>
