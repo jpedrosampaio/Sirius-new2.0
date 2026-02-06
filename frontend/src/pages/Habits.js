@@ -434,6 +434,7 @@ export default function Habits() {
           )}
         </DialogContent>
       </Dialog>
+      <MobileNav user={user} />
     </div>
   );
 }
