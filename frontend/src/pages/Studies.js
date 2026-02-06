@@ -149,11 +149,11 @@ export default function Studies() {
         axios.get(`${API}/study/streak`, { withCredentials: true }),
         axios.get(`${API}/study/stats`, { withCredentials: true })
       ]);
-      setAreas(areasRes.data);
-      setNotebooks(notebooksRes.data);
-      setTasks(tasksRes.data);
-      setStreak(streakRes.data);
-      setStats(statsRes.data);
+      setAreas(Array.isArray(areasRes.data) ? areasRes.data : []);
+      setNotebooks(Array.isArray(notebooksRes.data) ? notebooksRes.data : []);
+      setTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
+      setStreak(streakRes.data || {});
+      setStats(statsRes.data || null);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
