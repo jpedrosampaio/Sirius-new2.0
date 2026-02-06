@@ -464,7 +464,7 @@ export default function Studies() {
         answers: quizAnswers
       }, { withCredentials: true });
       setQuizResult(res.data);
-      toast.success(`Quiz finalizado! Nota: ${res.data.score.toFixed(0)}% +${res.data.xp_earned} XP`);
+      toast.success(`Quiz finalizado! Nota: ${(res.data.score ?? 0).toFixed(0)}% +${res.data.xp_earned} XP`);
       fetchAllData();
     } catch (error) {
       toast.error("Erro ao submeter quiz");
