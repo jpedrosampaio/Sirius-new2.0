@@ -973,7 +973,7 @@ export default function Finance() {
                       <span className="text-[#A1A1AA] uppercase text-xs">Despesas Projetadas</span>
                       <TrendingDown className="w-4 h-4 text-[#FF9500]" />
                     </div>
-                    <p className="font-data text-xl text-[#FF9500]">R$ {projectionSummary.total_projected_expenses.toFixed(2)}</p>
+                    <p className="font-data text-xl text-[#FF9500]">R$ {(projectionSummary.total_projected_expenses ?? 0).toFixed(2)}</p>
                   </Card>
                   
                   <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
