@@ -790,7 +790,7 @@ export default function Finance() {
                         </div>
                         <div>
                           <h3 className="font-heading text-lg">{card.name}</h3>
-                          <p className="text-xs text-[#A1A1AA]">Limite: R$ {card.limit.toFixed(2)}</p>
+                          <p className="text-xs text-[#A1A1AA]">Limite: R$ {(card.limit ?? 0).toFixed(2)}</p>
                         </div>
                       </div>
                       <div className="space-y-2 text-sm mb-4">
