@@ -179,25 +179,25 @@ export default function Tasks() {
             </Dialog>
           </div>
 
-          <div className="mb-6 flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
+          <div className="mb-4 md:mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:space-x-4">
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
               <Calendar className="w-5 h-5 text-[#007AFF]" />
               <Input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-[#0A0A0A] border-[#27272A] text-white font-mono"
+                className="bg-[#0A0A0A] border-[#27272A] text-white font-mono flex-1 sm:flex-none"
               />
             </div>
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="bg-[#0A0A0A] border-[#27272A] mb-6">
-              <TabsTrigger value="all" className="data-[state=active]:bg-[#007AFF]">Todas</TabsTrigger>
-              <TabsTrigger value="once" className="data-[state=active]:bg-[#007AFF]">Única</TabsTrigger>
-              <TabsTrigger value="daily" className="data-[state=active]:bg-[#007AFF]">Diárias</TabsTrigger>
-              <TabsTrigger value="weekly" className="data-[state=active]:bg-[#007AFF]">Semanais</TabsTrigger>
-              <TabsTrigger value="monthly" className="data-[state=active]:bg-[#007AFF]">Mensais</TabsTrigger>
+            <TabsList className="bg-[#0A0A0A] border-[#27272A] mb-4 md:mb-6 w-full overflow-x-auto flex-nowrap">
+              <TabsTrigger value="all" className="data-[state=active]:bg-[#007AFF] text-xs md:text-sm">Todas</TabsTrigger>
+              <TabsTrigger value="once" className="data-[state=active]:bg-[#007AFF] text-xs md:text-sm">Única</TabsTrigger>
+              <TabsTrigger value="daily" className="data-[state=active]:bg-[#007AFF] text-xs md:text-sm">Diárias</TabsTrigger>
+              <TabsTrigger value="weekly" className="data-[state=active]:bg-[#007AFF] text-xs md:text-sm">Semanais</TabsTrigger>
+              <TabsTrigger value="monthly" className="data-[state=active]:bg-[#007AFF] text-xs md:text-sm">Mensais</TabsTrigger>
             </TabsList>
 
             <div className="space-y-3">
