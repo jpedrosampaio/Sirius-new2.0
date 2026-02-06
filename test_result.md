@@ -308,6 +308,36 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Task XP toggle working perfectly. Completing medium priority task awards +20 XP, uncompleting same task deducts -20 XP. XP changes are correctly applied and returned in API response."
 
+  - task: "Notifications CRUD endpoints"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented notifications endpoints: GET/POST/PATCH/DELETE /api/notifications, toggle, pending notifications"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Notifications endpoints working correctly. POST /api/notifications successfully creates notification with title 'Lembrete de Água' and message 'Beba água!'. GET /api/notifications retrieves notifications list and shows created notification. Authentication with testnotif@test.com working."
+
+  - task: "Image analysis endpoint"
+    implemented: true
+    working: false
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/chat/analyze-image endpoint for image upload and analysis using Google Gemini Vision"
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED: Image analysis endpoint exists and is accessible but failing with Google Gemini API error. Endpoint responds with 500 error: 'Unable to process input image. Please retry or report in https://developers.generativeai.google/guide/troubleshooting'. This appears to be a Google Gemini Vision API issue with the test image format, not a code problem."
+
 frontend:
   - task: "Credit card charge with installments UI"
     implemented: true
