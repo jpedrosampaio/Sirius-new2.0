@@ -897,6 +897,7 @@ async def create_budget(request: Request, budget_data: BudgetCreate, session_tok
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.budgets.insert_one(budget_doc)
+    budget_doc.pop('_id', None)  # Remove MongoDB ObjectId
     budget_doc['created_at'] = datetime.fromisoformat(budget_doc['created_at'])
     return Budget(**budget_doc)
 
@@ -929,6 +930,7 @@ async def create_goal(request: Request, goal_data: GoalCreate, session_token: Op
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.goals.insert_one(goal_doc)
+    goal_doc.pop('_id', None)  # Remove MongoDB ObjectId
     goal_doc['created_at'] = datetime.fromisoformat(goal_doc['created_at'])
     return Goal(**goal_doc)
 
