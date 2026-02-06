@@ -75,13 +75,26 @@ export default function Chat() {
         }
       );
 
-      setMessages(prev => {
-        const filtered = prev.filter(m => m.message_id !== userMsg.message_id);
-        return [...filtered, res.data.user_message, res.data.ai_message];
-      });
+      const userMessage = res.data?.user_message;
+      const aiMessage = res.data?.ai_message;
       
-      if (res.data.ai_message.transaction_data) {
-        toast.success("Transação registrada automaticamente!");
+      if (userMessage && aiMessage) {
+        setMessages(prev => {
+          const filtered = prev.filter(m => m.message_id !== userMsg.message_id);
+          return [...filtered, userMessage, aiMessage];
+        });
+        
+        if (aiMessage.transaction_data) {
+          toast.success("Transação registrada automaticamente!");
+        }
+      } else {
+        // Fallback: keep user message and add error AI message
+        setMessages(prev => [...prev, {
+          message_id: `ai_err_${Date.now()}`,
+          role: "assistant",
+          content: "Desculpe, não consegui processar sua mensagem. Tente novamente.",
+          created_at: new Date().toISOString()
+        }]);
       }
     } catch (error) {
       console.error("Erro ao enviar:", error);
