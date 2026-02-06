@@ -1178,6 +1178,22 @@ export default function Studies() {
                         </Select>
                       </div>
                       <div>
+                        <Label>Recorrência</Label>
+                        <Select value={taskForm.recurrence} onValueChange={(v) => setTaskForm({...taskForm, recurrence: v})}>
+                          <SelectTrigger className="bg-[#121212] border-[#27272A]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="once">Única vez</SelectItem>
+                            <SelectItem value="daily">Diária</SelectItem>
+                            <SelectItem value="weekly">Semanal</SelectItem>
+                            <SelectItem value="monthly">Mensal</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
                         <Label>Prioridade</Label>
                         <Select value={taskForm.priority} onValueChange={(v) => setTaskForm({...taskForm, priority: v})}>
                           <SelectTrigger className="bg-[#121212] border-[#27272A]">
@@ -1190,17 +1206,6 @@ export default function Studies() {
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label>Prazo</Label>
-                        <Input
-                          type="date"
-                          value={taskForm.deadline}
-                          onChange={(e) => setTaskForm({...taskForm, deadline: e.target.value})}
-                          className="bg-[#121212] border-[#27272A]"
-                        />
-                      </div>
                       <div>
                         <Label>Tempo Estimado (min)</Label>
                         <Input
@@ -1210,6 +1215,15 @@ export default function Studies() {
                           className="bg-[#121212] border-[#27272A]"
                         />
                       </div>
+                    </div>
+                    <div>
+                      <Label>Prazo (opcional)</Label>
+                      <Input
+                        type="date"
+                        value={taskForm.deadline}
+                        onChange={(e) => setTaskForm({...taskForm, deadline: e.target.value})}
+                        className="bg-[#121212] border-[#27272A]"
+                      />
                     </div>
                     <Button onClick={handleCreateTask} className="w-full bg-[#007AFF]">
                       Criar Tarefa
