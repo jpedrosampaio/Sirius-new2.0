@@ -120,13 +120,13 @@ export default function Nutrition() {
         axios.get(`${API}/nutrition/recipes`, { withCredentials: true }),
         axios.get(`${API}/nutrition/diets`, { withCredentials: true })
       ]);
-      setMeals(mealsRes.data);
-      setStats(statsRes.data);
-      setGoals(goalsRes.data);
-      setGoalsForm(goalsRes.data);
-      setWaterData(waterRes.data);
-      setRecipes(recipesRes.data);
-      setDiets(dietsRes.data);
+      setMeals(Array.isArray(mealsRes.data) ? mealsRes.data : []);
+      setStats(statsRes.data || null);
+      setGoals(goalsRes.data || null);
+      setGoalsForm(goalsRes.data || {});
+      setWaterData(waterRes.data || { total_ml: 0, logs: [] });
+      setRecipes(Array.isArray(recipesRes.data) ? recipesRes.data : []);
+      setDiets(Array.isArray(dietsRes.data) ? dietsRes.data : []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
