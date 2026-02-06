@@ -89,7 +89,6 @@ export default function Chat() {
           toast.success("Transação registrada automaticamente!");
         }
       } else {
-        // Fallback: keep user message and add error AI message
         setMessages(prev => [...prev, {
           message_id: `ai_err_${Date.now()}`,
           role: "assistant",
@@ -110,20 +109,18 @@ export default function Chat() {
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
       <div className="flex-1 ml-0 md:ml-64 flex flex-col h-screen">
-        <div className="p-4 md:p-6 border-b border-[#27272A]">
-          <h1 className="font-heading text-2xl md:text-3xl mb-1" data-testid="chat-title">CHAT FINANCEIRO</h1>
-          <p className="text-sm text-[#A1A1AA]">Registre transações via texto</p>
-        <MobileNav user={user} />
-    </div>
-  );
+        <div className="p-4 md:p-6 border-b border-[#27272A] pt-14 md:pt-6">
+          <h1 className="font-heading text-xl md:text-3xl mb-1" data-testid="chat-title">CHAT FINANCEIRO</h1>
+          <p className="text-xs md:text-sm text-[#A1A1AA]">Registre transações via texto</p>
+        </div>
 
-        <div ref={scrollRef} className="flex-1 p-4 md:p-6 overflow-y-auto">
+        <div ref={scrollRef} className="flex-1 p-4 md:p-6 overflow-y-auto pb-36 md:pb-24">
           <div className="max-w-4xl mx-auto space-y-4">
             {messages.length === 0 ? (
-              <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
-                <MessageSquare className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
-                <p className="text-[#A1A1AA]">Inicie uma conversa sobre suas finanças</p>
-                <p className="text-sm text-[#52525B] mt-2">Exemplo: "Gastei R$ 50 no almoço"</p>
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-6 md:p-8 text-center">
+                <MessageSquare className="w-10 h-10 md:w-12 md:h-12 text-[#52525B] mx-auto mb-4" />
+                <p className="text-[#A1A1AA] text-sm md:text-base">Inicie uma conversa sobre suas finanças</p>
+                <p className="text-xs md:text-sm text-[#52525B] mt-2">Exemplo: "Gastei R$ 50 no almoço"</p>
               </Card>
             ) : (
               messages.map((msg) => (
@@ -131,63 +128,49 @@ export default function Chat() {
                   key={msg.message_id}
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`flex items-start space-x-3 max-w-[85%] md:max-w-2xl ${
+                  <div className={`flex items-start space-x-2 md:space-x-3 max-w-[90%] md:max-w-2xl ${
                     msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''
                   }`}>
-                    <div className={`w-8 h-8 rounded-sm flex items-center justify-center flex-shrink-0 ${
+                    <div className={`w-7 h-7 md:w-8 md:h-8 rounded-sm flex items-center justify-center flex-shrink-0 ${
                       msg.role === 'user' ? 'bg-[#007AFF]' : 'bg-[#2C2C2E]'
                     }`}>
                       {msg.role === 'user' ? (
-                        <User className="w-5 h-5" />
+                        <User className="w-4 h-4 md:w-5 md:h-5" />
                       ) : (
-                        <Bot className="w-5 h-5" />
+                        <Bot className="w-4 h-4 md:w-5 md:h-5" />
                       )}
-                    <MobileNav user={user} />
-    </div>
-  );
-                    <div className={`p-4 rounded-sm ${
+                    </div>
+                    <div className={`p-3 md:p-4 rounded-sm ${
                       msg.role === 'user'
                         ? 'bg-[#007AFF]/20 border border-[#007AFF]/30'
                         : 'bg-[#0A0A0A] border border-[#27272A]'
                     }`}>
-                      <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                      <p className="text-xs md:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                       {msg.transaction_data && (
                         <div className="mt-3 pt-3 border-t border-[#27272A] text-xs">
                           <p className="text-[#39FF14] uppercase tracking-wider mb-1">Transação Registrada</p>
                           <p>Tipo: {msg.transaction_data.type === 'income' ? 'Receita' : 'Despesa'}</p>
                           <p>Valor: R$ {msg.transaction_data.amount}</p>
                           <p>Categoria: {msg.transaction_data.category}</p>
-                        <MobileNav user={user} />
-    </div>
-  );
+                        </div>
                       )}
-                    <MobileNav user={user} />
-    </div>
-  );
-                  <MobileNav user={user} />
-    </div>
-  );
-                <MobileNav user={user} />
-    </div>
-  );
+                    </div>
+                  </div>
+                </div>
               ))
             )}
-          <MobileNav user={user} />
-    </div>
-  );
-        <MobileNav user={user} />
-    </div>
-  );
+          </div>
+        </div>
 
-        <div className="p-4 md:p-6 border-t border-[#27272A] bg-[#0A0A0A]">
+        <div className="p-4 md:p-6 border-t border-[#27272A] bg-[#0A0A0A] fixed bottom-16 md:bottom-0 left-0 right-0 md:left-64">
           <form onSubmit={handleSend} className="max-w-4xl mx-auto">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 md:space-x-3">
               <Input
                 data-testid="chat-input"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Digite uma mensagem... Ex: 'Gastei R$ 50 no almoço'"
-                className="flex-1 bg-[#121212] border-[#27272A] text-white font-mono"
+                placeholder="Ex: 'Gastei R$ 50 no almoço'"
+                className="flex-1 bg-[#121212] border-[#27272A] text-white font-mono text-sm"
                 disabled={loading}
               />
               
@@ -195,7 +178,7 @@ export default function Chat() {
                 data-testid="chat-send-btn"
                 type="submit"
                 disabled={loading}
-                className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest"
+                className="bg-[#007AFF] hover:bg-[#0062CC] px-3 md:px-4"
               >
                 {loading ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white" />
@@ -203,18 +186,11 @@ export default function Chat() {
                   <Send className="w-4 h-4" />
                 )}
               </Button>
-            <MobileNav user={user} />
-    </div>
-  );
+            </div>
           </form>
-        <MobileNav user={user} />
-    </div>
-  );
+        </div>
+      </div>
       <MobileNav user={user} />
     </div>
-  );
-    <MobileNav user={user} />
-    </div>
-  );
   );
 }
