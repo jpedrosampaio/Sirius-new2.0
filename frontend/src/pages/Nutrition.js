@@ -97,6 +97,7 @@ export default function Nutrition() {
     if (user) {
       fetchData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, selectedDate]);
 
   const fetchUser = async () => {
