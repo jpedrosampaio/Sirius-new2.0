@@ -266,6 +266,7 @@ export default function Tasks() {
           </Tabs>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }
