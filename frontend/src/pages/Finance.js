@@ -585,7 +585,7 @@ export default function Finance() {
                             {t.description && <p className="text-sm text-[#A1A1AA]">{t.description}</p>}
                           </div>
                           <div className={`font-data text-xl ${t.type === 'income' ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
-                            {t.type === 'income' ? '+' : '-'}R$ {t.amount.toFixed(2)}
+                            {t.type === 'income' ? '+' : '-'}R$ {(t.amount ?? 0).toFixed(2)}
                           </div>
                           <Button variant="ghost" size="icon" onClick={() => handleDeleteTransaction(t.transaction_id)}>
                             <Trash2 className="w-4 h-4 text-[#52525B] hover:text-[#FF3B30]" />
