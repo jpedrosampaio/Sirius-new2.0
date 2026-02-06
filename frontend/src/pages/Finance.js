@@ -698,7 +698,7 @@ export default function Finance() {
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-[#A1A1AA]">Limite</span>
-                            <span>R$ {budget.limit.toFixed(2)}</span>
+                            <span>R$ {(budget.limit ?? 0).toFixed(2)}</span>
                           </div>
                           <div className="h-2 bg-[#27272A] rounded-full overflow-hidden mt-3">
                             <div className={`h-full ${isOver ? 'bg-[#FF3B30]' : 'bg-[#007AFF]'}`} style={{ width: `${Math.min(percentage, 100)}%` }} />
