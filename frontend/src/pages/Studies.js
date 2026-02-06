@@ -17,7 +17,7 @@ import {
   Brain, Layers, Target, Trophy, Flame, ChevronRight, Loader2,
   GraduationCap, Briefcase, FolderOpen, RotateCcw, CheckCircle2,
   XCircle, Sparkles, PenTool, Link, Upload, Play, Pause,
-  Edit3, Tag, AlertCircle, Timer, BookMarked, Lightbulb
+  Edit3, Tag, AlertCircle, Timer, BookMarked, Lightbulb, Repeat
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
