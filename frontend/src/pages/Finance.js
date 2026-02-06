@@ -146,7 +146,7 @@ export default function Finance() {
   const fetchCreditCards = async () => {
     try {
       const res = await axios.get(`${API}/credit-cards`, { withCredentials: true });
-      setCreditCards(res.data);
+      setCreditCards(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar cartões");
     }
