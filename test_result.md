@@ -373,6 +373,21 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
+      DASHBOARD UPDATE - Added Workout, Nutrition and Study stats
+      
+      Backend changes:
+      - Updated /api/stats/dashboard endpoint to include:
+        - workout_stats: workouts_this_week, total_duration_minutes, total_calories_burned, total_xp_earned
+        - nutrition_stats: calories_consumed/goal, protein, water_consumed/goal, meals_count
+        - study_stats: study_time_today_minutes, current_streak, flashcards_due, notebooks_count
+      
+      Frontend changes:
+      - Added 3 new cards to Dashboard: Treino, Nutrição, Estudos
+      - Each card shows relevant statistics with progress bars where applicable
+      
+      Please test the /api/stats/dashboard endpoint to verify the new data is returned correctly.
+  - agent: "main"
+    message: |
       Implemented new features:
       1. Credit card charge now supports installments (parcelado) - POST /api/credit-cards/{card_id}/charge
       2. New projections endpoints: GET/POST/PATCH/DELETE /api/projections, /api/projections/summary, /api/projections/insights
