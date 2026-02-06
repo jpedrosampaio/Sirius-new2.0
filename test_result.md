@@ -553,6 +553,18 @@ agent_communication:
       - All endpoints properly implemented
       
       **CONCLUSION:** Google Gemini AI integration is successfully implemented and functional. The only issue is API quota limits, which is expected with free tier usage.
+  - agent: "user"
+    message: |
+      BUG REPORT: Dashboard.js:105 - Cannot read properties of undefined (reading 'toFixed')
+      After login, screen goes black. Error at stats.balance.toFixed(0)
+      
+  - agent: "main"
+    message: |
+      BUG FIX: Dashboard.js - Added null coalescing (?? 0) to all .toFixed() calls and potentially undefined fields.
+      Fixed: stats.balance, stats.income, stats.expenses, stats.goals_avg_progress, 
+      stats.tasks_completed_today, stats.tasks_today, stats.habits_completed_today, 
+      stats.habits_total, user.rank, user.xp
+      
   - agent: "testing"
     message: |
       ✅ NUTRITION & STUDIES BACKEND TESTING COMPLETE - ALL TESTS PASSED (18/18)
