@@ -433,8 +433,8 @@ export default function Finance() {
                 <span className="text-[#A1A1AA] uppercase text-xs tracking-wider">Saldo</span>
                 <DollarSign className="w-5 h-5 text-[#007AFF]" />
               </div>
-              <p className={`font-data text-2xl md:text-3xl ${balance >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
-                R$ {balance.toFixed(2)}
+              <p className={`font-data text-2xl md:text-3xl ${(balance ?? 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                R$ {(balance ?? 0).toFixed(2)}
               </p>
             </Card>
           </div>
