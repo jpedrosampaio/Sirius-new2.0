@@ -19,9 +19,9 @@ BACKEND_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://project-revive-4.previ
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials - using the requested credentials from review
-TEST_EMAIL = "testfix@test.com"
+TEST_EMAIL = "testnotif@test.com"
 TEST_PASSWORD = "Test123!"
-TEST_NAME = "Test Fix User"
+TEST_NAME = "Test Notification User"
 
 class SiriusBackendTester:
     def __init__(self):
