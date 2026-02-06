@@ -4245,6 +4245,20 @@ async def get_study_tasks(request: Request, notebook_id: Optional[str] = None, c
         query["completed"] = completed
     
     tasks = await db.study_tasks.find(query, {"_id": 0}).to_list(1000)
+    
+    # For recurring tasks, check if completed today
+    today = datetime.now().strftime("%Y-%m-%d")
+    for task in tasks:
+        recurrence = task.get("recurrence", "once")
+        if recurrence != "once":
+            last_completed = task.get("last_completed_date")
+            if last_completed == today:
+                task["completed_today"] = True
+            else:
+                task["completed_today"] = False
+        else:
+            task["completed_today"] = task.get("completed", False)
+    
     return tasks
 
 @api_router.post("/study/tasks")
