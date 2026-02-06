@@ -232,10 +232,10 @@ export default function Dashboard() {
                     <Award className="w-10 h-10 text-[#FFD700]" />
                     <div className="flex-1">
                       <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Rank Atual</p>
-                      <p className="font-heading text-3xl">{user.rank}</p>
+                      <p className="font-heading text-3xl">{user?.rank || 'Recruta'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-data text-2xl">{user.xp}</p>
+                      <p className="font-data text-2xl">{user?.xp ?? 0}</p>
                       <p className="text-xs text-[#A1A1AA]">XP</p>
                     </div>
                   </div>
