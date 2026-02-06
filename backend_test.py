@@ -1338,28 +1338,237 @@ class SiriusBackendTester:
             self.log(f"❌ Study streak error: {str(e)}", "ERROR")
             return False
 
-    def test_study_stats(self):
-        """Test GET /api/study/stats - Get comprehensive study statistics"""
-        self.log("📊 Testing study stats endpoint...")
+    def test_critical_endpoints(self):
+        """Test the critical endpoints mentioned in the review request"""
+        self.log("🔥 Testing Critical Endpoints from Review Request")
+        
+        results = {}
+        
+        # 1. Authentication Test
+        results['authentication'] = self.login()
+        
+        if not results['authentication']:
+            self.log("❌ Cannot proceed without authentication", "ERROR")
+            return results
+        
+        # 2. Chat Test - Send "Olá" message
+        results['chat_send'] = self.test_chat_ola_message()
+        
+        # 3. Task Creation Test - "Teste de Correção"
+        results['task_creation'] = self.test_create_task_teste_correcao()
+        
+        # 4. Habit Creation Test - "Exercício"
+        results['habit_creation'] = self.test_create_habit_exercicio()
+        
+        # 5. Transaction Creation Test - R$ 100 expense
+        results['transaction_creation'] = self.test_create_transaction_100()
+        
+        # 6. Report Generation Test - weekly report for "janeiro"
+        results['report_generation'] = self.test_generate_weekly_report_janeiro()
+        
+        return results
+    
+    def test_chat_ola_message(self):
+        """Test POST /api/chat/send with 'Olá' message"""
+        self.log("💬 Testing chat endpoint with 'Olá' message...")
+        
+        chat_data = {
+            "content": "Olá"
+        }
         
         try:
-            response = self.session.get(f"{API_BASE}/study/stats")
+            response = self.session.post(f"{API_BASE}/chat/send", json=chat_data)
             
             if response.status_code == 200:
                 data = response.json()
-                total_study_time = data.get('total_study_time', 0)
-                completed_tasks = data.get('completed_tasks', 0)
+                user_message = data.get('user_message', {})
+                ai_message = data.get('ai_message', {})
                 
-                self.log("✅ Study stats GET successful")
-                self.log(f"   Total study time: {total_study_time} minutes")
-                self.log(f"   Completed tasks: {completed_tasks}")
-                return True
+                # Verify structure
+                if (user_message.get('message_id') and 
+                    ai_message.get('message_id') and 
+                    user_message.get('content') == "Olá" and
+                    ai_message.get('content')):
+                    
+                    self.log("✅ Chat endpoint working correctly")
+                    self.log(f"   User message ID: {user_message.get('message_id')}")
+                    self.log(f"   AI message ID: {ai_message.get('message_id')}")
+                    self.log(f"   AI response length: {len(ai_message.get('content', ''))} characters")
+                    return True
+                else:
+                    self.log("❌ Chat response missing required fields", "ERROR")
+                    return False
             else:
-                self.log(f"❌ Study stats failed: {response.status_code} - {response.text}", "ERROR")
+                self.log(f"❌ Chat endpoint failed: {response.status_code} - {response.text}", "ERROR")
                 return False
                 
         except Exception as e:
-            self.log(f"❌ Study stats error: {str(e)}", "ERROR")
+            self.log(f"❌ Chat endpoint error: {str(e)}", "ERROR")
+            return False
+    
+    def test_create_task_teste_correcao(self):
+        """Test POST /api/tasks - Create task 'Teste de Correção'"""
+        self.log("📋 Testing task creation - 'Teste de Correção'...")
+        
+        task_data = {
+            "title": "Teste de Correção",
+            "description": "Tarefa criada para teste de correção do sistema",
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "priority": "medium",
+            "recurrence": "once"
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/tasks", json=task_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                task_id = data.get('task_id')
+                
+                # Verify Task object structure (no ObjectId serialization error)
+                if (task_id and 
+                    data.get('title') == "Teste de Correção" and
+                    data.get('user_id') and
+                    data.get('created_at')):
+                    
+                    self.log("✅ Task creation successful")
+                    self.log(f"   Task ID: {task_id}")
+                    self.log(f"   Title: {data.get('title')}")
+                    self.log(f"   Priority: {data.get('priority')}")
+                    return True
+                else:
+                    self.log("❌ Task object missing required fields or ObjectId error", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Task creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Task creation error: {str(e)}", "ERROR")
+            return False
+    
+    def test_create_habit_exercicio(self):
+        """Test POST /api/habits - Create habit 'Exercício'"""
+        self.log("🏃 Testing habit creation - 'Exercício'...")
+        
+        habit_data = {
+            "name": "Exercício",
+            "description": "Praticar exercícios físicos diariamente",
+            "color": "#FF6B6B"
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/habits", json=habit_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                habit_id = data.get('habit_id')
+                
+                # Verify Habit object structure
+                if (habit_id and 
+                    data.get('name') == "Exercício" and
+                    data.get('user_id') and
+                    data.get('created_at')):
+                    
+                    self.log("✅ Habit creation successful")
+                    self.log(f"   Habit ID: {habit_id}")
+                    self.log(f"   Name: {data.get('name')}")
+                    self.log(f"   Color: {data.get('color')}")
+                    return True
+                else:
+                    self.log("❌ Habit object missing required fields", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Habit creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Habit creation error: {str(e)}", "ERROR")
+            return False
+    
+    def test_create_transaction_100(self):
+        """Test POST /api/transactions - Create R$ 100 expense transaction"""
+        self.log("💰 Testing transaction creation - R$ 100 expense...")
+        
+        transaction_data = {
+            "type": "expense",
+            "amount": 100.00,
+            "category": "outros",
+            "description": "Despesa de teste - R$ 100",
+            "date": datetime.now().strftime("%Y-%m-%d")
+        }
+        
+        try:
+            response = self.session.post(f"{API_BASE}/transactions", json=transaction_data)
+            
+            if response.status_code == 200:
+                data = response.json()
+                transaction_id = data.get('transaction_id')
+                
+                # Verify Transaction object structure
+                if (transaction_id and 
+                    data.get('type') == "expense" and
+                    data.get('amount') == 100.00 and
+                    data.get('user_id') and
+                    data.get('created_at')):
+                    
+                    self.log("✅ Transaction creation successful")
+                    self.log(f"   Transaction ID: {transaction_id}")
+                    self.log(f"   Type: {data.get('type')}")
+                    self.log(f"   Amount: R$ {data.get('amount'):.2f}")
+                    return True
+                else:
+                    self.log("❌ Transaction object missing required fields", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Transaction creation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Transaction creation error: {str(e)}", "ERROR")
+            return False
+    
+    def test_generate_weekly_report_janeiro(self):
+        """Test POST /api/reports/generate - Generate weekly report for 'janeiro'"""
+        self.log("📊 Testing report generation - weekly report for 'janeiro'...")
+        
+        try:
+            response = self.session.post(f"{API_BASE}/reports/generate?report_type=weekly&period=janeiro")
+            
+            if response.status_code == 200:
+                data = response.json()
+                report_id = data.get('report_id')
+                insights = data.get('insights', '')
+                
+                # Verify Report object structure
+                if (report_id and 
+                    data.get('type') == "weekly" and
+                    data.get('period') == "janeiro" and
+                    data.get('user_id') and
+                    data.get('created_at')):
+                    
+                    self.log("✅ Report generation successful")
+                    self.log(f"   Report ID: {report_id}")
+                    self.log(f"   Type: {data.get('type')}")
+                    self.log(f"   Period: {data.get('period')}")
+                    self.log(f"   Insights length: {len(insights)} characters")
+                    
+                    # Check if insights contain meaningful content (even if AI error message)
+                    if insights and len(insights) > 10:
+                        self.log("   ✅ Report contains insights (AI response generated)")
+                    else:
+                        self.log("   ⚠️ Report has minimal insights", "WARNING")
+                    
+                    return True
+                else:
+                    self.log("❌ Report object missing required fields", "ERROR")
+                    return False
+            else:
+                self.log(f"❌ Report generation failed: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Report generation error: {str(e)}", "ERROR")
             return False
 
     def run_nutrition_and_studies_tests(self):
