@@ -183,9 +183,9 @@ export default function Habits() {
   };
 
   // Calculate overall stats
-  const totalCompletions = habits.reduce((acc, h) => acc + h.completions.length, 0);
-  const avgStreak = habits.length > 0 ? Math.round(habits.reduce((acc, h) => acc + h.streak, 0) / habits.length) : 0;
-  const bestOverallStreak = habits.length > 0 ? Math.max(...habits.map(h => h.best_streak)) : 0;
+  const totalCompletions = habits.reduce((acc, h) => acc + (h.completions || []).length, 0);
+  const avgStreak = habits.length > 0 ? Math.round(habits.reduce((acc, h) => acc + (h.streak ?? 0), 0) / habits.length) : 0;
+  const bestOverallStreak = habits.length > 0 ? Math.max(...habits.map(h => h.best_streak ?? 0)) : 0;
 
   const handleDeleteHabit = async (habitId) => {
     try {
