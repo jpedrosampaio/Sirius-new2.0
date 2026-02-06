@@ -41,7 +41,7 @@ export default function Chat() {
   const fetchMessages = async () => {
     try {
       const res = await axios.get(`${API}/chat/messages`, { withCredentials: true });
-      setMessages(res.data);
+      setMessages(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar mensagens", error);
     }
