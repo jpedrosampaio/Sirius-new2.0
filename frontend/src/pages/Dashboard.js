@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { CheckSquare, TrendingUp, DollarSign, Target, Award, Zap } from "lucide-react";
+import { CheckSquare, TrendingUp, DollarSign, Target, Award, Zap, Dumbbell, Utensils, BookOpen, Droplets, Flame, Clock, Brain } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
