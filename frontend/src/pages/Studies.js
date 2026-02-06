@@ -1246,12 +1246,12 @@ export default function Studies() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <AlertCircle className="w-5 h-5 text-yellow-500" />
-                    Pendentes ({tasks.filter(t => !t.completed).length})
+                    Pendentes ({tasks.filter(t => !t.completed_today).length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {tasks.filter(t => !t.completed).map(task => (
+                    {tasks.filter(t => !t.completed_today).map(task => (
                       <div key={task.task_id} className="bg-[#121212] p-4 rounded-lg">
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3">
@@ -1273,6 +1273,12 @@ export default function Studies() {
                                 }>
                                   {task.priority}
                                 </Badge>
+                                {task.recurrence && task.recurrence !== "once" && (
+                                  <Badge variant="outline" className="border-blue-500 text-blue-400">
+                                    <Repeat className="w-3 h-3 mr-1" />
+                                    {recurrenceLabels[task.recurrence]}
+                                  </Badge>
+                                )}
                                 {task.deadline && (
                                   <Badge variant="outline" className="border-purple-500 text-purple-400">
                                     <Calendar className="w-3 h-3 mr-1" />
@@ -1288,7 +1294,7 @@ export default function Studies() {
                         </div>
                       </div>
                     ))}
-                    {tasks.filter(t => !t.completed).length === 0 && (
+                    {tasks.filter(t => !t.completed_today).length === 0 && (
                       <p className="text-center text-[#A1A1AA] py-8">Nenhuma tarefa pendente 🎉</p>
                     )}
                   </div>
@@ -1300,24 +1306,40 @@ export default function Studies() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    Concluídas ({tasks.filter(t => t.completed).length})
+                    Concluídas Hoje ({tasks.filter(t => t.completed_today).length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {tasks.filter(t => t.completed).slice(0, 10).map(task => (
+                    {tasks.filter(t => t.completed_today).slice(0, 10).map(task => (
                       <div key={task.task_id} className="bg-[#121212] p-4 rounded-lg opacity-60">
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3">
                             <button
-                              onClick={() => handleToggleTask(task.task_id, false)}
-                              className="mt-1 w-5 h-5 rounded border-2 border-green-500 bg-green-500 flex items-center justify-center"
+                              onClick={() => task.recurrence === "once" ? handleToggleTask(task.task_id, false) : null}
+                              className={`mt-1 w-5 h-5 rounded border-2 border-green-500 bg-green-500 flex items-center justify-center ${task.recurrence !== "once" ? 'cursor-default' : ''}`}
                             >
                               <CheckCircle2 className="w-3 h-3 text-white" />
                             </button>
                             <div>
-                              <h4 className="font-medium line-through">{task.title}</h4>
-                              <Badge variant="outline" className="mt-1">{taskTypeLabels[task.task_type]}</Badge>
+                              <h4 className={`font-medium ${task.recurrence === "once" ? 'line-through' : ''}`}>{task.title}</h4>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <Badge variant="outline">{taskTypeLabels[task.task_type]}</Badge>
+                                {task.recurrence && task.recurrence !== "once" && (
+                                  <Badge variant="outline" className="border-blue-500 text-blue-400">
+                                    <Repeat className="w-3 h-3 mr-1" />
+                                    {recurrenceLabels[task.recurrence]}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {tasks.filter(t => t.completed_today).length === 0 && (
+                      <p className="text-center text-[#A1A1AA] py-8">Nenhuma tarefa concluída hoje</p>
+                    )}
                             </div>
                           </div>
                         </div>
