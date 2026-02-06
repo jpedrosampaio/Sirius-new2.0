@@ -1437,6 +1437,7 @@ Forneça insights, padrões identificados e sugestões de otimização em portug
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.reports.insert_one(report_doc)
+        report_doc.pop('_id', None)  # Remove MongoDB ObjectId
         report_doc['created_at'] = datetime.fromisoformat(report_doc['created_at'])
         
         return Report(**report_doc)
@@ -2415,6 +2416,7 @@ async def log_workout(request: Request, workout_data: WorkoutLogCreate, session_
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.workout_logs.insert_one(workout_doc)
+    workout_doc.pop('_id', None)  # Remove MongoDB ObjectId
     
     # Award XP to user
     new_xp = user.xp + xp_earned
