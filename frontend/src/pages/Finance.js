@@ -417,7 +417,7 @@ export default function Finance() {
                 <span className="text-[#A1A1AA] uppercase text-xs tracking-wider">Receitas</span>
                 <TrendingUp className="w-5 h-5 text-[#39FF14]" />
               </div>
-              <p className="font-data text-2xl md:text-3xl text-[#39FF14]">R$ {income.toFixed(2)}</p>
+              <p className="font-data text-2xl md:text-3xl text-[#39FF14]">R$ {(income ?? 0).toFixed(2)}</p>
             </Card>
 
             <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
