@@ -518,7 +518,7 @@ export default function Workouts() {
         {hasExercises && isExpanded && (
           <div className="mt-4 border-t border-[#27272A] pt-4 space-y-2">
             <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">Exercícios do Treino</Label>
-            {workout.exercises_completed.map((ex, idx) => (
+            {(workout.exercises_completed || []).map((ex, idx) => (
               <div key={idx} className={`flex items-center gap-3 p-2 rounded ${ex.completed ? 'bg-[#121212]' : 'bg-[#0A0A0A] border border-[#27272A]'}`}>
                 <div className={`w-5 h-5 rounded border flex items-center justify-center ${ex.completed ? 'bg-[#00F0FF] border-[#00F0FF]' : 'border-[#52525B]'}`}>
                   {ex.completed && <Check className="w-3 h-3 text-black" />}
