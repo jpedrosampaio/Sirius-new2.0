@@ -2696,6 +2696,7 @@ async def create_notification(request: Request, notif_data: NotificationCreate, 
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.notifications.insert_one(notification_doc)
+    notification_doc.pop('_id', None)  # Remove MongoDB ObjectId
     notification_doc['created_at'] = datetime.fromisoformat(notification_doc['created_at'])
     return Notification(**notification_doc)
 
