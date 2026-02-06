@@ -395,8 +395,10 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Dashboard stats with workout, nutrition, study data"
-  stuck_tasks: []
+    - "Notifications CRUD endpoints"
+    - "Image analysis endpoint"
+  stuck_tasks: 
+    - "Image analysis endpoint"
   test_all: false
   test_priority: "high_first"
 
