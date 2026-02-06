@@ -1376,6 +1376,163 @@ Mantenha a resposta concisa (máximo 3-4 parágrafos)."""
         logging.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/chat/analyze-image")
+async def analyze_image_for_expenses(
+    request: Request, 
+    image: UploadFile = File(...),
+    description: str = Form(""),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Analyze an image (receipt, invoice, etc.) and extract expense information"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=503, detail="Serviço de IA não disponível")
+    
+    try:
+        # Read image content
+        image_content = await image.read()
+        image_base64 = base64.b64encode(image_content).decode('utf-8')
+        
+        # Determine mime type
+        content_type = image.content_type or "image/jpeg"
+        
+        # Create user message with image reference
+        message_id = f"msg_{uuid.uuid4().hex[:12]}"
+        user_message = {
+            "message_id": message_id,
+            "user_id": user.user_id,
+            "role": "user",
+            "content": f"[Imagem enviada] {description}" if description else "[Imagem enviada para análise de gastos]",
+            "has_image": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.chat_messages.insert_one(user_message.copy())
+        
+        # Analyze image with Gemini Vision
+        prompt = """Analise esta imagem de comprovante/nota fiscal/recibo e extraia as informações de gastos.
+
+IMPORTANTE: Responda SEMPRE em formato JSON válido com a seguinte estrutura:
+{
+    "found_expenses": true/false,
+    "expenses": [
+        {
+            "description": "descrição do item/gasto",
+            "amount": 0.00,
+            "category": "alimentação/transporte/moradia/saúde/educação/lazer/outros",
+            "date": "YYYY-MM-DD ou null se não encontrar"
+        }
+    ],
+    "total": 0.00,
+    "establishment": "nome do estabelecimento ou null",
+    "summary": "resumo breve da análise"
+}
+
+Se não conseguir identificar gastos na imagem, retorne:
+{
+    "found_expenses": false,
+    "expenses": [],
+    "total": 0,
+    "establishment": null,
+    "summary": "Não foi possível identificar gastos nesta imagem"
+}"""
+
+        # Call Gemini with image
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(data=image_content, mime_type=content_type),
+                prompt
+            ]
+        )
+        
+        ai_response_text = response.text
+        
+        # Try to parse JSON from response
+        transactions_created = []
+        try:
+            # Clean response - remove markdown code blocks if present
+            cleaned_response = ai_response_text.strip()
+            if cleaned_response.startswith("```json"):
+                cleaned_response = cleaned_response[7:]
+            if cleaned_response.startswith("```"):
+                cleaned_response = cleaned_response[3:]
+            if cleaned_response.endswith("```"):
+                cleaned_response = cleaned_response[:-3]
+            cleaned_response = cleaned_response.strip()
+            
+            parsed = json.loads(cleaned_response)
+            
+            if parsed.get("found_expenses") and parsed.get("expenses"):
+                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                
+                for expense in parsed["expenses"]:
+                    if expense.get("amount") and float(expense["amount"]) > 0:
+                        transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
+                        transaction_doc = {
+                            "transaction_id": transaction_id,
+                            "user_id": user.user_id,
+                            "type": "expense",
+                            "amount": float(expense["amount"]),
+                            "category": expense.get("category", "outros"),
+                            "description": expense.get("description", "Gasto via imagem"),
+                            "date": expense.get("date") or today,
+                            "source": "image_analysis",
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await db.transactions.insert_one(transaction_doc)
+                        transaction_doc.pop('_id', None)
+                        transactions_created.append(transaction_doc)
+                
+                # Build response message
+                if transactions_created:
+                    response_parts = [f"✅ **{len(transactions_created)} gasto(s) registrado(s)!**\n"]
+                    if parsed.get("establishment"):
+                        response_parts.append(f"📍 **Local:** {parsed['establishment']}\n")
+                    response_parts.append("\n**Itens:**")
+                    for t in transactions_created:
+                        response_parts.append(f"\n• {t['description']}: R$ {t['amount']:.2f} ({t['category']})")
+                    response_parts.append(f"\n\n💰 **Total:** R$ {parsed.get('total', sum(t['amount'] for t in transactions_created)):.2f}")
+                    
+                    ai_response = "\n".join(response_parts)
+                else:
+                    ai_response = f"📝 **Análise da imagem:**\n\n{parsed.get('summary', 'Imagem analisada mas nenhum gasto foi registrado.')}"
+            else:
+                ai_response = f"📝 **Análise da imagem:**\n\n{parsed.get('summary', 'Não foi possível identificar gastos nesta imagem.')}"
+                
+        except json.JSONDecodeError:
+            # If JSON parsing fails, return raw response
+            ai_response = f"📝 **Análise da imagem:**\n\n{ai_response_text}"
+        
+        # Save AI response
+        ai_message_id = f"msg_{uuid.uuid4().hex[:12]}"
+        ai_message = {
+            "message_id": ai_message_id,
+            "user_id": user.user_id,
+            "role": "assistant",
+            "content": ai_response,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        if transactions_created:
+            ai_message["transactions_created"] = [{"amount": t["amount"], "category": t["category"], "description": t["description"]} for t in transactions_created]
+        
+        await db.chat_messages.insert_one(ai_message.copy())
+        
+        user_message['created_at'] = datetime.fromisoformat(user_message['created_at'])
+        ai_message['created_at'] = datetime.fromisoformat(ai_message['created_at'])
+        
+        return {
+            "user_message": user_message, 
+            "ai_message": ai_message,
+            "transactions_created": transactions_created
+        }
+        
+    except Exception as e:
+        logging.error(f"Image analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao analisar imagem: {str(e)}")
+
 @api_router.get("/reports")
 async def get_reports(request: Request, type: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
