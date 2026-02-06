@@ -147,11 +147,11 @@ export default function Reports() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
                         <p className="text-xs text-[#A1A1AA] mb-1">Tarefas</p>
-                        <p className="font-data text-lg">{report.data.tasks_completed}/{report.data.tasks}</p>
+                        <p className="font-data text-lg">{report.data?.tasks_completed ?? 0}/{report.data?.tasks ?? 0}</p>
                       </div>
                       <div>
                         <p className="text-xs text-[#A1A1AA] mb-1">Hábitos</p>
-                        <p className="font-data text-lg">{report.data.total_habits_completions}</p>
+                        <p className="font-data text-lg">{report.data?.total_habits_completions ?? 0}</p>
                       </div>
                       <div>
                         <p className="text-xs text-[#A1A1AA] mb-1">Receitas</p>
