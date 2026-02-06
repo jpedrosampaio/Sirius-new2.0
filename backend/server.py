@@ -1390,13 +1390,24 @@ async def analyze_image_for_expenses(
     if not gemini_client:
         raise HTTPException(status_code=503, detail="Serviço de IA não disponível")
     
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/jpg"]
+    content_type = image.content_type or "image/jpeg"
+    
+    # Normalize content type
+    if content_type == "image/jpg":
+        content_type = "image/jpeg"
+    
+    if content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Tipo de imagem não suportado: {content_type}. Use JPEG, PNG, WebP ou HEIC.")
+    
     try:
         # Read image content
         image_content = await image.read()
-        image_base64 = base64.b64encode(image_content).decode('utf-8')
         
-        # Determine mime type
-        content_type = image.content_type or "image/jpeg"
+        # Check file size (max 20MB for inline)
+        if len(image_content) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Imagem muito grande. Máximo 20MB.")
         
         # Create user message with image reference
         message_id = f"msg_{uuid.uuid4().hex[:12]}"
@@ -1438,16 +1449,26 @@ Se não conseguir identificar gastos na imagem, retorne:
     "summary": "Não foi possível identificar gastos nesta imagem"
 }"""
 
-        # Call Gemini with image
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=[
-                types.Part.from_bytes(data=image_content, mime_type=content_type),
-                prompt
-            ]
-        )
-        
-        ai_response_text = response.text
+        # Call Gemini with image using correct format
+        try:
+            response = gemini_client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Part.from_bytes(data=image_content, mime_type=content_type),
+                    prompt
+                ]
+            )
+            ai_response_text = response.text
+        except Exception as gemini_error:
+            logging.error(f"Gemini Vision error: {gemini_error}")
+            # Fallback response if Gemini fails
+            ai_response_text = json.dumps({
+                "found_expenses": False,
+                "expenses": [],
+                "total": 0,
+                "establishment": None,
+                "summary": f"Não foi possível analisar a imagem. Erro: {str(gemini_error)[:100]}"
+            })
         
         # Try to parse JSON from response
         transactions_created = []
