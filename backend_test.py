@@ -1637,45 +1637,44 @@ class SiriusBackendTester:
         
         return results
     
-    def run_gemini_integration_tests(self):
-        """Run focused Google Gemini AI integration tests"""
-        self.log("🚀 Starting Google Gemini AI Integration Tests")
+    def run_critical_endpoint_tests(self):
+        """Run the critical endpoint tests requested in the review"""
+        self.log("🚀 Starting Critical Endpoint Tests (Review Request)")
         self.log(f"Backend URL: {BACKEND_URL}")
+        self.log(f"Test User: {TEST_EMAIL}")
         
-        results = {}
-        
-        # Authentication with Gemini test user
-        results['login'] = self.login()
-        
-        if not results['login']:
-            self.log("❌ Cannot proceed without authentication", "ERROR")
-            return results
-        
-        # Google Gemini AI Integration Tests
-        results['gemini_chat_integration'] = self.test_gemini_chat_integration()
-        results['gemini_projections_insights'] = self.test_gemini_projections_insights()
-        results['motivational_quote_endpoint'] = self.test_motivational_quote_endpoint()
+        results = self.test_critical_endpoints()
         
         # Summary
         self.log("\n" + "="*60)
-        self.log("📋 GEMINI INTEGRATION TEST RESULTS")
+        self.log("📋 CRITICAL ENDPOINT TEST RESULTS")
         self.log("="*60)
         
         passed = 0
         total = len(results)
         
+        test_descriptions = {
+            'authentication': 'Authentication (testfix@test.com)',
+            'chat_send': 'Chat Send Message ("Olá")',
+            'task_creation': 'Task Creation ("Teste de Correção")',
+            'habit_creation': 'Habit Creation ("Exercício")',
+            'transaction_creation': 'Transaction Creation (R$ 100)',
+            'report_generation': 'Report Generation (weekly/janeiro)'
+        }
+        
         for test_name, result in results.items():
             status = "✅ PASS" if result else "❌ FAIL"
-            self.log(f"{test_name.replace('_', ' ').title()}: {status}")
+            description = test_descriptions.get(test_name, test_name.replace('_', ' ').title())
+            self.log(f"{description}: {status}")
             if result:
                 passed += 1
         
         self.log(f"\nOverall: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
         
         if passed == total:
-            self.log("🎉 All Gemini integration tests passed!")
+            self.log("🎉 All critical endpoint tests passed!")
         else:
-            self.log(f"⚠️ {total - passed} test(s) failed")
+            self.log(f"⚠️ {total - passed} critical test(s) failed")
         
         return results
 
