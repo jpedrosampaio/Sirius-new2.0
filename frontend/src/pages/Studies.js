@@ -281,7 +281,7 @@ export default function Studies() {
       }, { withCredentials: true });
       toast.success("Tarefa criada!");
       setShowTaskDialog(false);
-      setTaskForm({ title: "", description: "", task_type: "reading", deadline: "", priority: "medium", estimated_minutes: 30 });
+      setTaskForm({ title: "", description: "", task_type: "reading", recurrence: "once", deadline: "", priority: "medium", estimated_minutes: 30 });
       fetchAllData();
     } catch (error) {
       toast.error("Erro ao criar tarefa");
