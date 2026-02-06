@@ -1445,6 +1445,55 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
     goals = await db.goals.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     avg_progress = sum([len(g.get('daily_checks', [])) for g in goals]) / len(goals) if goals else 0
     
+    # ===== WORKOUT STATS =====
+    week_start = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")
+    workouts_week = await db.workout_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": week_start},
+        "completed": True
+    }, {"_id": 0}).to_list(100)
+    
+    workout_stats = {
+        "workouts_this_week": len(workouts_week),
+        "total_duration_minutes": sum(w.get("duration_minutes", 0) for w in workouts_week),
+        "total_calories_burned": sum(w.get("calories", 0) or 0 for w in workouts_week),
+        "total_xp_earned": sum(w.get("xp_earned", 0) for w in workouts_week)
+    }
+    
+    # ===== NUTRITION STATS =====
+    meals_today = await db.meals.find({"user_id": user.user_id, "date": today}, {"_id": 0}).to_list(100)
+    water_today = await db.water_logs.find({"user_id": user.user_id, "date": today}, {"_id": 0}).to_list(100)
+    nutrition_goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    if not nutrition_goals:
+        nutrition_goals = {"daily_calories": 2000, "daily_protein": 150, "daily_carbs": 250, "daily_fat": 65, "water_goal_ml": 2000}
+    
+    nutrition_stats = {
+        "calories_consumed": sum(m.get("total_calories", 0) for m in meals_today),
+        "calories_goal": nutrition_goals.get("daily_calories", 2000),
+        "protein_consumed": round(sum(m.get("total_protein", 0) for m in meals_today), 1),
+        "protein_goal": nutrition_goals.get("daily_protein", 150),
+        "water_consumed_ml": sum(w.get("amount_ml", 0) for w in water_today),
+        "water_goal_ml": nutrition_goals.get("water_goal_ml", 2000),
+        "meals_count": len(meals_today)
+    }
+    
+    # ===== STUDY STATS =====
+    study_sessions_today = await db.study_sessions.find({"user_id": user.user_id, "date": today}, {"_id": 0}).to_list(100)
+    study_streak = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+    flashcards = await db.flashcards.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+    due_flashcards = [f for f in flashcards if f.get("next_review", "") <= today]
+    notebooks = await db.notebooks.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    
+    study_stats = {
+        "study_time_today_minutes": sum(s.get("duration_minutes", 0) for s in study_sessions_today),
+        "current_streak": study_streak.get("current_streak", 0) if study_streak else 0,
+        "longest_streak": study_streak.get("longest_streak", 0) if study_streak else 0,
+        "flashcards_due": len(due_flashcards),
+        "total_flashcards": len(flashcards),
+        "notebooks_count": len(notebooks)
+    }
+    
     return {
         "user": {"name": user.name, "xp": user.xp, "rank": user.rank, "picture": user.picture},
         "tasks_today": tasks_today,
@@ -1455,7 +1504,10 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
         "expenses": expenses,
         "balance": income - expenses,
         "goals_total": len(goals),
-        "goals_avg_progress": avg_progress
+        "goals_avg_progress": avg_progress,
+        "workout_stats": workout_stats,
+        "nutrition_stats": nutrition_stats,
+        "study_stats": study_stats
     }
 
 @api_router.post("/goals/{goal_id}/check")
