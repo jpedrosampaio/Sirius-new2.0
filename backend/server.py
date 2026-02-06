@@ -4291,7 +4291,7 @@ async def update_study_task(request: Request, task_id: str, data: dict, session_
         raise HTTPException(status_code=404, detail="Task not found")
     
     update_fields = {}
-    for field in ["title", "description", "deadline", "reminder", "priority", "estimated_minutes", "actual_minutes", "notes"]:
+    for field in ["title", "description", "deadline", "reminder", "priority", "estimated_minutes", "actual_minutes", "notes", "recurrence"]:
         if field in data:
             update_fields[field] = data[field]
     
@@ -4299,12 +4299,11 @@ async def update_study_task(request: Request, task_id: str, data: dict, session_
     if "completed" in data:
         new_completed = data["completed"]
         was_completed = task.get("completed", False)
+        recurrence = task.get("recurrence", "once")
+        today = datetime.now().strftime("%Y-%m-%d")
         
         if new_completed and not was_completed:
             # Completing task - award XP
-            update_fields["completed"] = True
-            update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
-            
             xp = task.get("xp_reward", 20)
             new_xp = user.xp + xp
             new_rank = calculate_rank(new_xp)
@@ -4313,15 +4312,27 @@ async def update_study_task(request: Request, task_id: str, data: dict, session_
             # Update study streak
             await update_study_streak(user.user_id)
             
-        elif not new_completed and was_completed:
-            # Uncompleting task - deduct XP
-            update_fields["completed"] = False
-            update_fields["completed_at"] = None
+            if recurrence == "once":
+                # One-time task - mark as completed permanently
+                update_fields["completed"] = True
+                update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
+            else:
+                # Recurring task - mark last completed date but keep available
+                update_fields["last_completed_date"] = today
+                update_fields["completed_at"] = datetime.now(timezone.utc).isoformat()
+                # For recurring tasks, completed stays False so it shows up again
+                update_fields["completed"] = False
             
-            xp = task.get("xp_reward", 20)
-            new_xp = max(0, user.xp - xp)
-            new_rank = calculate_rank(new_xp)
-            await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        elif not new_completed and was_completed:
+            # Uncompleting task - deduct XP (only for non-recurring)
+            if recurrence == "once":
+                update_fields["completed"] = False
+                update_fields["completed_at"] = None
+                
+                xp = task.get("xp_reward", 20)
+                new_xp = max(0, user.xp - xp)
+                new_rank = calculate_rank(new_xp)
+                await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
     
     if update_fields:
         await db.study_tasks.update_one(
