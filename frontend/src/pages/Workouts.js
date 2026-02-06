@@ -1010,7 +1010,7 @@ export default function Workouts() {
                               </div>
                               {plan.description && <p className="text-sm text-[#A1A1AA]">{plan.description}</p>}
                               <p className="text-xs text-[#52525B] mt-1">
-                                {plan.exercises.length} exercícios
+                                {(plan.exercises || []).length} exercícios
                                 {total > 0 && (
                                   <span className={`ml-2 ${isCompleted ? 'text-green-500' : 'text-[#00F0FF]'}`}>
                                     ({completed}/{total} hoje)
