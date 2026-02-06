@@ -19,6 +19,7 @@ import Nutrition from "@/pages/Nutrition";
 import Studies from "@/pages/Studies";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 function AppRouter() {
   const location = useLocation();
