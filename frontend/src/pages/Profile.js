@@ -185,13 +185,13 @@ export default function Profile() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <h2 className="font-heading text-3xl mb-2">{user.name}</h2>
-                  <p className="text-[#A1A1AA] mb-4">{user.email}</p>
+                  <h2 className="font-heading text-3xl mb-2">{user.name || 'Usuário'}</h2>
+                  <p className="text-[#A1A1AA] mb-4">{user.email || ''}</p>
                   <div className="flex items-center space-x-4">
                     <div className="rank-badge bg-[#007AFF] text-white px-3 py-1 rounded-sm">
-                      {user.rank}
+                      {user.rank || 'Recruta'}
                     </div>
-                    <div className="font-data text-2xl">{user.xp} XP</div>
+                    <div className="font-data text-2xl">{user.xp ?? 0} XP</div>
                   </div>
                 </div>
               </div>
