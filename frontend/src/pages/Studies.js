@@ -39,6 +39,13 @@ const taskTypeLabels = {
   exam: "Prova"
 };
 
+const recurrenceLabels = {
+  once: "Única vez",
+  daily: "Diária",
+  weekly: "Semanal",
+  monthly: "Mensal"
+};
+
 const dayLabels = {
   monday: "Segunda",
   tuesday: "Terça",
