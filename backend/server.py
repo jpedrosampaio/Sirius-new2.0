@@ -1397,13 +1397,17 @@ async def generate_report(request: Request, report_type: str, period: str, sessi
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
     tasks = await db.tasks.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+    task_instances = await db.task_instances.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     transactions = await db.transactions.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     goals = await db.goals.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     
+    # Count completed task instances
+    completed_task_instances = len([t for t in task_instances if t.get('completed', False)])
+    
     data = {
         "tasks": len(tasks),
-        "tasks_completed": len([t for t in tasks if t['completed']]),
+        "tasks_completed": completed_task_instances,
         "habits": len(habits),
         "total_habits_completions": sum([len(h['completions']) for h in habits]),
         "income": sum([t['amount'] for t in transactions if t['type'] == 'income']),
