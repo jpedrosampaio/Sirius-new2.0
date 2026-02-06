@@ -1679,7 +1679,16 @@ class SiriusBackendTester:
         return results
 
 def main():
-    """Main test execution for Nutrition and Studies modules"""
+    """Main test execution for critical endpoints"""
+    tester = SiriusBackendTester()
+    results = tester.run_critical_endpoint_tests()
+    
+    # Return exit code based on results
+    all_passed = all(results.values())
+    return 0 if all_passed else 1
+
+def run_nutrition_and_studies():
+    """Run Nutrition and Studies module tests"""
     tester = SiriusBackendTester()
     results = tester.run_nutrition_and_studies_tests()
     
