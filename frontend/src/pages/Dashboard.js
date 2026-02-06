@@ -116,6 +116,116 @@ export default function Dashboard() {
                 </Card>
               </div>
 
+              {/* Treino, Nutrição e Estudos */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+                {/* Card de Treino */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <Dumbbell className="w-10 h-10 text-[#FF6B6B]" />
+                    <div>
+                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Treinos</p>
+                      <p className="font-heading text-2xl">Esta Semana</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2">
+                        <Flame className="w-4 h-4" /> Sessões
+                      </span>
+                      <span className="font-data text-[#FF6B6B]">{stats.workout_stats?.workouts_this_week || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2">
+                        <Clock className="w-4 h-4" /> Duração
+                      </span>
+                      <span className="font-data">{stats.workout_stats?.total_duration_minutes || 0} min</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2">
+                        <Flame className="w-4 h-4" /> Calorias
+                      </span>
+                      <span className="font-data text-[#FF9500]">{stats.workout_stats?.total_calories_burned || 0} kcal</span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Card de Nutrição */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <Utensils className="w-10 h-10 text-[#4ECDC4]" />
+                    <div>
+                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Nutrição</p>
+                      <p className="font-heading text-2xl">Hoje</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[#A1A1AA] text-sm">Calorias</span>
+                        <span className="font-data text-sm">
+                          {stats.nutrition_stats?.calories_consumed || 0} / {stats.nutrition_stats?.calories_goal || 2000}
+                        </span>
+                      </div>
+                      <Progress 
+                        value={Math.min(((stats.nutrition_stats?.calories_consumed || 0) / (stats.nutrition_stats?.calories_goal || 2000)) * 100, 100)} 
+                        className="h-2" 
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[#A1A1AA] text-sm flex items-center gap-1">
+                          <Droplets className="w-3 h-3" /> Água
+                        </span>
+                        <span className="font-data text-sm text-[#00B4D8]">
+                          {((stats.nutrition_stats?.water_consumed_ml || 0) / 1000).toFixed(1)}L / {((stats.nutrition_stats?.water_goal_ml || 2000) / 1000).toFixed(1)}L
+                        </span>
+                      </div>
+                      <Progress 
+                        value={Math.min(((stats.nutrition_stats?.water_consumed_ml || 0) / (stats.nutrition_stats?.water_goal_ml || 2000)) * 100, 100)} 
+                        className="h-2 [&>div]:bg-[#00B4D8]" 
+                      />
+                    </div>
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="text-[#A1A1AA]">Refeições</span>
+                      <span className="font-data">{stats.nutrition_stats?.meals_count || 0}</span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Card de Estudos */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <BookOpen className="w-10 h-10 text-[#A78BFA]" />
+                    <div>
+                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Estudos</p>
+                      <p className="font-heading text-2xl">Progresso</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2">
+                        <Clock className="w-4 h-4" /> Hoje
+                      </span>
+                      <span className="font-data">{stats.study_stats?.study_time_today_minutes || 0} min</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2">
+                        <Flame className="w-4 h-4" /> Streak
+                      </span>
+                      <span className="font-data text-[#FFD700]">{stats.study_stats?.current_streak || 0} dias</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2">
+                        <Brain className="w-4 h-4" /> Flashcards
+                      </span>
+                      <span className={`font-data ${(stats.study_stats?.flashcards_due || 0) > 0 ? 'text-[#FF9500]' : 'text-[#39FF14]'}`}>
+                        {stats.study_stats?.flashcards_due || 0} pendentes
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
                   <div className="flex items-center space-x-4 mb-4">
