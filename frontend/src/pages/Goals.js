@@ -213,7 +213,7 @@ export default function Goals() {
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-[#A1A1AA]">Progresso</span>
-                        <span className="font-data text-lg text-[#007AFF]">{progress.toFixed(0)}%</span>
+                        <span className="font-data text-lg text-[#007AFF]">{(progress ?? 0).toFixed(0)}%</span>
                       </div>
                       <div className="h-2 bg-[#27272A] rounded-full overflow-hidden">
                         <div
