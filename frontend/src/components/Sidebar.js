@@ -106,16 +106,16 @@ export default function Sidebar({ user }) {
               <Avatar className="w-10 h-10 border-2 border-[#007AFF]">
                 <AvatarImage src={user.picture} />
                 <AvatarFallback className="bg-[#007AFF] text-white font-heading text-sm">
-                  {user.name.charAt(0).toUpperCase()}
+                  {(user.name || 'U').charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate text-sm">{user.name}</p>
+                <p className="font-medium truncate text-sm">{user.name || 'Usuário'}</p>
                 <div className="flex items-center space-x-2">
                   <span className="rank-badge bg-[#007AFF] text-white px-1.5 py-0.5 rounded-sm text-[10px]">
-                    {user.rank}
+                    {user.rank || 'Recruta'}
                   </span>
-                  <span className="font-data text-xs text-[#A1A1AA]">{user.xp} XP</span>
+                  <span className="font-data text-xs text-[#A1A1AA]">{user.xp ?? 0} XP</span>
                 </div>
               </div>
             </div>
