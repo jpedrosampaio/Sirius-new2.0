@@ -119,7 +119,7 @@ export default function Finance() {
   const fetchTransactions = async () => {
     try {
       const res = await axios.get(`${API}/transactions?month=${selectedMonth}`, { withCredentials: true });
-      setTransactions(res.data);
+      setTransactions(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar transações");
     }
