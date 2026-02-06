@@ -253,7 +253,7 @@ export default function Profile() {
                   >
                     <div
                       className={`w-16 h-16 mx-auto rounded-sm flex items-center justify-center mb-2 ${
-                        rank.name === user.rank
+                        rank.name === (user.rank || 'Recruta')
                           ? 'bg-[#007AFF] shadow-[0_0_15px_rgba(0,122,255,0.5)]'
                           : isUnlocked
                           ? 'bg-[#2C2C2E]'
