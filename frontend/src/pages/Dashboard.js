@@ -110,7 +110,7 @@ export default function Dashboard() {
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
                   <div className="flex items-center justify-between mb-4">
                     <Target className="w-8 h-8 text-[#00F0FF]" />
-                    <span className="font-data text-2xl">{stats.goals_avg_progress.toFixed(0)}%</span>
+                    <span className="font-data text-2xl">{(stats.goals_avg_progress ?? 0).toFixed(0)}%</span>
                   </div>
                   <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Progresso Metas</p>
                 </Card>
