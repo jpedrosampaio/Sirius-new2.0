@@ -1133,7 +1133,7 @@ export default function Finance() {
                       <XAxis dataKey="name" tick={{ fill: '#A1A1AA', fontSize: 12 }} />
                       <YAxis tick={{ fill: '#A1A1AA', fontSize: 12 }} />
                       <Tooltip 
-                        formatter={(value) => `R$ ${value.toFixed(2)}`}
+                        formatter={(value) => `R$ ${(value ?? 0).toFixed(2)}`}
                         contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A' }}
                       />
                       <Bar dataKey="value" fill="#007AFF" radius={[4, 4, 0, 0]} />
