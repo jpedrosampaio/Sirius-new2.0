@@ -315,7 +315,7 @@ export default function Notifications() {
                           <h3 className="font-heading">{template.title}</h3>
                           <p className="text-sm text-[#A1A1AA] mt-1">{template.message}</p>
                           <div className="flex items-center gap-2 mt-2 text-xs text-[#52525B]">
-                            <Clock className="w-3 h-3" /> Sugerido: {template.suggested_times.join(", ")}
+                            <Clock className="w-3 h-3" /> Sugerido: {(template.suggested_times || []).join(", ")}
                           </div>
                         </div>
                       </div>
