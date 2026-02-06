@@ -26,13 +26,21 @@ db = client[os.environ['DB_NAME']]
 
 # Initialize Google Gemini client
 GOOGLE_GEMINI_API_KEY = os.environ.get('GOOGLE_GEMINI_API_KEY', '')
-gemini_client = genai.Client(api_key=GOOGLE_GEMINI_API_KEY)
+gemini_client = None
+if GOOGLE_GEMINI_API_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GOOGLE_GEMINI_API_KEY)
+    except Exception as e:
+        logging.error(f"Failed to initialize Gemini client: {e}")
 
 # Model to use - can be changed if quota issues occur
 GEMINI_MODEL = "gemini-2.5-flash"
 
 async def call_llm(prompt: str, session_id: str = "default", system_message: str = "Você é um assistente financeiro inteligente.") -> str:
     """Helper function to call LLM using Google Gemini"""
+    if not gemini_client:
+        logging.warning("Gemini client not initialized - API key may be missing")
+        return "⚠️ Serviço de IA indisponível no momento. Por favor, configure a API key do Google Gemini."
     try:
         response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
@@ -44,7 +52,7 @@ async def call_llm(prompt: str, session_id: str = "default", system_message: str
         return response.text
     except Exception as e:
         logging.error(f"LLM call failed: {e}")
-        raise e
+        return f"⚠️ Erro ao processar sua solicitação: {str(e)}"
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
