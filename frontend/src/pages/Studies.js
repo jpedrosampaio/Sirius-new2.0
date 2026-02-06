@@ -97,7 +97,7 @@ export default function Studies() {
   const [notebookForm, setNotebookForm] = useState({ name: "", description: "", color: "#007AFF", tags: [] });
   const [noteForm, setNoteForm] = useState({ title: "", content: "", tags: [], links: [] });
   const [taskForm, setTaskForm] = useState({ 
-    title: "", description: "", task_type: "reading", deadline: "", 
+    title: "", description: "", task_type: "reading", recurrence: "once", deadline: "", 
     priority: "medium", estimated_minutes: 30 
   });
   const [flashcardForm, setFlashcardForm] = useState({ front: "", back: "", deck_name: "Geral" });
