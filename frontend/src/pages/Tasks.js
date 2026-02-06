@@ -192,6 +192,8 @@ export default function Tasks() {
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="bg-[#0A0A0A] border-[#27272A] mb-6">
+              <TabsTrigger value="all" className="data-[state=active]:bg-[#007AFF]">Todas</TabsTrigger>
+              <TabsTrigger value="once" className="data-[state=active]:bg-[#007AFF]">Única</TabsTrigger>
               <TabsTrigger value="daily" className="data-[state=active]:bg-[#007AFF]">Diárias</TabsTrigger>
               <TabsTrigger value="weekly" className="data-[state=active]:bg-[#007AFF]">Semanais</TabsTrigger>
               <TabsTrigger value="monthly" className="data-[state=active]:bg-[#007AFF]">Mensais</TabsTrigger>
