@@ -126,10 +126,10 @@ export default function Reports() {
                       </div>
                       <div>
                         <h3 className="font-heading text-xl mb-1">
-                          RELATÓRIO {report.type.toUpperCase()}
+                          RELATÓRIO {(report.type || '').toUpperCase()}
                         </h3>
                         <p className="text-sm text-[#A1A1AA]">
-                          Período: {report.period} | Gerado em: {new Date(report.created_at).toLocaleString('pt-BR')}
+                          Período: {report.period || ''} | Gerado em: {report.created_at ? new Date(report.created_at).toLocaleString('pt-BR') : ''}
                         </p>
                       </div>
                     </div>
