@@ -991,7 +991,7 @@ export default function Finance() {
                       <span className="text-[#A1A1AA] uppercase text-xs">Parcelas</span>
                       <CreditCardIcon className="w-4 h-4 text-[#00F0FF]" />
                     </div>
-                    <p className="font-data text-xl text-[#00F0FF]">R$ {projectionSummary.installment_expenses.toFixed(2)}</p>
+                    <p className="font-data text-xl text-[#00F0FF]">R$ {(projectionSummary.installment_expenses ?? 0).toFixed(2)}</p>
                   </Card>
                 </div>
               )}
