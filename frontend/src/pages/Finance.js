@@ -281,7 +281,7 @@ export default function Finance() {
       const res = await axios.post(`${API}/credit-cards/${selectedCard}/charge`, chargeData, { withCredentials: true });
       
       if (newCharge.payment_type === "parcelado") {
-        toast.success(`Compra parcelada em ${chargeData.installments}x de R$ ${res.data.installment_amount.toFixed(2)} lançada!`);
+        toast.success(`Compra parcelada em ${chargeData.installments}x de R$ ${(res.data.installment_amount ?? 0).toFixed(2)} lançada!`);
       } else {
         toast.success("Compra à vista lançada no cartão!");
       }
