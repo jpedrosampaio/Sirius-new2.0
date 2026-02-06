@@ -144,40 +144,31 @@ export default function Tasks() {
                     />
                   </div>
                   <div>
-                    <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Tipo</Label>
-                    <div className="flex gap-2">
-                      {['daily', 'weekly', 'monthly'].map((type) => (
-                        <button
-                          key={type}
-                          onClick={() => setNewTask({...newTask, recurrence: type})}
-                          className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
-                            newTask.recurrence === type
-                              ? 'bg-[#007AFF] text-white'
-                              : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
-                          }`}
-                        >
-                          {recurrenceLabels[type]}
-                        </button>
-                      ))}
-                    </div>
+                    <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Recorrência</Label>
+                    <Select value={newTask.recurrence} onValueChange={(v) => setNewTask({...newTask, recurrence: v})}>
+                      <SelectTrigger className="bg-[#121212] border-[#27272A] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="once">Única vez</SelectItem>
+                        <SelectItem value="daily">Diária</SelectItem>
+                        <SelectItem value="weekly">Semanal</SelectItem>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label className="text-[#A1A1AA] uppercase text-xs tracking-wider mb-2 block">Prioridade</Label>
-                    <div className="flex gap-2">
-                      {['low', 'medium', 'high'].map((p) => (
-                        <button
-                          key={p}
-                          onClick={() => setNewTask({...newTask, priority: p})}
-                          className={`flex-1 py-2 px-4 rounded-sm uppercase text-xs tracking-wider transition-colors ${
-                            newTask.priority === p
-                              ? 'bg-[#007AFF] text-white'
-                              : 'bg-[#121212] text-[#A1A1AA] hover:bg-[#1C1C1E]'
-                          }`}
-                        >
-                          {p === 'low' ? 'Baixa' : p === 'medium' ? 'Média' : 'Alta'}
-                        </button>
-                      ))}
-                    </div>
+                    <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v})}>
+                      <SelectTrigger className="bg-[#121212] border-[#27272A] text-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Baixa</SelectItem>
+                        <SelectItem value="medium">Média</SelectItem>
+                        <SelectItem value="high">Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <Button data-testid="task-submit-btn" onClick={handleCreateTask} className="w-full bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest">
                     Criar
