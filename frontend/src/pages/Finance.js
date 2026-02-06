@@ -694,7 +694,7 @@ export default function Finance() {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span className="text-[#A1A1AA]">Gasto</span>
-                            <span>R$ {budget.spent.toFixed(2)}</span>
+                            <span>R$ {(budget.spent ?? 0).toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-[#A1A1AA]">Limite</span>
