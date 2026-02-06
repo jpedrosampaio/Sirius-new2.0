@@ -1903,6 +1903,7 @@ async def create_credit_card(request: Request, card_data: CreditCardCreate, sess
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.credit_cards.insert_one(card_doc)
+    card_doc.pop('_id', None)  # Remove MongoDB ObjectId
     card_doc['created_at'] = datetime.fromisoformat(card_doc['created_at'])
     return CreditCard(**card_doc)
 
@@ -2337,6 +2338,7 @@ async def create_workout_plan(request: Request, plan_data: WorkoutPlanCreate, se
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.workout_plans.insert_one(plan_doc)
+    plan_doc.pop('_id', None)  # Remove MongoDB ObjectId
     plan_doc['created_at'] = datetime.fromisoformat(plan_doc['created_at'])
     return WorkoutPlan(**plan_doc)
 
