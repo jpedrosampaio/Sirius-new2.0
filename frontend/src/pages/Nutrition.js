@@ -1002,6 +1002,7 @@ export default function Nutrition() {
           </TabsContent>
         </Tabs>
       </main>
+      <MobileNav user={user} />
     </div>
   );
 }

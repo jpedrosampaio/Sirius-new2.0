@@ -1523,6 +1523,7 @@ export default function Workouts() {
           </Tabs>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }

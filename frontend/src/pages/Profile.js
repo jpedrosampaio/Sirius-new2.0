@@ -313,6 +313,7 @@ export default function Profile() {
           </div>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }

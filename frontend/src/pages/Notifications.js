@@ -328,6 +328,7 @@ export default function Notifications() {
           </Tabs>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }

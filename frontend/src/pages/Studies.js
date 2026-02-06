@@ -1783,6 +1783,7 @@ export default function Studies() {
           </TabsContent>
         </Tabs>
       </main>
+      <MobileNav user={user} />
     </div>
   );
 }

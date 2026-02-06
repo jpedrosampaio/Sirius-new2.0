@@ -180,6 +180,7 @@ export default function Reports() {
           </div>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }
