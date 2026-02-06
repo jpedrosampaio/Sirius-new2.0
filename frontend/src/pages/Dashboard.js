@@ -94,7 +94,7 @@ export default function Dashboard() {
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
                   <div className="flex items-center justify-between mb-4">
                     <TrendingUp className="w-8 h-8 text-[#39FF14]" />
-                    <span className="font-data text-2xl">{stats.habits_completed_today}/{stats.habits_total}</span>
+                    <span className="font-data text-2xl">{stats.habits_completed_today ?? 0}/{stats.habits_total ?? 0}</span>
                   </div>
                   <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Hábitos Hoje</p>
                 </Card>
