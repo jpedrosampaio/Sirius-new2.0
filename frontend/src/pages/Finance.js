@@ -155,7 +155,7 @@ export default function Finance() {
   const fetchProjections = async () => {
     try {
       const res = await axios.get(`${API}/projections?month=${projectionMonth}`, { withCredentials: true });
-      setProjections(res.data);
+      setProjections(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar projeções");
     }
