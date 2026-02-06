@@ -96,6 +96,8 @@ export default function Tasks() {
   };
 
   const recurrenceLabels = {
+    all: "Todas",
+    once: "Única vez",
     daily: "Diárias",
     weekly: "Semanais",
     monthly: "Mensais"
