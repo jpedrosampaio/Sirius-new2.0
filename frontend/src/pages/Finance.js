@@ -1249,6 +1249,7 @@ export default function Finance() {
           </Tabs>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }
