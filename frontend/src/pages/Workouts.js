@@ -110,16 +110,17 @@ export default function Workouts() {
         axios.get(`${API}/motivational-quote`, { withCredentials: true })
       ]);
       setUser(userRes.data);
-      setWorkouts(workoutsRes.data);
-      setPlans(plansRes.data);
-      setStats(statsRes.data);
-      setDetailedStats(detailedStatsRes.data);
-      setMeasurements(measurementsRes.data);
-      setLatestMeasurement(latestRes.data);
-      setMotivationalQuote(quoteRes.data);
+      setWorkouts(Array.isArray(workoutsRes.data) ? workoutsRes.data : []);
+      setPlans(Array.isArray(plansRes.data) ? plansRes.data : []);
+      setStats(statsRes.data || null);
+      setDetailedStats(detailedStatsRes.data || null);
+      setMeasurements(Array.isArray(measurementsRes.data) ? measurementsRes.data : []);
+      setLatestMeasurement(latestRes.data || null);
+      setMotivationalQuote(quoteRes.data || null);
       
       // Load daily status for each plan
-      const statusPromises = plansRes.data.map(plan => 
+      const plansData = Array.isArray(plansRes.data) ? plansRes.data : [];
+      const statusPromises = plansData.map(plan => 
         axios.get(`${API}/daily-workout-status/${plan.plan_id}`, { withCredentials: true })
           .then(res => ({ planId: plan.plan_id, status: res.data }))
           .catch(() => ({ planId: plan.plan_id, status: { exercises_status: {}, completed: false } }))
