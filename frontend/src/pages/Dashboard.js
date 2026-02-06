@@ -279,6 +279,7 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }
