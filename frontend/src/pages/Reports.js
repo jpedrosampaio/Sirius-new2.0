@@ -34,7 +34,7 @@ export default function Reports() {
   const fetchReports = async () => {
     try {
       const res = await axios.get(`${API}/reports`, { withCredentials: true });
-      setReports(res.data);
+      setReports(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       toast.error("Erro ao carregar relatórios");
     }
