@@ -44,7 +44,7 @@ export default function Tasks() {
         ? `${API}/tasks?date=${selectedDate}` 
         : `${API}/tasks?date=${selectedDate}&recurrence=${activeTab}`;
       const res = await axios.get(url, { withCredentials: true });
-      setTasks(res.data);
+      setTasks(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       toast.error("Erro ao carregar tarefas");
     }
