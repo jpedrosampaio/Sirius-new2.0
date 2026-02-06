@@ -1184,7 +1184,7 @@ export default function Finance() {
                             <p className="text-sm text-[#A1A1AA]">{proj.category}</p>
                           </div>
                           <div className="font-data text-xl text-[#FF9500]">
-                            R$ {proj.amount.toFixed(2)}
+                            R$ {(proj.amount ?? 0).toFixed(2)}
                           </div>
                           <div className="flex items-center space-x-1">
                             <Button 
