@@ -623,14 +623,14 @@ export default function Nutrition() {
                               <div>
                                 <Label>Tipo de Refeição</Label>
                                 <Select 
-                                  value={recipePreferences.meal_type} 
-                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, meal_type: v})}
+                                  value={recipePreferences.meal_type || "any"} 
+                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, meal_type: v === "any" ? "" : v})}
                                 >
                                   <SelectTrigger className="bg-[#121212] border-[#27272A]">
                                     <SelectValue placeholder="Qualquer" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">Qualquer</SelectItem>
+                                    <SelectItem value="any">Qualquer</SelectItem>
                                     <SelectItem value="breakfast">Café da Manhã</SelectItem>
                                     <SelectItem value="lunch">Almoço</SelectItem>
                                     <SelectItem value="dinner">Jantar</SelectItem>
@@ -641,14 +641,14 @@ export default function Nutrition() {
                               <div>
                                 <Label>Tipo de Dieta</Label>
                                 <Select 
-                                  value={recipePreferences.diet_type} 
-                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, diet_type: v})}
+                                  value={recipePreferences.diet_type || "any"} 
+                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, diet_type: v === "any" ? "" : v})}
                                 >
                                   <SelectTrigger className="bg-[#121212] border-[#27272A]">
                                     <SelectValue placeholder="Balanceada" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">Balanceada</SelectItem>
+                                    <SelectItem value="any">Balanceada</SelectItem>
                                     <SelectItem value="high-protein">Alta Proteína</SelectItem>
                                     <SelectItem value="low-carb">Low Carb</SelectItem>
                                     <SelectItem value="keto">Cetogênica</SelectItem>
@@ -662,14 +662,14 @@ export default function Nutrition() {
                               <div>
                                 <Label>Culinária</Label>
                                 <Select 
-                                  value={recipePreferences.cuisine} 
-                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, cuisine: v})}
+                                  value={recipePreferences.cuisine || "any"} 
+                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, cuisine: v === "any" ? "" : v})}
                                 >
                                   <SelectTrigger className="bg-[#121212] border-[#27272A]">
                                     <SelectValue placeholder="Qualquer" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="">Qualquer</SelectItem>
+                                    <SelectItem value="any">Qualquer</SelectItem>
                                     <SelectItem value="brasileira">Brasileira</SelectItem>
                                     <SelectItem value="italiana">Italiana</SelectItem>
                                     <SelectItem value="japonesa">Japonesa</SelectItem>
