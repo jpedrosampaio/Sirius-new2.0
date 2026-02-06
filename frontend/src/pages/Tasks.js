@@ -57,7 +57,7 @@ export default function Tasks() {
     try {
       await axios.post(`${API}/tasks`, { ...newTask, date: selectedDate }, { withCredentials: true });
       toast.success("Tarefa criada!");
-      setNewTask({ title: "", description: "", priority: "medium", recurrence: activeTab });
+      setNewTask({ title: "", description: "", priority: "medium", recurrence: "once" });
       setOpen(false);
       fetchTasks();
       fetchUser();
