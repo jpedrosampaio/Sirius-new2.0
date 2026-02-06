@@ -134,7 +134,7 @@ export default function Profile() {
   const nextRank = getNextRank();
   const currentRankIndex = getCurrentRankIndex();
   const currentRankData = ranks[currentRankIndex];
-  const progress = nextRank ? ((user.xp - currentRankData.xp) / (nextRank.xp - currentRankData.xp)) * 100 : 100;
+  const progress = nextRank ? (((user.xp ?? 0) - currentRankData.xp) / (nextRank.xp - currentRankData.xp)) * 100 : 100;
 
   return (
     <div className="flex min-h-screen bg-[#050505]">
