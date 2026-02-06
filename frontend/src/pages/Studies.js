@@ -1576,10 +1576,10 @@ export default function Studies() {
                             {(quizResult.score ?? 0).toFixed(0)}%
                           </div>
                           <p className="text-[#A1A1AA]">
-                            {quizResult.correct_count} de {quizResult.total_questions} corretas
+                            {quizResult.correct_count ?? 0} de {quizResult.total_questions ?? 0} corretas
                           </p>
                           <Badge className="bg-green-500/20 text-green-400 mt-2">
-                            +{quizResult.xp_earned} XP
+                            +{quizResult.xp_earned ?? 0} XP
                           </Badge>
                         </div>
                         
