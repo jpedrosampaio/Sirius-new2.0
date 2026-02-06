@@ -150,7 +150,7 @@ export default function Profile() {
                   <Avatar className="w-24 h-24 border-2 border-[#007AFF]">
                     <AvatarImage src={user.picture} />
                     <AvatarFallback className="bg-[#007AFF] text-white font-heading text-2xl">
-                      {user.name.charAt(0).toUpperCase()}
+                      {(user.name || 'U').charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   {/* Overlay para upload */}
