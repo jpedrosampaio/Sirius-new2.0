@@ -267,8 +267,8 @@ export default function Dashboard() {
                     </div>
                     <div className="border-t border-[#27272A] pt-3 flex justify-between items-center">
                       <span className="font-medium">Saldo</span>
-                      <span className={`font-data text-lg ${stats.balance >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
-                        R$ {stats.balance.toFixed(2)}
+                      <span className={`font-data text-lg ${(stats.balance ?? 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                        R$ {(stats.balance ?? 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
