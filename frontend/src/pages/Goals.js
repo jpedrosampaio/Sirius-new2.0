@@ -181,7 +181,7 @@ export default function Goals() {
               goals.map((goal) => {
                 const days = getDaysArray(goal.sprint_duration);
                 const dailyChecks = goal.daily_checks || [];
-                const progress = (dailyChecks.length / goal.sprint_duration) * 100;
+                const progress = (dailyChecks.length / (goal.sprint_duration || 1)) * 100;
                 
                 return (
                   <Card key={goal.goal_id} className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
