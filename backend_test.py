@@ -18,10 +18,10 @@ load_dotenv('/app/frontend/.env')
 BACKEND_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://project-revive-4.preview.emergentagent.com')
 API_BASE = f"{BACKEND_URL}/api"
 
-# Test credentials - using the requested credentials
-TEST_EMAIL = "testsirius@test.com"
+# Test credentials - using the requested credentials from review
+TEST_EMAIL = "testfix@test.com"
 TEST_PASSWORD = "Test123!"
-TEST_NAME = "Test Sirius"
+TEST_NAME = "Test Fix User"
 
 class SiriusBackendTester:
     def __init__(self):
