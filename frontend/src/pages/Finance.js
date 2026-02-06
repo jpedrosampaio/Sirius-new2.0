@@ -458,7 +458,7 @@ export default function Finance() {
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
+                  <Tooltip formatter={(value) => `R$ ${(value ?? 0).toFixed(2)}`} />
                 </PieChart>
               </ResponsiveContainer>
             </Card>
