@@ -221,8 +221,8 @@ export default function Workouts() {
       setNewWorkout({
         ...newWorkout,
         plan_id: planId,
-        name: plan.name,
-        exercises_completed: plan.exercises.map(ex => ({
+        name: plan.name || 'Treino',
+        exercises_completed: (plan.exercises || []).map(ex => ({
           ...ex,
           completed: false
         }))
