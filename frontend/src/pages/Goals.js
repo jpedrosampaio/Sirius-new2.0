@@ -42,7 +42,7 @@ export default function Goals() {
   const fetchGoals = async () => {
     try {
       const res = await axios.get(`${API}/goals`, { withCredentials: true });
-      setGoals(res.data);
+      setGoals(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       toast.error("Erro ao carregar metas");
     }
