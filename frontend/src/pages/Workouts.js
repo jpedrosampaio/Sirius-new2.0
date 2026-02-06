@@ -1043,7 +1043,7 @@ export default function Workouts() {
                               </Button>
                             </div>
                             <div className="space-y-2">
-                              {plan.exercises.map((ex, idx) => {
+                              {(plan.exercises || []).map((ex, idx) => {
                                 const isChecked = status.exercises_status?.[idx] || false;
                                 return (
                                   <div 
