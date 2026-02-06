@@ -1573,7 +1573,7 @@ export default function Studies() {
                       <div className="py-4 space-y-6">
                         <div className="text-center">
                           <div className="text-5xl font-bold text-[#00F0FF] mb-2">
-                            {quizResult.score.toFixed(0)}%
+                            {(quizResult.score ?? 0).toFixed(0)}%
                           </div>
                           <p className="text-[#A1A1AA]">
                             {quizResult.correct_count} de {quizResult.total_questions} corretas
