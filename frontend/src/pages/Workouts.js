@@ -1273,7 +1273,7 @@ export default function Workouts() {
                             {pdfAnalysis?.extracted_data?.recommendations && (
                               <div className="mt-4 text-left bg-[#121212] p-3 rounded">
                                 <p className="text-xs text-[#00F0FF] uppercase mb-2">Recomendações do PDF:</p>
-                                <p className="text-sm text-[#A1A1AA]">{pdfAnalysis.extracted_data.recommendations.join(", ")}</p>
+                                <p className="text-sm text-[#A1A1AA]">{(pdfAnalysis.extracted_data.recommendations || []).join(", ")}</p>
                               </div>
                             )}
                           </div>
