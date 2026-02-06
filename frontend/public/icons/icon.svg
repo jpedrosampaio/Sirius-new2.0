@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00F0FF"/>
+      <stop offset="50%" stop-color="#007AFF"/>
+      <stop offset="100%" stop-color="#00F0FF"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" fill="#050505" rx="80"/>
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="200" fill="none" stroke="url(#logoGradient)" stroke-width="8" opacity="0.5"/>
+  <!-- Inner star -->
+  <path 
+    d="M256 56 L297 179 L460 179 L328 283 L373 430 L256 330 L139 430 L184 283 L52 179 L215 179 Z" 
+    fill="url(#logoGradient)"
+  />
+  <!-- Center circle dark -->
+  <circle cx="256" cy="256" r="55" fill="#050505"/>
+  <!-- Center circle light -->
+  <circle cx="256" cy="256" r="40" fill="url(#logoGradient)" opacity="0.9"/>
+  <!-- Cross lines -->
+  <line x1="256" y1="100" x2="256" y2="216" stroke="#050505" stroke-width="14"/>
+  <line x1="256" y1="296" x2="256" y2="412" stroke="#050505" stroke-width="14"/>
+  <line x1="100" y1="256" x2="216" y2="256" stroke="#050505" stroke-width="14"/>
+  <line x1="296" y1="256" x2="412" y2="256" stroke="#050505" stroke-width="14"/>
+</svg>
