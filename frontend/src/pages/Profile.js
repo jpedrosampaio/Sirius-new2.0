@@ -113,14 +113,14 @@ export default function Profile() {
 
   const getNextRank = () => {
     if (!user) return null;
-    const currentIndex = ranks.findIndex(r => r.name === user.rank);
+    const currentIndex = ranks.findIndex(r => r.name === (user.rank || 'Recruta'));
     if (currentIndex === -1 || currentIndex === ranks.length - 1) return null;
     return ranks[currentIndex + 1];
   };
 
   const getCurrentRankIndex = () => {
     if (!user) return 0;
-    return ranks.findIndex(r => r.name === user.rank);
+    return ranks.findIndex(r => r.name === (user.rank || 'Recruta'));
   };
 
   if (!user) {
