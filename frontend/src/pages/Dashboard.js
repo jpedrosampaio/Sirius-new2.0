@@ -102,7 +102,7 @@ export default function Dashboard() {
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
                   <div className="flex items-center justify-between mb-4">
                     <DollarSign className="w-8 h-8 text-[#FF9500]" />
-                    <span className="font-data text-2xl">R$ {stats.balance.toFixed(0)}</span>
+                    <span className="font-data text-2xl">R$ {(stats.balance ?? 0).toFixed(0)}</span>
                   </div>
                   <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Saldo Mês</p>
                 </Card>
