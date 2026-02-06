@@ -93,7 +93,7 @@ export default function Notifications() {
       setNewNotification({ title: "", message: "", type: "reminder", category: "custom", scheduled_time: "08:00", repeat: "daily", repeat_days: [], channels: ["in_app"] });
       setOpen(false);
       const notifsRes = await axios.get(`${API}/notifications`, { withCredentials: true });
-      setNotifications(notifsRes.data);
+      setNotifications(Array.isArray(notifsRes.data) ? notifsRes.data : []);
     } catch (error) {
       toast.error("Erro ao criar lembrete");
     }
@@ -104,7 +104,7 @@ export default function Notifications() {
       const res = await axios.patch(`${API}/notifications/${notificationId}/toggle`, {}, { withCredentials: true });
       toast.success(res.data.enabled ? "Lembrete ativado" : "Lembrete desativado");
       const notifsRes = await axios.get(`${API}/notifications`, { withCredentials: true });
-      setNotifications(notifsRes.data);
+      setNotifications(Array.isArray(notifsRes.data) ? notifsRes.data : []);
     } catch (error) {
       toast.error("Erro ao atualizar lembrete");
     }
@@ -115,7 +115,7 @@ export default function Notifications() {
       await axios.delete(`${API}/notifications/${notificationId}`, { withCredentials: true });
       toast.success("Lembrete deletado");
       const notifsRes = await axios.get(`${API}/notifications`, { withCredentials: true });
-      setNotifications(notifsRes.data);
+      setNotifications(Array.isArray(notifsRes.data) ? notifsRes.data : []);
     } catch (error) {
       toast.error("Erro ao deletar lembrete");
     }
