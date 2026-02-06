@@ -26,6 +26,7 @@ export default function Tasks() {
   useEffect(() => {
     fetchUser();
     fetchTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, activeTab]);
 
   const fetchUser = async () => {
