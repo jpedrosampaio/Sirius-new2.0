@@ -171,10 +171,14 @@ export default function Studies() {
         axios.get(`${API}/study/quizzes?notebook_id=${selectedNotebook.notebook_id}`, { withCredentials: true }),
         axios.get(`${API}/study/schedule`, { withCredentials: true })
       ]);
-      setNotes(notesRes.data);
-      setFlashcards(flashcardsRes.data);
-      setQuizzes(quizzesRes.data);
-      setSchedule(scheduleRes.data.filter(s => s.notebook_id === selectedNotebook.notebook_id));
+      const notesData = Array.isArray(notesRes.data) ? notesRes.data : [];
+      const flashcardsData = Array.isArray(flashcardsRes.data) ? flashcardsRes.data : [];
+      const quizzesData = Array.isArray(quizzesRes.data) ? quizzesRes.data : [];
+      const scheduleData = Array.isArray(scheduleRes.data) ? scheduleRes.data : [];
+      setNotes(notesData);
+      setFlashcards(flashcardsData);
+      setQuizzes(quizzesData);
+      setSchedule(scheduleData.filter(s => s.notebook_id === selectedNotebook.notebook_id));
     } catch (error) {
       console.error("Error fetching notebook data:", error);
     }
