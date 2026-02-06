@@ -109,7 +109,7 @@ export default function Habits() {
   const fetchHabits = async () => {
     try {
       const res = await axios.get(`${API}/habits`, { withCredentials: true });
-      setHabits(res.data);
+      setHabits(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       toast.error("Erro ao carregar hábitos");
     }
