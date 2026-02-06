@@ -204,7 +204,7 @@ export default function Profile() {
                   </div>
                   <Progress value={progress} className="h-2" />
                   <p className="text-xs text-[#A1A1AA] mt-2">
-                    Faltam {nextRank.xp - user.xp} XP para o próximo rank
+                    Faltam {nextRank.xp - (user.xp ?? 0)} XP para o próximo rank
                   </p>
                 </div>
               )}
