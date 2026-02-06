@@ -1340,14 +1340,6 @@ export default function Studies() {
                     {tasks.filter(t => t.completed_today).length === 0 && (
                       <p className="text-center text-[#A1A1AA] py-8">Nenhuma tarefa concluída hoje</p>
                     )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {tasks.filter(t => t.completed).length === 0 && (
-                      <p className="text-center text-[#A1A1AA] py-8">Nenhuma tarefa concluída ainda</p>
-                    )}
                   </div>
                 </CardContent>
               </Card>
