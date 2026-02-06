@@ -36,7 +36,7 @@ export default function Profile() {
   const fetchAchievements = async () => {
     try {
       const res = await axios.get(`${API}/achievements`, { withCredentials: true });
-      setAchievements(res.data);
+      setAchievements(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar conquistas", error);
     }
