@@ -62,8 +62,8 @@ export default function Notifications() {
           axios.get(`${API}/notification-templates`, { withCredentials: true })
         ]);
         setUser(userRes.data);
-        setNotifications(notifsRes.data);
-        setTemplates(templatesRes.data);
+        setNotifications(Array.isArray(notifsRes.data) ? notifsRes.data : []);
+        setTemplates(Array.isArray(templatesRes.data) ? templatesRes.data : []);
       } catch (error) {
         console.error("Erro ao carregar dados");
       }
