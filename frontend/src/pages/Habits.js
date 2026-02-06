@@ -304,22 +304,22 @@ export default function Habits() {
               </Card>
             ) : (
               habits.map((habit) => {
-                const completedToday = habit.completions.includes(today);
+                const completedToday = (habit.completions || []).includes(today);
                 return (
                   <Card
                     key={habit.habit_id}
                     className="habit-card bg-[#0A0A0A] border-[#27272A] p-4 relative overflow-hidden"
-                    style={{ borderLeftColor: habit.color, borderLeftWidth: '4px' }}
+                    style={{ borderLeftColor: habit.color || '#007AFF', borderLeftWidth: '4px' }}
                   >
                     <div className="flex items-center justify-between gap-4">
                       {/* Left: Name and description */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3">
-                          <h3 className="font-heading text-lg truncate">{habit.name}</h3>
+                          <h3 className="font-heading text-lg truncate">{habit.name || 'Hábito'}</h3>
                           <CompactStreakDisplay 
-                            streak={habit.streak} 
-                            bestStreak={habit.best_streak} 
-                            color={habit.color} 
+                            streak={habit.streak ?? 0} 
+                            bestStreak={habit.best_streak ?? 0} 
+                            color={habit.color || '#007AFF'} 
                           />
                         </div>
                         {habit.description && (
@@ -330,8 +330,8 @@ export default function Habits() {
                       {/* Center: Mini consistency chart */}
                       {showStats && (
                         <MiniConsistencyChart 
-                          completions={habit.completions} 
-                          color={habit.color} 
+                          completions={habit.completions || []} 
+                          color={habit.color || '#007AFF'} 
                         />
                       )}
                       
