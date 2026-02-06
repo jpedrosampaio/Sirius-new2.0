@@ -451,7 +451,7 @@ export default function Finance() {
                     cx="50%"
                     cy="50%"
                     outerRadius={120}
-                    label={(entry) => `${entry.name}: R$ ${entry.value.toFixed(0)}`}
+                    label={(entry) => `${entry.name}: R$ ${(entry.value ?? 0).toFixed(0)}`}
                     labelLine={true}
                   >
                     {chartData.map((entry, index) => (
