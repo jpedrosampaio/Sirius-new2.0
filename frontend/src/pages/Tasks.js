@@ -203,7 +203,9 @@ export default function Tasks() {
               {tasks.length === 0 ? (
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
                   <CheckSquare className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
-                  <p className="text-[#A1A1AA]">Nenhuma tarefa {recurrenceLabels[activeTab].toLowerCase()}</p>
+                  <p className="text-[#A1A1AA]">
+                    {activeTab === "all" ? "Nenhuma tarefa para esta data" : `Nenhuma tarefa ${recurrenceLabels[activeTab].toLowerCase()}`}
+                  </p>
                 </Card>
               ) : (
                 tasks.map((task) => (
@@ -235,6 +237,12 @@ export default function Tasks() {
                             <span className="text-xs uppercase text-[#A1A1AA] tracking-wider">
                               {task.priority === 'low' ? 'Baixa' : task.priority === 'medium' ? 'Média' : 'Alta'}
                             </span>
+                            {task.recurrence && (
+                              <span className="text-xs flex items-center gap-1 text-[#A1A1AA]">
+                                <Repeat className="w-3 h-3" />
+                                {task.recurrence === 'once' ? 'Única' : task.recurrence === 'daily' ? 'Diária' : task.recurrence === 'weekly' ? 'Semanal' : 'Mensal'}
+                              </span>
+                            )}
                             <span className="font-data text-xs text-[#007AFF]">+{task.xp_reward} XP</span>
                           </div>
                         </div>
