@@ -128,7 +128,7 @@ export default function Finance() {
   const fetchBudgets = async () => {
     try {
       const res = await axios.get(`${API}/budgets?month=${selectedMonth}`, { withCredentials: true });
-      setBudgets(res.data);
+      setBudgets(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar orçamentos");
     }
