@@ -98,11 +98,13 @@ export default function Finance() {
     fetchBudgets();
     fetchStats();
     fetchCreditCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
   useEffect(() => {
     fetchProjections();
     fetchProjectionSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectionMonth]);
 
   const fetchUser = async () => {
