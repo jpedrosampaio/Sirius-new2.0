@@ -1656,8 +1656,9 @@ async def complete_challenge(request: Request, challenge_id: str, session_token:
     
     return {"message": "Challenge completed", "xp_earned": challenge['xp_reward'], "new_xp": new_xp, "new_rank": new_rank}
 
-@api_router.get("/notifications")
-async def get_notifications(request: Request, session_token: Optional[str] = Cookie(None)):
+@api_router.get("/alerts")
+async def get_alerts(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get automatic system alerts (budget, habits, etc.)"""
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
