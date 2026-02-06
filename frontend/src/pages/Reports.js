@@ -159,7 +159,7 @@ export default function Reports() {
                       </div>
                       <div>
                         <p className="text-xs text-[#A1A1AA] mb-1">Despesas</p>
-                        <p className="font-data text-lg text-[#FF3B30]">R$ {report.data.expenses.toFixed(2)}</p>
+                        <p className="font-data text-lg text-[#FF3B30]">R$ {(report.data.expenses ?? 0).toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
