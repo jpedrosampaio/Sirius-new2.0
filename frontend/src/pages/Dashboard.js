@@ -263,7 +263,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[#A1A1AA]">Despesas</span>
-                      <span className="font-data text-[#FF3B30]">-R$ {stats.expenses.toFixed(2)}</span>
+                      <span className="font-data text-[#FF3B30]">-R$ {(stats.expenses ?? 0).toFixed(2)}</span>
                     </div>
                     <div className="border-t border-[#27272A] pt-3 flex justify-between items-center">
                       <span className="font-medium">Saldo</span>
