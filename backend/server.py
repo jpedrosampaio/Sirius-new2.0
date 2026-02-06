@@ -3489,10 +3489,12 @@ class StudyTask(BaseModel):
     title: str
     description: Optional[str] = None
     task_type: str  # reading, exercise, review, project, exam
+    recurrence: str = "once"  # once, daily, weekly, monthly
     deadline: Optional[str] = None
     reminder: Optional[str] = None
     completed: bool = False
     completed_at: Optional[str] = None
+    last_completed_date: Optional[str] = None  # For recurring tasks
     priority: str = "medium"
     estimated_minutes: int = 30
     actual_minutes: int = 0
@@ -3505,6 +3507,7 @@ class StudyTaskCreate(BaseModel):
     title: str
     description: Optional[str] = None
     task_type: str = "reading"
+    recurrence: str = "once"  # once, daily, weekly, monthly
     deadline: Optional[str] = None
     reminder: Optional[str] = None
     priority: str = "medium"
