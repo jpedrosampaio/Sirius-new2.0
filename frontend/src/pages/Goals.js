@@ -258,6 +258,7 @@ export default function Goals() {
           </div>
         </div>
       </div>
+      <MobileNav user={user} />
     </div>
   );
 }
