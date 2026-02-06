@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
+import MobileNav from "@/components/MobileNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -112,7 +113,9 @@ export default function Chat() {
         <div className="p-4 md:p-6 border-b border-[#27272A]">
           <h1 className="font-heading text-2xl md:text-3xl mb-1" data-testid="chat-title">CHAT FINANCEIRO</h1>
           <p className="text-sm text-[#A1A1AA]">Registre transações via texto</p>
-        </div>
+        <MobileNav user={user} />
+    </div>
+  );
 
         <div ref={scrollRef} className="flex-1 p-4 md:p-6 overflow-y-auto">
           <div className="max-w-4xl mx-auto space-y-4">
@@ -139,7 +142,9 @@ export default function Chat() {
                       ) : (
                         <Bot className="w-5 h-5" />
                       )}
-                    </div>
+                    <MobileNav user={user} />
+    </div>
+  );
                     <div className={`p-4 rounded-sm ${
                       msg.role === 'user'
                         ? 'bg-[#007AFF]/20 border border-[#007AFF]/30'
@@ -152,15 +157,27 @@ export default function Chat() {
                           <p>Tipo: {msg.transaction_data.type === 'income' ? 'Receita' : 'Despesa'}</p>
                           <p>Valor: R$ {msg.transaction_data.amount}</p>
                           <p>Categoria: {msg.transaction_data.category}</p>
-                        </div>
+                        <MobileNav user={user} />
+    </div>
+  );
                       )}
-                    </div>
-                  </div>
-                </div>
+                    <MobileNav user={user} />
+    </div>
+  );
+                  <MobileNav user={user} />
+    </div>
+  );
+                <MobileNav user={user} />
+    </div>
+  );
               ))
             )}
-          </div>
-        </div>
+          <MobileNav user={user} />
+    </div>
+  );
+        <MobileNav user={user} />
+    </div>
+  );
 
         <div className="p-4 md:p-6 border-t border-[#27272A] bg-[#0A0A0A]">
           <form onSubmit={handleSend} className="max-w-4xl mx-auto">
@@ -186,10 +203,18 @@ export default function Chat() {
                   <Send className="w-4 h-4" />
                 )}
               </Button>
-            </div>
-          </form>
-        </div>
-      </div>
+            <MobileNav user={user} />
     </div>
+  );
+          </form>
+        <MobileNav user={user} />
+    </div>
+  );
+      <MobileNav user={user} />
+    </div>
+  );
+    <MobileNav user={user} />
+    </div>
+  );
   );
 }
