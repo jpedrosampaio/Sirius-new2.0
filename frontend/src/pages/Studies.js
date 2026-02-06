@@ -127,6 +127,7 @@ export default function Studies() {
     if (user && selectedNotebook) {
       fetchNotebookData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNotebook]);
 
   const fetchUser = async () => {
