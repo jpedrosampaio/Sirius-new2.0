@@ -19,9 +19,9 @@ export default function Tasks() {
   const [user, setUser] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [activeTab, setActiveTab] = useState("daily");
+  const [activeTab, setActiveTab] = useState("all");
   const [open, setOpen] = useState(false);
-  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", recurrence: "daily" });
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", recurrence: "once" });
 
   useEffect(() => {
     fetchUser();
