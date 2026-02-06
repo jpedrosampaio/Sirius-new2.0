@@ -2116,6 +2116,7 @@ async def create_projection(request: Request, projection_data: ProjectionCreate,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.projections.insert_one(projection_doc)
+    projection_doc.pop('_id', None)  # Remove MongoDB ObjectId
     
     # Se for despesa fixa ou com repetições, criar projeções para meses futuros
     if projection_data.is_fixed or (projection_data.repeat_count and projection_data.repeat_count > 1):
