@@ -49,11 +49,11 @@ export default function Dashboard() {
     if (!user) return { name: "Soldado", xp: 100, progress: 0 };
     
     for (let i = 0; i < ranks.length; i++) {
-      if (user.rank === ranks[i].name) {
+      if ((user.rank || 'Recruta') === ranks[i].name) {
         if (i === ranks.length - 1) return { name: "Máximo", xp: ranks[i].xp, progress: 100 };
         const next = ranks[i + 1];
         const current = ranks[i];
-        const progress = ((user.xp - current.xp) / (next.xp - current.xp)) * 100;
+        const progress = (((user.xp ?? 0) - current.xp) / (next.xp - current.xp)) * 100;
         return { name: next.name, xp: next.xp, progress };
       }
     }
