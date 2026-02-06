@@ -636,6 +636,7 @@ async def create_task(request: Request, task_data: TaskCreate, session_token: Op
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.tasks.insert_one(task_doc)
+    task_doc.pop('_id', None)  # Remove MongoDB ObjectId
     task_doc['created_at'] = datetime.fromisoformat(task_doc['created_at'])
     task_doc['date'] = task_data.date
     task_doc['completed'] = False
@@ -727,6 +728,7 @@ async def create_habit(request: Request, habit_data: HabitCreate, session_token:
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.habits.insert_one(habit_doc)
+    habit_doc.pop('_id', None)  # Remove MongoDB ObjectId
     habit_doc['created_at'] = datetime.fromisoformat(habit_doc['created_at'])
     return Habit(**habit_doc)
 
@@ -821,6 +823,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.transactions.insert_one(transaction_doc)
+    transaction_doc.pop('_id', None)  # Remove MongoDB ObjectId
     
     if transaction_data.type == "expense":
         month = transaction_data.date[:7]
