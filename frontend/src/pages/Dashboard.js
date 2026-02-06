@@ -86,7 +86,7 @@ export default function Dashboard() {
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
                   <div className="flex items-center justify-between mb-4">
                     <CheckSquare className="w-8 h-8 text-[#007AFF]" />
-                    <span className="font-data text-2xl">{stats.tasks_completed_today}/{stats.tasks_today}</span>
+                    <span className="font-data text-2xl">{stats.tasks_completed_today ?? 0}/{stats.tasks_today ?? 0}</span>
                   </div>
                   <p className="text-[#A1A1AA] uppercase text-xs tracking-wider">Tarefas Hoje</p>
                 </Card>
