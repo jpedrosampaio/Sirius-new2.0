@@ -37,6 +37,7 @@ export default function Finance() {
   const [openEditProjection, setOpenEditProjection] = useState(false);
   const [selectedProjection, setSelectedProjection] = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 640 : false);
   const [projectionMonth, setProjectionMonth] = useState(() => {
     const next = new Date();
     next.setMonth(next.getMonth() + 1);
