@@ -104,6 +104,12 @@ export default function Finance() {
   }, [selectedMonth]);
 
   useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
     fetchProjections();
     fetchProjectionSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
