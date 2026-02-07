@@ -74,7 +74,7 @@ export default function Dashboard() {
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-20 md:pb-8">
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 md:mb-8 pt-12 md:pt-0">
             <h1 className="font-heading text-2xl md:text-4xl mb-2" data-testid="dashboard-title">CENTRO DE COMANDO</h1>
