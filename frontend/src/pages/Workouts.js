@@ -944,7 +944,7 @@ export default function Workouts() {
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="bg-[#0A0A0A] border border-[#27272A] mb-6">
+            <TabsList className="bg-[#0A0A0A] border border-[#27272A] mb-6 overflow-x-auto flex-nowrap w-full justify-start md:justify-center">
               <TabsTrigger value="log" className="data-[state=active]:bg-[#27272A]">
                 <Activity className="w-4 h-4 mr-2" /> Hoje
               </TabsTrigger>
