@@ -140,9 +140,9 @@ export default function Profile() {
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-64 p-8">
-        <div className="max-w-5xl mx-auto">
-          <h1 className="font-heading text-4xl mb-8" data-testid="profile-title">PERFIL DO OPERADOR</h1>
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
+        <div className="max-w-5xl mx-auto pt-14 md:pt-0">
+          <h1 className="font-heading text-3xl md:text-4xl mb-8" data-testid="profile-title">PERFIL DO OPERADOR</h1>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             <Card className="bg-[#0A0A0A] border-[#27272A] p-6 lg:col-span-2">
