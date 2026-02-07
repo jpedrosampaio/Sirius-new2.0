@@ -475,7 +475,7 @@ export default function Finance() {
           </div>
 
           <Tabs defaultValue="transactions" className="w-full">
-            <TabsList className="bg-[#0A0A0A] border-[#27272A]">
+            <TabsList className="bg-[#0A0A0A] border-[#27272A] overflow-x-auto flex-nowrap w-full justify-start md:justify-center">
               <TabsTrigger value="transactions">Transações</TabsTrigger>
               <TabsTrigger value="budgets">Orçamentos</TabsTrigger>
               <TabsTrigger value="cards">Cartões</TabsTrigger>
