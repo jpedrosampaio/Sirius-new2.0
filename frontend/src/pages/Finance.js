@@ -448,9 +448,9 @@ export default function Finance() {
           </div>
 
           {chartData.length > 0 && (
-            <Card className="bg-[#0A0A0A] border-[#27272A] p-6 mb-8">
+            <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6 mb-8">
               <h3 className="font-heading text-xl mb-4 uppercase">Gastos por Categoria</h3>
-              <ResponsiveContainer width="100%" height={350}>
+              <ResponsiveContainer width="100%" height={isMobile ? 250 : 350}>
                 <PieChart>
                   <Pie
                     data={chartData}
@@ -458,9 +458,9 @@ export default function Finance() {
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    outerRadius={120}
-                    label={(entry) => `${entry.name}: R$ ${(entry.value ?? 0).toFixed(0)}`}
-                    labelLine={true}
+                    outerRadius={isMobile ? 65 : 120}
+                    label={isMobile ? (entry) => `${entry.name}` : (entry) => `${entry.name}: R$ ${(entry.value ?? 0).toFixed(0)}`}
+                    labelLine={!isMobile}
                   >
                     {chartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
