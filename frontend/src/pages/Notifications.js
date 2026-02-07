@@ -259,7 +259,7 @@ export default function Notifications() {
           )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="bg-[#0A0A0A] border border-[#27272A] mb-6">
+            <TabsList className="bg-[#0A0A0A] border border-[#27272A] mb-6 overflow-x-auto flex-nowrap w-full justify-start md:justify-center">
               <TabsTrigger value="active" className="data-[state=active]:bg-[#27272A]"><Bell className="w-4 h-4 mr-2" /> Ativos</TabsTrigger>
               <TabsTrigger value="templates" className="data-[state=active]:bg-[#27272A]"><Settings className="w-4 h-4 mr-2" /> Templates</TabsTrigger>
             </TabsList>
