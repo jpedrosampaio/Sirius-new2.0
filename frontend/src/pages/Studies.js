@@ -561,7 +561,7 @@ export default function Studies() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-[#121212] border border-[#27272A] flex-wrap">
+          <TabsList className="bg-[#121212] border border-[#27272A] overflow-x-auto flex-nowrap w-full justify-start md:justify-center">
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="notebooks">Cadernos</TabsTrigger>
             <TabsTrigger value="tasks">Tarefas</TabsTrigger>
