@@ -145,10 +145,10 @@ export default function Profile() {
           <h1 className="font-heading text-3xl md:text-4xl mb-8" data-testid="profile-title">PERFIL DO OPERADOR</h1>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <Card className="bg-[#0A0A0A] border-[#27272A] p-6 lg:col-span-2">
-              <div className="flex items-start space-x-6">
-                <div className="relative group">
-                  <Avatar className="w-24 h-24 border-2 border-[#007AFF]">
+            <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6 lg:col-span-2">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
+                <div className="relative group flex-shrink-0">
+                  <Avatar className="w-20 h-20 sm:w-24 sm:h-24 border-2 border-[#007AFF]">
                     <AvatarImage src={user.picture} />
                     <AvatarFallback className="bg-[#007AFF] text-white font-heading text-2xl">
                       {(user.name || 'U').charAt(0).toUpperCase()}
@@ -185,14 +185,14 @@ export default function Profile() {
                     </button>
                   )}
                 </div>
-                <div className="flex-1">
-                  <h2 className="font-heading text-3xl mb-2">{user.name || 'Usuário'}</h2>
-                  <p className="text-[#A1A1AA] mb-4">{user.email || ''}</p>
-                  <div className="flex items-center space-x-4">
-                    <div className="rank-badge bg-[#007AFF] text-white px-3 py-1 rounded-sm">
+                <div className="flex-1 text-center sm:text-left min-w-0">
+                  <h2 className="font-heading text-2xl sm:text-3xl mb-2 truncate">{user.name || 'Usuário'}</h2>
+                  <p className="text-[#A1A1AA] mb-4 text-sm truncate">{user.email || ''}</p>
+                  <div className="flex items-center justify-center sm:justify-start space-x-4">
+                    <div className="rank-badge bg-[#007AFF] text-white px-3 py-1 rounded-sm text-sm">
                       {user.rank || 'Recruta'}
                     </div>
-                    <div className="font-data text-2xl">{user.xp ?? 0} XP</div>
+                    <div className="font-data text-xl sm:text-2xl">{user.xp ?? 0} XP</div>
                   </div>
                 </div>
               </div>
