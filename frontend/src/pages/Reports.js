@@ -59,10 +59,10 @@ export default function Reports() {
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-64 p-8">
-        <div className="max-w-6xl mx-auto">
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
+        <div className="max-w-6xl mx-auto pt-14 md:pt-0">
           <div className="mb-8">
-            <h1 className="font-heading text-4xl mb-2" data-testid="reports-title">RELATÓRIOS INTELIGENTES</h1>
+            <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="reports-title">RELATÓRIOS INTELIGENTES</h1>
             <p className="text-[#A1A1AA]">Análises e insights com IA</p>
           </div>
 
