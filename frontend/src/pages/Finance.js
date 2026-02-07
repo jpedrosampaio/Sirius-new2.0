@@ -967,7 +967,7 @@ export default function Finance() {
 
               {/* Summary Cards */}
               {projectionSummary && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[#A1A1AA] uppercase text-xs">Receita Estimada</span>
