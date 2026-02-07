@@ -151,9 +151,9 @@ export default function Dashboard() {
                 </Card>
 
                 {/* Card de Nutrição */}
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center space-x-4 mb-4">
-                    <Utensils className="w-10 h-10 text-[#4ECDC4]" />
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center space-x-3 md:space-x-4 mb-3 md:mb-4">
+                    <Utensils className="w-8 h-8 md:w-10 md:h-10 text-[#4ECDC4]" />
                     <div>
                       <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Nutrição</p>
                       <p className="font-heading text-2xl">Hoje</p>
