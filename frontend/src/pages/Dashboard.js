@@ -249,12 +249,12 @@ export default function Dashboard() {
                   </div>
                 </Card>
 
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center space-x-4 mb-4">
-                    <Zap className="w-10 h-10 text-[#007AFF]" />
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center space-x-3 md:space-x-4 mb-3 md:mb-4">
+                    <Zap className="w-8 h-8 md:w-10 md:h-10 text-[#007AFF]" />
                     <div>
                       <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Resumo Financeiro</p>
-                      <p className="font-heading text-2xl">Mês Atual</p>
+                      <p className="font-heading text-xl md:text-2xl">Mês Atual</p>
                     </div>
                   </div>
                   <div className="space-y-3">
