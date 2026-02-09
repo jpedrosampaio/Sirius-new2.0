@@ -259,16 +259,16 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA]">Receitas</span>
-                      <span className="font-data text-[#39FF14]">+R$ {(stats.income ?? 0).toFixed(2)}</span>
+                      <span className="text-[#A1A1AA] text-sm">Receitas</span>
+                      <span className="font-data text-sm text-[#39FF14]">+R$ {(stats.income ?? 0).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA]">Despesas</span>
-                      <span className="font-data text-[#FF3B30]">-R$ {(stats.expenses ?? 0).toFixed(2)}</span>
+                      <span className="text-[#A1A1AA] text-sm">Despesas</span>
+                      <span className="font-data text-sm text-[#FF3B30]">-R$ {(stats.expenses ?? 0).toFixed(2)}</span>
                     </div>
                     <div className="border-t border-[#27272A] pt-3 flex justify-between items-center">
-                      <span className="font-medium">Saldo</span>
-                      <span className={`font-data text-lg ${(stats.balance ?? 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                      <span className="font-medium text-sm">Saldo</span>
+                      <span className={`font-data text-base md:text-lg ${(stats.balance ?? 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
                         R$ {(stats.balance ?? 0).toFixed(2)}
                       </span>
                     </div>
