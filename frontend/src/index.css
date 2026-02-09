@@ -94,6 +94,12 @@ html {
     }
 }
 
+/* Scrollable tabs - prevent tab triggers from shrinking */
+[role="tablist"] > [role="tab"] {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 .font-heading {
     font-family: 'Barlow Condensed', sans-serif;
     font-weight: 700;
