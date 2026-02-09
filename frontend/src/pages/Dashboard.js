@@ -227,16 +227,16 @@ export default function Dashboard() {
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-center space-x-4 mb-4">
-                    <Award className="w-10 h-10 text-[#FFD700]" />
-                    <div className="flex-1">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 mb-8">
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center space-x-3 md:space-x-4 mb-3 md:mb-4">
+                    <Award className="w-8 h-8 md:w-10 md:h-10 text-[#FFD700]" />
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Rank Atual</p>
-                      <p className="font-heading text-3xl">{user?.rank || 'Recruta'}</p>
+                      <p className="font-heading text-2xl md:text-3xl">{user?.rank || 'Recruta'}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-data text-2xl">{user?.xp ?? 0}</p>
+                    <div className="text-right flex-shrink-0">
+                      <p className="font-data text-xl md:text-2xl">{user?.xp ?? 0}</p>
                       <p className="text-xs text-[#A1A1AA]">XP</p>
                     </div>
                   </div>
