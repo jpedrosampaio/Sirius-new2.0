@@ -205,24 +205,24 @@ export default function Habits() {
       <Sidebar user={user} />
       <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-8 pt-14 md:pt-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-8 pt-14 md:pt-0 gap-3">
             <div>
-              <h1 className="font-heading text-3xl md:text-4xl mb-2" data-testid="habits-title">HÁBITOS</h1>
-              <p className="text-[#A1A1AA]">Construa sequências inquebráveis</p>
+              <h1 className="font-heading text-3xl md:text-4xl mb-1 md:mb-2" data-testid="habits-title">HÁBITOS</h1>
+              <p className="text-[#A1A1AA] text-sm">Construa sequências inquebráveis</p>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <Button
                 variant="outline"
                 onClick={() => setShowStats(!showStats)}
-                className="border-[#27272A] text-[#A1A1AA] hover:text-white uppercase text-xs tracking-widest"
+                className="border-[#27272A] text-[#A1A1AA] hover:text-white uppercase text-[10px] sm:text-xs tracking-widest"
               >
-                <BarChart3 className="w-4 h-4 mr-2" />
+                <BarChart3 className="w-4 h-4 mr-1 sm:mr-2" />
                 {showStats ? 'Ocultar Stats' : 'Mostrar Stats'}
               </Button>
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
-                  <Button data-testid="habits-create-btn" className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest shadow-[0_0_10px_rgba(0,122,255,0.3)]">
-                    <Plus className="w-4 h-4 mr-2" />
+                  <Button data-testid="habits-create-btn" className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-[10px] sm:text-xs tracking-widest shadow-[0_0_10px_rgba(0,122,255,0.3)]">
+                    <Plus className="w-4 h-4 mr-1 sm:mr-2" />
                     Novo Hábito
                   </Button>
                 </DialogTrigger>
