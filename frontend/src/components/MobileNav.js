@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Target, Dumbbell, Apple, BookOpen, Bell, FileText, User, LogOut } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { clearToken } from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -17,10 +18,12 @@ export default function MobileNav({ user }) {
   const handleLogout = async () => {
     try {
       await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      clearToken();
       toast.success("Logout realizado");
       navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
+      clearToken();
       navigate('/login');
     }
   };
