@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
+import { clearToken } from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -53,10 +54,12 @@ export default function Sidebar({ user }) {
   const handleLogout = async () => {
     try {
       await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      clearToken();
       toast.success("Logout realizado");
       navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
+      clearToken();
       navigate('/login');
     }
   };
