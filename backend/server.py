@@ -1085,11 +1085,12 @@ Orçamentos Definidos: {len(budgets)}"""
         if is_help:
             ai_response = """🤖 **Olá! Sou o assistente financeiro do Sirius. Posso ajudar com:**
 
-💰 **Registrar Transações:**
+💰 **Registrar Transações (aceito várias de uma vez!):**
 - "Recebi 5000 de salário"
 - "Gastei 150 no supermercado"
-- "Paguei 200 de luz"
-- "Entrou 300 de freelance"
+- "Gastei 50 no mercado, 30 de uber, 200 de luz e 100 de internet"
+- "Recebi 3000 de salário e 500 de freelance"
+- "Paguei 200 de luz, 150 de água e 80 de internet"
 
 📊 **Relatórios e Análises:**
 - "Como estão minhas finanças?"
@@ -1127,17 +1128,102 @@ Orçamentos Definidos: {len(budgets)}"""
                         ai_response += f" | {t['description']}"
                     ai_response += "\n"
         
-        # INCOME TRANSACTION
-        elif is_income and has_amount:
-            prompt = f'''Extraia os dados da RECEITA/ENTRADA financeira desta mensagem.
+        # MIXED TRANSACTIONS (both income and expense in same message)
+        elif is_income and is_expense and has_amount:
+            prompt = f'''Extraia TODAS as transações financeiras desta mensagem. A mensagem contém receitas E despesas misturadas.
 
 Mensagem: "{content}"
 
-Responda APENAS com JSON válido:
-{{"type": "income", "amount": 1000.0, "category": "salário", "description": "descrição curta"}}
+Responda APENAS com um JSON array válido. Cada item deve ter o campo "type" como "income" ou "expense":
+[{{"type": "income", "amount": 5000.0, "category": "salário", "description": "salário"}}, {{"type": "expense", "amount": 50.0, "category": "alimentação", "description": "mercado"}}]
 
 Categorias para receita: salário, freelance, investimentos, vendas, reembolso, outros
-Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
+Categorias para despesa: alimentação, transporte, moradia, saúde, educação, lazer, outros
+Extraia o valor numérico exato de CADA transação. Responda SOMENTE com o JSON array.'''
+            
+            response = await call_llm(prompt, f"mixed_{user.user_id}")
+            
+            try:
+                clean_response = response.strip()
+                if "```" in clean_response:
+                    clean_response = clean_response.split("```")[1].replace("json", "").strip()
+                start_idx = clean_response.find('[')
+                end_idx = clean_response.rfind(']') + 1
+                transactions_list = []
+                if start_idx != -1 and end_idx > start_idx:
+                    transactions_list = json.loads(clean_response[start_idx:end_idx])
+                else:
+                    start_idx = clean_response.find('{')
+                    end_idx = clean_response.rfind('}') + 1
+                    if start_idx != -1 and end_idx > start_idx:
+                        single = json.loads(clean_response[start_idx:end_idx])
+                        transactions_list = [single]
+                
+                if not isinstance(transactions_list, list):
+                    transactions_list = [transactions_list]
+                
+                registered = []
+                running_balance = balance
+                for td in transactions_list:
+                    amt = float(td.get("amount", 0))
+                    t_type = td.get("type", "expense")
+                    if t_type not in ["income", "expense"]:
+                        t_type = "expense"
+                    if amt > 0:
+                        transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
+                        transaction_doc = {
+                            "transaction_id": transaction_id,
+                            "user_id": user.user_id,
+                            "type": t_type,
+                            "amount": amt,
+                            "category": td.get("category", "outros"),
+                            "description": td.get("description", ""),
+                            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                            "created_at": datetime.now(timezone.utc).isoformat()
+                        }
+                        await db.transactions.insert_one(transaction_doc)
+                        if t_type == "income":
+                            running_balance += amt
+                        else:
+                            running_balance -= amt
+                        registered.append({**td, "type": t_type})
+                
+                if registered:
+                    action_taken = registered
+                    total_income_added = sum(float(t['amount']) for t in registered if t['type'] == 'income')
+                    total_expense_added = sum(float(t['amount']) for t in registered if t['type'] == 'expense')
+                    
+                    ai_response = f"""✅ **{len(registered)} Transações Registradas!**
+
+"""
+                    for i, td in enumerate(registered, 1):
+                        emoji = "💰" if td['type'] == 'income' else "🔴"
+                        tipo = "Receita" if td['type'] == 'income' else "Despesa"
+                        ai_response += f"**{i}.** {emoji} R$ {float(td['amount']):.2f} | {tipo} | {td.get('category', 'outros')} | {td.get('description', '-')}\n"
+                    
+                    ai_response += f"\n💰 **Total Receitas:** R$ {total_income_added:.2f}"
+                    ai_response += f"\n💸 **Total Despesas:** R$ {total_expense_added:.2f}"
+                    ai_response += f"\n📊 **Novo Saldo:** R$ {running_balance:.2f}"
+                else:
+                    ai_response = "❌ Não consegui processar as transações. Tente separar receitas e despesas."
+            except Exception as e:
+                logging.error(f"Mixed transaction parse error: {e}")
+                ai_response = "❌ Não consegui processar as transações. Tente novamente."
+        
+        # INCOME TRANSACTION (supports multiple in one message)
+        elif is_income and has_amount:
+            prompt = f'''Extraia TODAS as receitas/entradas financeiras desta mensagem. A mensagem pode conter UMA ou VÁRIAS receitas.
+
+Mensagem: "{content}"
+
+Responda APENAS com um JSON array válido. Mesmo que seja apenas uma receita, retorne como array:
+[{{"type": "income", "amount": 1000.0, "category": "salário", "description": "descrição curta"}}]
+
+Exemplo com múltiplas receitas:
+[{{"type": "income", "amount": 5000.0, "category": "salário", "description": "salário mensal"}}, {{"type": "income", "amount": 500.0, "category": "freelance", "description": "freelance design"}}]
+
+Categorias para receita: salário, freelance, investimentos, vendas, reembolso, outros
+Extraia o valor numérico exato de CADA receita mencionada. Responda SOMENTE com o JSON array.'''
             
             response = await call_llm(prompt, f"income_{user.user_id}")
             
@@ -1145,48 +1231,85 @@ Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
                 clean_response = response.strip()
                 if "```" in clean_response:
                     clean_response = clean_response.split("```")[1].replace("json", "").strip()
-                start_idx = clean_response.find('{')
-                end_idx = clean_response.rfind('}') + 1
+                # Try to parse as array first
+                start_idx = clean_response.find('[')
+                end_idx = clean_response.rfind(']') + 1
+                transactions_list = []
                 if start_idx != -1 and end_idx > start_idx:
-                    transaction_data = json.loads(clean_response[start_idx:end_idx])
-                    
-                    if float(transaction_data.get("amount", 0)) > 0:
+                    transactions_list = json.loads(clean_response[start_idx:end_idx])
+                else:
+                    # Fallback: try single object
+                    start_idx = clean_response.find('{')
+                    end_idx = clean_response.rfind('}') + 1
+                    if start_idx != -1 and end_idx > start_idx:
+                        single = json.loads(clean_response[start_idx:end_idx])
+                        transactions_list = [single]
+                
+                if not isinstance(transactions_list, list):
+                    transactions_list = [transactions_list]
+                
+                registered = []
+                running_balance = balance
+                for td in transactions_list:
+                    amt = float(td.get("amount", 0))
+                    if amt > 0:
                         transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
                         transaction_doc = {
                             "transaction_id": transaction_id,
                             "user_id": user.user_id,
                             "type": "income",
-                            "amount": float(transaction_data["amount"]),
-                            "category": transaction_data.get("category", "outros"),
-                            "description": transaction_data.get("description", ""),
+                            "amount": amt,
+                            "category": td.get("category", "outros"),
+                            "description": td.get("description", ""),
                             "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                             "created_at": datetime.now(timezone.utc).isoformat()
                         }
                         await db.transactions.insert_one(transaction_doc)
-                        action_taken = transaction_data
-                        
-                        new_balance = balance + float(transaction_data["amount"])
+                        running_balance += amt
+                        registered.append(td)
+                
+                if registered:
+                    action_taken = registered if len(registered) > 1 else registered[0]
+                    if len(registered) == 1:
+                        td = registered[0]
                         ai_response = f"""✅ **Receita Registrada!**
 
-💰 **Valor:** R$ {float(transaction_data['amount']):.2f}
-📁 **Categoria:** {transaction_data.get('category', 'outros')}
-📝 **Descrição:** {transaction_data.get('description', '-')}
+💰 **Valor:** R$ {float(td['amount']):.2f}
+📁 **Categoria:** {td.get('category', 'outros')}
+📝 **Descrição:** {td.get('description', '-')}
 
-📊 **Novo Saldo:** R$ {new_balance:.2f}"""
-            except Exception:
+📊 **Novo Saldo:** R$ {running_balance:.2f}"""
+                    else:
+                        total_added = sum(float(t['amount']) for t in registered)
+                        ai_response = f"""✅ **{len(registered)} Receitas Registradas!**
+
+"""
+                        for i, td in enumerate(registered, 1):
+                            ai_response += f"**{i}.** 💰 R$ {float(td['amount']):.2f} | {td.get('category', 'outros')} | {td.get('description', '-')}\n"
+                        
+                        ai_response += f"""
+💰 **Total Adicionado:** R$ {total_added:.2f}
+📊 **Novo Saldo:** R$ {running_balance:.2f}"""
+                else:
+                    ai_response = "❌ Não consegui processar a receita. Tente: 'Recebi 1000 de salário'"
+            except Exception as e:
+                logging.error(f"Income parse error: {e}")
                 ai_response = "❌ Não consegui processar a receita. Tente: 'Recebi 1000 de salário'"
         
-        # EXPENSE TRANSACTION
+        # EXPENSE TRANSACTION (supports multiple in one message)
         elif is_expense and has_amount:
-            prompt = f'''Extraia os dados da DESPESA/GASTO financeiro desta mensagem.
+            prompt = f'''Extraia TODAS as despesas/gastos financeiros desta mensagem. A mensagem pode conter UMA ou VÁRIAS despesas.
 
 Mensagem: "{content}"
 
-Responda APENAS com JSON válido:
-{{"type": "expense", "amount": 100.0, "category": "alimentação", "description": "descrição curta"}}
+Responda APENAS com um JSON array válido. Mesmo que seja apenas uma despesa, retorne como array:
+[{{"type": "expense", "amount": 100.0, "category": "alimentação", "description": "descrição curta"}}]
+
+Exemplo com múltiplas despesas:
+[{{"type": "expense", "amount": 50.0, "category": "alimentação", "description": "supermercado"}}, {{"type": "expense", "amount": 30.0, "category": "transporte", "description": "uber"}}, {{"type": "expense", "amount": 200.0, "category": "moradia", "description": "conta de luz"}}]
 
 Categorias para despesa: alimentação, transporte, moradia, saúde, educação, lazer, outros
-Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
+Extraia o valor numérico exato de CADA despesa mencionada. Responda SOMENTE com o JSON array.'''
             
             response = await call_llm(prompt, f"expense_{user.user_id}")
             
@@ -1194,47 +1317,89 @@ Extraia o valor numérico exato. Responda SOMENTE com o JSON.'''
                 clean_response = response.strip()
                 if "```" in clean_response:
                     clean_response = clean_response.split("```")[1].replace("json", "").strip()
-                start_idx = clean_response.find('{')
-                end_idx = clean_response.rfind('}') + 1
+                # Try to parse as array first
+                start_idx = clean_response.find('[')
+                end_idx = clean_response.rfind(']') + 1
+                transactions_list = []
                 if start_idx != -1 and end_idx > start_idx:
-                    transaction_data = json.loads(clean_response[start_idx:end_idx])
-                    
-                    if float(transaction_data.get("amount", 0)) > 0:
+                    transactions_list = json.loads(clean_response[start_idx:end_idx])
+                else:
+                    # Fallback: try single object
+                    start_idx = clean_response.find('{')
+                    end_idx = clean_response.rfind('}') + 1
+                    if start_idx != -1 and end_idx > start_idx:
+                        single = json.loads(clean_response[start_idx:end_idx])
+                        transactions_list = [single]
+                
+                if not isinstance(transactions_list, list):
+                    transactions_list = [transactions_list]
+                
+                registered = []
+                running_balance = balance
+                budget_alerts = []
+                for td in transactions_list:
+                    amt = float(td.get("amount", 0))
+                    if amt > 0:
                         transaction_id = f"trans_{uuid.uuid4().hex[:12]}"
                         transaction_doc = {
                             "transaction_id": transaction_id,
                             "user_id": user.user_id,
                             "type": "expense",
-                            "amount": float(transaction_data["amount"]),
-                            "category": transaction_data.get("category", "outros"),
-                            "description": transaction_data.get("description", ""),
+                            "amount": amt,
+                            "category": td.get("category", "outros"),
+                            "description": td.get("description", ""),
                             "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
                             "created_at": datetime.now(timezone.utc).isoformat()
                         }
                         await db.transactions.insert_one(transaction_doc)
-                        action_taken = transaction_data
+                        running_balance -= amt
+                        registered.append(td)
                         
-                        # Check budget
-                        cat = transaction_data.get("category", "outros")
-                        budget_alert = ""
+                        # Check budget for this category
+                        cat = td.get("category", "outros")
                         for b in budgets:
                             if b['category'] == cat:
-                                new_spent = expense_by_category.get(cat, 0) + float(transaction_data["amount"])
+                                new_spent = expense_by_category.get(cat, 0) + sum(float(r['amount']) for r in registered if r.get('category') == cat)
                                 pct = (new_spent / b['limit']) * 100
                                 if pct >= 100:
-                                    budget_alert = f"\n\n⚠️ **ALERTA:** Orçamento de {cat} estourado! ({pct:.0f}%)"
+                                    alert = f"⚠️ **ALERTA:** Orçamento de {cat} estourado! ({pct:.0f}%)"
+                                    if alert not in budget_alerts:
+                                        budget_alerts.append(alert)
                                 elif pct >= 80:
-                                    budget_alert = f"\n\n⚠️ **Atenção:** {pct:.0f}% do orçamento de {cat} usado"
-                        
-                        new_balance = balance - float(transaction_data["amount"])
+                                    alert = f"⚠️ **Atenção:** {pct:.0f}% do orçamento de {cat} usado"
+                                    if alert not in budget_alerts:
+                                        budget_alerts.append(alert)
+                
+                if registered:
+                    action_taken = registered if len(registered) > 1 else registered[0]
+                    budget_alert_text = "\n".join(budget_alerts) if budget_alerts else ""
+                    if budget_alert_text:
+                        budget_alert_text = "\n\n" + budget_alert_text
+                    
+                    if len(registered) == 1:
+                        td = registered[0]
                         ai_response = f"""✅ **Despesa Registrada!**
 
-🔴 **Valor:** R$ {float(transaction_data['amount']):.2f}
-📁 **Categoria:** {transaction_data.get('category', 'outros')}
-📝 **Descrição:** {transaction_data.get('description', '-')}
+🔴 **Valor:** R$ {float(td['amount']):.2f}
+📁 **Categoria:** {td.get('category', 'outros')}
+📝 **Descrição:** {td.get('description', '-')}
 
-📊 **Novo Saldo:** R$ {new_balance:.2f}{budget_alert}"""
-            except Exception:
+📊 **Novo Saldo:** R$ {running_balance:.2f}{budget_alert_text}"""
+                    else:
+                        total_spent = sum(float(t['amount']) for t in registered)
+                        ai_response = f"""✅ **{len(registered)} Despesas Registradas!**
+
+"""
+                        for i, td in enumerate(registered, 1):
+                            ai_response += f"**{i}.** 🔴 R$ {float(td['amount']):.2f} | {td.get('category', 'outros')} | {td.get('description', '-')}\n"
+                        
+                        ai_response += f"""
+💸 **Total Gasto:** R$ {total_spent:.2f}
+📊 **Novo Saldo:** R$ {running_balance:.2f}{budget_alert_text}"""
+                else:
+                    ai_response = "❌ Não consegui processar a despesa. Tente: 'Gastei 50 no mercado'"
+            except Exception as e:
+                logging.error(f"Expense parse error: {e}")
                 ai_response = "❌ Não consegui processar a despesa. Tente: 'Gastei 50 no mercado'"
         
         # CREATE BUDGET
