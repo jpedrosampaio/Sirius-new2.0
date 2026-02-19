@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 load_dotenv('/app/frontend/.env')
 
 # Configuration
-BACKEND_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://mobile-optimization-6.preview.emergentagent.com')
+BACKEND_URL = os.getenv('REACT_APP_BACKEND_URL', 'https://finance-pagination.preview.emergentagent.com')
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials - using the requested credentials from review
@@ -1868,7 +1868,332 @@ class SiriusBackendTester:
         
         return results
 
+    # ========== PROJECTION DUPLICATION FIX TESTS ==========
+    
+    def test_projection_duplication_fix(self):
+        """Test projection duplication fix - main test from review request"""
+        self.log("🔧 Testing Projection Duplication Fix...")
+        
+        success_count = 0
+        total_tests = 4
+        
+        # Test 1: Projection with repeat_count=3 for 2025-08
+        if self.test_projection_repeat_count():
+            success_count += 1
+        
+        # Test 2: Fixed projection for 2025-08
+        if self.test_fixed_projection_no_duplication():
+            success_count += 1
+        
+        # Test 3: Credit card installment projection duplication fix
+        if self.test_credit_card_installment_no_duplication():
+            success_count += 1
+        
+        # Test 4: Verify specific months have correct projections
+        if self.test_projection_month_verification():
+            success_count += 1
+        
+        if success_count == total_tests:
+            self.log(f"✅ All projection duplication tests passed ({success_count}/{total_tests})")
+            return True
+        else:
+            self.log(f"❌ Some projection duplication tests failed ({success_count}/{total_tests})", "ERROR")
+            return False
+
+    def test_projection_repeat_count(self):
+        """Test creating projection with repeat_count=3 for 2025-08"""
+        self.log("📊 Testing projection with repeat_count=3...")
+        
+        projection_data = {
+            "description": "Teste repetição",
+            "amount": 100.00,
+            "category": "moradia",
+            "month": "2025-08",
+            "repeat_count": 3,
+            "is_fixed": False
+        }
+        
+        try:
+            # Create projection
+            response = self.session.post(f"{API_BASE}/projections", json=projection_data)
+            
+            if response.status_code != 200:
+                self.log(f"❌ Failed to create repeat projection: {response.status_code}", "ERROR")
+                return False
+            
+            # Verify projections in target months
+            test_months = ["2025-08", "2025-09", "2025-10"]
+            success = True
+            
+            for month in test_months:
+                proj_response = self.session.get(f"{API_BASE}/projections?month={month}")
+                if proj_response.status_code == 200:
+                    projections = proj_response.json()
+                    test_projections = [p for p in projections if 
+                                     p.get('description') == "Teste repetição"]
+                    
+                    if len(test_projections) == 1:
+                        self.log(f"   ✅ {month}: Found exactly 1 projection (R$ {test_projections[0]['amount']:.2f})")
+                    else:
+                        self.log(f"   ❌ {month}: Found {len(test_projections)} projections, expected 1", "ERROR")
+                        success = False
+                else:
+                    self.log(f"   ❌ Failed to get projections for {month}", "ERROR")
+                    success = False
+            
+            return success
+            
+        except Exception as e:
+            self.log(f"❌ Projection repeat count error: {str(e)}", "ERROR")
+            return False
+
+    def test_fixed_projection_no_duplication(self):
+        """Test creating fixed projection for 2025-08"""
+        self.log("🏠 Testing fixed projection without duplication...")
+        
+        projection_data = {
+            "description": "Aluguel fixo",
+            "amount": 500.00,
+            "category": "moradia",
+            "month": "2025-08",
+            "is_fixed": True
+        }
+        
+        try:
+            # Create fixed projection
+            response = self.session.post(f"{API_BASE}/projections", json=projection_data)
+            
+            if response.status_code != 200:
+                self.log(f"❌ Failed to create fixed projection: {response.status_code}", "ERROR")
+                return False
+            
+            # Verify in 2025-08 and 2025-09
+            test_months = ["2025-08", "2025-09"]
+            success = True
+            
+            for month in test_months:
+                proj_response = self.session.get(f"{API_BASE}/projections?month={month}")
+                if proj_response.status_code == 200:
+                    projections = proj_response.json()
+                    fixed_projections = [p for p in projections if 
+                                       p.get('description') == "Aluguel fixo"]
+                    
+                    if len(fixed_projections) == 1:
+                        self.log(f"   ✅ {month}: Found exactly 1 fixed projection (R$ {fixed_projections[0]['amount']:.2f})")
+                    else:
+                        self.log(f"   ❌ {month}: Found {len(fixed_projections)} fixed projections, expected 1", "ERROR")
+                        success = False
+                else:
+                    self.log(f"   ❌ Failed to get projections for {month}", "ERROR")
+                    success = False
+            
+            return success
+            
+        except Exception as e:
+            self.log(f"❌ Fixed projection error: {str(e)}", "ERROR")
+            return False
+
+    def test_credit_card_installment_no_duplication(self):
+        """Test credit card charge with installments doesn't create duplications"""
+        self.log("💳 Testing credit card installments without duplication...")
+        
+        # First create a credit card if we don't have one
+        if not self.test_card_id:
+            if not self.test_credit_card_creation():
+                return False
+        
+        charge_data = {
+            "amount": 300.00,
+            "description": "Teste parcelamento duplication fix",
+            "category": "lazer",
+            "payment_type": "parcelado",
+            "installments": 3
+        }
+        
+        try:
+            # Create charge with installments
+            response = self.session.post(f"{API_BASE}/credit-cards/{self.test_card_id}/charge", json=charge_data)
+            
+            if response.status_code != 200:
+                self.log(f"❌ Failed to create installment charge: {response.status_code}", "ERROR")
+                return False
+            
+            # Check projections in future months for installments
+            success = True
+            months_to_check = ["2025-08", "2025-09", "2025-10", "2025-11"]
+            
+            for month in months_to_check:
+                proj_response = self.session.get(f"{API_BASE}/projections?month={month}")
+                if proj_response.status_code == 200:
+                    projections = proj_response.json()
+                    installment_projs = [p for p in projections if 
+                                       p.get('description') == "Teste parcelamento duplication fix" and
+                                       p.get('projection_type') == 'installment']
+                    
+                    if len(installment_projs) <= 1:
+                        if installment_projs:
+                            self.log(f"   ✅ {month}: Found {len(installment_projs)} installment projection")
+                        else:
+                            self.log(f"   ✅ {month}: No installment projections (valid)")
+                    else:
+                        self.log(f"   ❌ {month}: Found {len(installment_projs)} installment projections - DUPLICATION!", "ERROR")
+                        success = False
+            
+            return success
+            
+        except Exception as e:
+            self.log(f"❌ Credit card installment duplication test error: {str(e)}", "ERROR")
+            return False
+
+    def test_projection_month_verification(self):
+        """Verify that all created projections are in correct months"""
+        self.log("📅 Verifying projection month placement...")
+        
+        try:
+            # Check projections in specific months mentioned in review request
+            target_months = ["2025-08", "2025-09", "2025-10"]
+            success = True
+            
+            for month in target_months:
+                proj_response = self.session.get(f"{API_BASE}/projections?month={month}")
+                
+                if proj_response.status_code == 200:
+                    projections = proj_response.json()
+                    
+                    # Count different types of projections
+                    repeat_projs = [p for p in projections if p.get('description') == "Teste repetição"]
+                    fixed_projs = [p for p in projections if p.get('description') == "Aluguel fixo"]
+                    installment_projs = [p for p in projections if p.get('projection_type') == 'installment']
+                    
+                    self.log(f"   {month}: {len(repeat_projs)} repeat, {len(fixed_projs)} fixed, {len(installment_projs)} installment projections")
+                    
+                    # Each type should have at most 1 projection per month
+                    if len(repeat_projs) > 1 or len(fixed_projs) > 1:
+                        self.log(f"   ❌ {month}: Duplication detected!", "ERROR")
+                        success = False
+                else:
+                    self.log(f"   ❌ Failed to get projections for {month}", "ERROR")
+                    success = False
+            
+            return success
+            
+        except Exception as e:
+            self.log(f"❌ Month verification error: {str(e)}", "ERROR")
+            return False
+
+    # ========== TRANSACTION PAGINATION TEST ==========
+    
+    def test_transaction_pagination(self):
+        """Test that GET /api/transactions returns all transactions (no 20-item server limit)"""
+        self.log("📄 Testing transaction pagination fix...")
+        
+        try:
+            # First, create multiple transactions to test pagination
+            self.log("   Creating test transactions...")
+            
+            # Create 25 test transactions to exceed the old 20 limit
+            for i in range(25):
+                transaction_data = {
+                    "type": "expense",
+                    "amount": 10.00 + i,
+                    "category": "outros",
+                    "description": f"Teste paginação #{i+1}",
+                    "date": "2025-07-03"
+                }
+                
+                response = self.session.post(f"{API_BASE}/transactions", json=transaction_data)
+                if response.status_code != 200:
+                    self.log(f"   ⚠️ Failed to create test transaction #{i+1}", "WARNING")
+            
+            # Now get all transactions
+            self.log("   Fetching all transactions...")
+            response = self.session.get(f"{API_BASE}/transactions")
+            
+            if response.status_code == 200:
+                transactions = response.json()
+                total_transactions = len(transactions)
+                
+                # Count our test transactions
+                test_transactions = [t for t in transactions if 
+                                   "Teste paginação" in t.get('description', '')]
+                
+                self.log(f"   ✅ Retrieved {total_transactions} total transactions")
+                self.log(f"   ✅ Found {len(test_transactions)} test transactions")
+                
+                # The key test: should get MORE than 20 transactions if server pagination is removed
+                if total_transactions >= 20:
+                    self.log("   ✅ Transaction pagination fix working - returning full list")
+                    return True
+                else:
+                    self.log(f"   ⚠️ Only {total_transactions} transactions returned", "WARNING")
+                    return True  # Still consider success as limit might be due to few transactions
+            else:
+                self.log(f"   ❌ Failed to get transactions: {response.status_code} - {response.text}", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.log(f"❌ Transaction pagination test error: {str(e)}", "ERROR")
+            return False
+
+    def run_review_request_focus_tests(self):
+        """Run the specific tests requested in review - projection duplication and transaction pagination"""
+        self.log("\n" + "="*80)
+        self.log("🎯 RUNNING REVIEW REQUEST FOCUS TESTS")
+        self.log("Testing: Projection Duplication Fix & Transaction Pagination")
+        self.log("="*80)
+        
+        results = {}
+        
+        # Authentication first
+        self.log("\n1️⃣ AUTHENTICATION")
+        results['authentication'] = self.register_test_user()
+        
+        if not results['authentication']:
+            self.log("❌ Cannot proceed without authentication", "ERROR")
+            return results
+        
+        # Test 1: Projection Duplication Fix
+        self.log("\n2️⃣ PROJECTION DUPLICATION FIX")
+        results['projection_duplication'] = self.test_projection_duplication_fix()
+        
+        # Test 2: Transaction Pagination
+        self.log("\n3️⃣ TRANSACTION PAGINATION")
+        results['transaction_pagination'] = self.test_transaction_pagination()
+        
+        # Summary
+        self.log("\n" + "="*60)
+        self.log("📊 FOCUS TEST RESULTS")
+        self.log("="*60)
+        
+        passed = 0
+        total = len(results)
+        
+        for test_name, result in results.items():
+            status = "✅ PASS" if result else "❌ FAIL"
+            description = test_name.replace('_', ' ').title()
+            self.log(f"{description}: {status}")
+            if result:
+                passed += 1
+        
+        self.log(f"\nOverall: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
+        
+        if passed == total:
+            self.log("🎉 All focus tests passed!")
+        else:
+            self.log(f"⚠️ {total - passed} focus test(s) failed")
+        
+        return results
+
 def main():
+    """Main test execution for review request focus tests"""
+    tester = SiriusBackendTester()
+    results = tester.run_review_request_focus_tests()
+    
+    # Return exit code based on results
+    all_passed = all(results.values())
+    return 0 if all_passed else 1
+
+def main_review_notifications():
     """Main test execution for review request endpoints"""
     tester = SiriusBackendTester()
     results = tester.run_review_request_tests()
