@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Shield, Mail, Lock, User, Chrome } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
+import { setToken } from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -24,6 +25,10 @@ export default function Register() {
       const response = await axios.post(`${API}/auth/register`, { name, email, password }, {
         withCredentials: true
       });
+      // Store token in localStorage for cross-origin/incognito support
+      if (response.data.session_token) {
+        setToken(response.data.session_token);
+      }
       toast.success("Conta criada com sucesso!");
       navigate('/dashboard', { state: { user: response.data.user } });
     } catch (error) {
