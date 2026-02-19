@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
+import { getToken, clearToken } from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -20,18 +21,27 @@ export default function ProtectedRoute({ children }) {
 
     const checkAuth = async () => {
       try {
+        // Token is automatically added by axios interceptor from api.js
         const response = await axios.get(`${API}/auth/me`, {
           withCredentials: true
         });
         setIsAuthenticated(true);
         setUser(response.data);
       } catch (error) {
+        clearToken();
         setIsAuthenticated(false);
         navigate('/login');
       }
     };
 
-    checkAuth();
+    // Check if we have a token (cookie or localStorage)
+    const hasToken = getToken();
+    if (!hasToken) {
+      // No token in localStorage, still try with cookies
+      checkAuth();
+    } else {
+      checkAuth();
+    }
   }, [navigate, location]);
 
   if (isAuthenticated === null) {
