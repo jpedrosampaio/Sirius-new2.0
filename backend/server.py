@@ -2292,9 +2292,12 @@ async def charge_to_card(request: Request, card_id: str, charge_data: CardCharge
     # Determinar o mês de início baseado na escolha do usuário
     current_date = datetime.now(timezone.utc)
     if start_month == "next":
-        # Primeira parcela no próximo mês
-        first_month_date = current_date + timedelta(days=30)
-        first_month = first_month_date.strftime("%Y-%m")
+        # Primeira parcela no próximo mês (aritmética correta de mês)
+        next_m = current_date.month + 1
+        next_y = current_date.year + (next_m - 1) // 12
+        next_m = ((next_m - 1) % 12) + 1
+        first_month_date = current_date.replace(year=next_y, month=next_m, day=1)
+        first_month = f"{next_y}-{next_m:02d}"
         transaction_date = first_month_date.strftime("%Y-%m-%d")
     else:
         # Primeira parcela no mês atual
@@ -2369,13 +2372,20 @@ async def charge_to_card(request: Request, card_id: str, charge_data: CardCharge
     
     # Se for parcelado, criar projeções para os meses seguintes
     if payment_type == "parcelado" and installments > 1:
-        # Determinar data base para cálculo dos meses seguintes
-        base_date = first_month_date if start_month == "next" else current_date
+        # Determinar mês base para cálculo dos meses seguintes
+        if start_month == "next":
+            base_year = first_month_date.year
+            base_month_num = first_month_date.month
+        else:
+            base_year = current_date.year
+            base_month_num = current_date.month
         
         for i in range(2, installments + 1):  # Começar da parcela 2
-            # Calcular mês da parcela
-            future_date = base_date + timedelta(days=30 * (i - 1))
-            future_month = future_date.strftime("%Y-%m")
+            # Aritmética correta de meses (evita duplicação por uso de timedelta)
+            total_months = base_month_num + (i - 1)
+            future_year = base_year + (total_months - 1) // 12
+            future_month_num = ((total_months - 1) % 12) + 1
+            future_month = f"{future_year}-{future_month_num:02d}"
             
             projection_id = f"proj_{uuid.uuid4().hex[:12]}"
             projection_doc = {
@@ -2469,12 +2479,16 @@ async def create_projection(request: Request, projection_data: ProjectionCreate,
     
     # Se for despesa fixa ou com repetições, criar projeções para meses futuros
     if projection_data.is_fixed or (projection_data.repeat_count and projection_data.repeat_count > 1):
-        base_date = datetime.strptime(projection_data.month + "-01", "%Y-%m-%d")
+        base_year = int(projection_data.month.split("-")[0])
+        base_month_num = int(projection_data.month.split("-")[1])
         repeat_times = 12 if projection_data.is_fixed else (projection_data.repeat_count - 1)
         
         for i in range(1, repeat_times + 1):
-            future_date = base_date + timedelta(days=30 * i)
-            future_month = future_date.strftime("%Y-%m")
+            # Aritmética correta de meses (evita duplicação por uso de timedelta)
+            total_months = base_month_num + i
+            future_year = base_year + (total_months - 1) // 12
+            future_month_num = ((total_months - 1) % 12) + 1
+            future_month = f"{future_year}-{future_month_num:02d}"
             
             future_proj_id = f"proj_{uuid.uuid4().hex[:12]}"
             future_proj_doc = {
