@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
+import { setToken } from "@/lib/api";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -27,6 +28,11 @@ export default function AuthCallback() {
         const response = await axios.get(`${API}/auth/google-session?session_id=${sessionId}`, {
           withCredentials: true
         });
+
+        // Store token in localStorage for cross-origin/incognito support
+        if (response.data.session_token) {
+          setToken(response.data.session_token);
+        }
 
         navigate('/dashboard', { state: { user: response.data.user }, replace: true });
       } catch (error) {
