@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, Edit2 } from "lucide-react";
+import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, ChevronLeft, Edit2 } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
@@ -91,6 +91,8 @@ export default function Finance() {
   });
   
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 15;
 
   const categories = ["alimentação", "transporte", "moradia", "saúde", "educação", "lazer", "outros"];
 
@@ -128,6 +130,7 @@ export default function Finance() {
     try {
       const res = await axios.get(`${API}/transactions?month=${selectedMonth}`, { withCredentials: true });
       setTransactions(Array.isArray(res.data) ? res.data : []);
+      setCurrentPage(1);
     } catch (error) {
       console.error("Erro ao carregar transações");
     }
@@ -576,32 +579,97 @@ export default function Finance() {
                     <p className="text-[#A1A1AA]">Nenhuma transação neste período</p>
                   </Card>
                 ) : (
-                  transactions.slice(0, 20).map((t) => (
-                    <Card key={t.transaction_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4 flex-1">
-                          <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${
-                            t.type === 'income' ? 'bg-[#39FF14]/20' : 'bg-[#FF3B30]/20'
-                          }`}>
-                            {t.type === 'income' ? <TrendingUp className="w-5 h-5 text-[#39FF14]" /> : <TrendingDown className="w-5 h-5 text-[#FF3B30]" />}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-1">
-                              <span className="font-medium">{t.category}</span>
-                              <span className="text-xs text-[#A1A1AA]">{t.date}</span>
+                  <>
+                    {transactions
+                      .slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+                      .map((t) => (
+                      <Card key={t.transaction_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4 flex-1">
+                            <div className={`w-10 h-10 rounded-sm flex items-center justify-center ${
+                              t.type === 'income' ? 'bg-[#39FF14]/20' : 'bg-[#FF3B30]/20'
+                            }`}>
+                              {t.type === 'income' ? <TrendingUp className="w-5 h-5 text-[#39FF14]" /> : <TrendingDown className="w-5 h-5 text-[#FF3B30]" />}
                             </div>
-                            {t.description && <p className="text-sm text-[#A1A1AA]">{t.description}</p>}
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-1">
+                                <span className="font-medium">{t.category}</span>
+                                <span className="text-xs text-[#A1A1AA]">{t.date}</span>
+                              </div>
+                              {t.description && <p className="text-sm text-[#A1A1AA]">{t.description}</p>}
+                            </div>
+                            <div className={`font-data text-xl ${t.type === 'income' ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                              {t.type === 'income' ? '+' : '-'}R$ {(t.amount ?? 0).toFixed(2)}
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteTransaction(t.transaction_id)}>
+                              <Trash2 className="w-4 h-4 text-[#52525B] hover:text-[#FF3B30]" />
+                            </Button>
                           </div>
-                          <div className={`font-data text-xl ${t.type === 'income' ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
-                            {t.type === 'income' ? '+' : '-'}R$ {(t.amount ?? 0).toFixed(2)}
-                          </div>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteTransaction(t.transaction_id)}>
-                            <Trash2 className="w-4 h-4 text-[#52525B] hover:text-[#FF3B30]" />
+                        </div>
+                      </Card>
+                    ))}
+                    
+                    {/* Pagination Controls */}
+                    {transactions.length > ITEMS_PER_PAGE && (
+                      <div className="flex items-center justify-between pt-4">
+                        <p className="text-sm text-[#A1A1AA]">
+                          Mostrando {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, transactions.length)} de {transactions.length} transações
+                        </p>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="bg-[#121212] border-[#27272A] text-[#A1A1AA] hover:bg-[#1A1A1A] disabled:opacity-30"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </Button>
+                          {Array.from({ length: Math.ceil(transactions.length / ITEMS_PER_PAGE) }, (_, i) => i + 1)
+                            .filter(page => {
+                              const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
+                              if (totalPages <= 7) return true;
+                              if (page === 1 || page === totalPages) return true;
+                              if (Math.abs(page - currentPage) <= 1) return true;
+                              return false;
+                            })
+                            .map((page, idx, arr) => {
+                              const elements = [];
+                              if (idx > 0 && page - arr[idx - 1] > 1) {
+                                elements.push(
+                                  <span key={`dots-${page}`} className="text-[#52525B] px-1">...</span>
+                                );
+                              }
+                              elements.push(
+                                <Button
+                                  key={page}
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setCurrentPage(page)}
+                                  className={`min-w-[36px] ${
+                                    currentPage === page
+                                      ? 'bg-[#007AFF] border-[#007AFF] text-white hover:bg-[#0062CC]'
+                                      : 'bg-[#121212] border-[#27272A] text-[#A1A1AA] hover:bg-[#1A1A1A]'
+                                  }`}
+                                >
+                                  {page}
+                                </Button>
+                              );
+                              return elements;
+                            })}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(transactions.length / ITEMS_PER_PAGE), p + 1))}
+                            disabled={currentPage >= Math.ceil(transactions.length / ITEMS_PER_PAGE)}
+                            className="bg-[#121212] border-[#27272A] text-[#A1A1AA] hover:bg-[#1A1A1A] disabled:opacity-30"
+                          >
+                            <ChevronRight className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>
-                    </Card>
-                  ))
+                    )}
+                  </>
                 )}
               </div>
             </TabsContent>
