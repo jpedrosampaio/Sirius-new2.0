@@ -5544,6 +5544,459 @@ Responda de forma concisa e motivadora em português."""
         logging.error(f"AI suggestions failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========== CONTEST ENDPOINTS ==========
+
+@api_router.get(\"/study/contests\")
+async def get_contests(request: Request, area_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Get contests, optionally filtered by area\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {\"user_id\": user.user_id}
+    if area_id:
+        query[\"area_id\"] = area_id
+    
+    contests = await db.contests.find(query, {\"_id\": 0}).to_list(1000)
+    return contests
+
+@api_router.post(\"/study/contests\")
+async def create_contest(request: Request, contest_data: ContestCreate, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Create a new contest\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    contest_id = f\"contest_{uuid.uuid4().hex[:12]}\"
+    contest_doc = {
+        \"contest_id\": contest_id,
+        \"user_id\": user.user_id,
+        **contest_data.model_dump(),
+        \"created_at\": datetime.now(timezone.utc).isoformat()
+    }
+    await db.contests.insert_one(contest_doc)
+    contest_doc.pop('_id', None)
+    return contest_doc
+
+@api_router.patch(\"/study/contests/{contest_id}\")
+async def update_contest(request: Request, contest_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Update a contest\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_fields = {}
+    for field in [\"name\", \"description\", \"institution\", \"exam_date\", \"color\", \"status\"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    if update_fields:
+        await db.contests.update_one(
+            {\"contest_id\": contest_id, \"user_id\": user.user_id},
+            {\"$set\": update_fields}
+        )
+    
+    updated = await db.contests.find_one({\"contest_id\": contest_id, \"user_id\": user.user_id}, {\"_id\": 0})
+    return updated
+
+@api_router.delete(\"/study/contests/{contest_id}\")
+async def delete_contest(request: Request, contest_id: str, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Delete a contest and its related notebooks\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.contests.delete_one({\"contest_id\": contest_id, \"user_id\": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail=\"Contest not found\")
+    
+    # Delete related notebooks (they become orphaned)
+    # Option: keep them but remove contest_id, or delete them entirely
+    # Here we'll just remove the contest_id reference
+    await db.notebooks.update_many(
+        {\"contest_id\": contest_id, \"user_id\": user.user_id},
+        {\"$set\": {\"contest_id\": None}}
+    )
+    
+    return {\"message\": \"Contest deleted\"}
+
+@api_router.get(\"/study/contests/{contest_id}/stats\")
+async def get_contest_stats(request: Request, contest_id: str, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Get statistics for a specific contest\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Verify contest exists
+    contest = await db.contests.find_one({\"contest_id\": contest_id, \"user_id\": user.user_id}, {\"_id\": 0})
+    if not contest:
+        raise HTTPException(status_code=404, detail=\"Contest not found\")
+    
+    # Get notebooks in this contest
+    notebooks = await db.notebooks.find({\"contest_id\": contest_id, \"user_id\": user.user_id}, {\"_id\": 0}).to_list(100)
+    
+    # Get questions for this contest
+    questions = await db.questions.find({\"contest_id\": contest_id, \"user_id\": user.user_id}, {\"_id\": 0}).to_list(10000)
+    
+    # Get attempts for these questions
+    question_ids = [q[\"question_id\"] for q in questions]
+    attempts = await db.question_attempts.find({
+        \"user_id\": user.user_id,
+        \"question_id\": {\"$in\": question_ids}
+    }, {\"_id\": 0}).to_list(10000)
+    
+    # Calculate stats
+    total_questions = len(questions)
+    answered_questions = len(set(a[\"question_id\"] for a in attempts))
+    correct_answers = sum(1 for a in attempts if a.get(\"is_correct\", False))
+    total_attempts = len(attempts)
+    
+    # Stats by subject
+    subject_stats = {}
+    for q in questions:
+        subject = q.get(\"subject\", \"Outros\")
+        if subject not in subject_stats:
+            subject_stats[subject] = {\"total\": 0, \"answered\": 0, \"correct\": 0}
+        subject_stats[subject][\"total\"] += 1
+    
+    for a in attempts:
+        q = next((q for q in questions if q[\"question_id\"] == a[\"question_id\"]), None)
+        if q:
+            subject = q.get(\"subject\", \"Outros\")
+            subject_stats[subject][\"answered\"] += 1
+            if a.get(\"is_correct\"):
+                subject_stats[subject][\"correct\"] += 1
+    
+    return {
+        \"contest\": contest,
+        \"notebooks_count\": len(notebooks),
+        \"total_questions\": total_questions,
+        \"answered_questions\": answered_questions,
+        \"unanswered_questions\": total_questions - answered_questions,
+        \"total_attempts\": total_attempts,
+        \"correct_answers\": correct_answers,
+        \"accuracy_percentage\": round((correct_answers / total_attempts * 100) if total_attempts > 0 else 0, 1),
+        \"subject_stats\": subject_stats
+    }
+
+# ========== QUESTIONS ENDPOINTS ==========
+
+@api_router.get(\"/study/questions\")
+async def get_questions(
+    request: Request, 
+    contest_id: Optional[str] = None,
+    notebook_id: Optional[str] = None,
+    subject: Optional[str] = None,
+    difficulty: Optional[str] = None,
+    unanswered_only: Optional[bool] = False,
+    session_token: Optional[str] = Cookie(None)
+):
+    \"\"\"Get questions with various filters\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {\"user_id\": user.user_id}
+    if contest_id:
+        query[\"contest_id\"] = contest_id
+    if notebook_id:
+        query[\"notebook_id\"] = notebook_id
+    if subject:
+        query[\"subject\"] = subject
+    if difficulty:
+        query[\"difficulty\"] = difficulty
+    
+    questions = await db.questions.find(query, {\"_id\": 0}).to_list(10000)
+    
+    if unanswered_only:
+        # Get attempts
+        question_ids = [q[\"question_id\"] for q in questions]
+        attempts = await db.question_attempts.find({
+            \"user_id\": user.user_id,
+            \"question_id\": {\"$in\": question_ids}
+        }, {\"_id\": 0}).to_list(10000)
+        answered_ids = set(a[\"question_id\"] for a in attempts)
+        questions = [q for q in questions if q[\"question_id\"] not in answered_ids]
+    
+    # Add attempt info to each question
+    for q in questions:
+        attempts = await db.question_attempts.find({
+            \"user_id\": user.user_id,
+            \"question_id\": q[\"question_id\"]
+        }, {\"_id\": 0}).to_list(100)
+        q[\"attempts_count\"] = len(attempts)
+        q[\"last_attempt\"] = attempts[-1] if attempts else None
+        q[\"is_answered\"] = len(attempts) > 0
+        q[\"is_correct\"] = attempts[-1].get(\"is_correct\", False) if attempts else None
+    
+    return questions
+
+@api_router.get(\"/study/questions/{question_id}\")
+async def get_question(request: Request, question_id: str, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Get a specific question with attempts\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    question = await db.questions.find_one({\"question_id\": question_id, \"user_id\": user.user_id}, {\"_id\": 0})
+    if not question:
+        raise HTTPException(status_code=404, detail=\"Question not found\")
+    
+    # Get attempts
+    attempts = await db.question_attempts.find({
+        \"user_id\": user.user_id,
+        \"question_id\": question_id
+    }, {\"_id\": 0}).to_list(100)
+    
+    question[\"attempts\"] = attempts
+    return question
+
+@api_router.post(\"/study/questions\")
+async def create_question(request: Request, question_data: QuestionCreate, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Create a new question\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    question_id = f\"question_{uuid.uuid4().hex[:12]}\"
+    question_doc = {
+        \"question_id\": question_id,
+        \"user_id\": user.user_id,
+        **question_data.model_dump(),
+        \"created_at\": datetime.now(timezone.utc).isoformat()
+    }
+    await db.questions.insert_one(question_doc)
+    question_doc.pop('_id', None)
+    return question_doc
+
+@api_router.post(\"/study/questions/{question_id}/answer\")
+async def answer_question(
+    request: Request, 
+    question_id: str, 
+    answer_data: QuestionAnswerSubmit,
+    session_token: Optional[str] = Cookie(None)
+):
+    \"\"\"Submit an answer to a question\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get question
+    question = await db.questions.find_one({\"question_id\": question_id, \"user_id\": user.user_id}, {\"_id\": 0})
+    if not question:
+        raise HTTPException(status_code=404, detail=\"Question not found\")
+    
+    # Check if answer is correct
+    correct_answer = question.get(\"correct_answer\", \"\")
+    user_answer = answer_data.user_answer
+    is_correct = user_answer == correct_answer
+    
+    # Create attempt
+    attempt_id = f\"attempt_{uuid.uuid4().hex[:12]}\"
+    attempt_doc = {
+        \"attempt_id\": attempt_id,
+        \"user_id\": user.user_id,
+        \"question_id\": question_id,
+        \"user_answer\": user_answer,
+        \"is_correct\": is_correct,
+        \"time_spent_seconds\": answer_data.time_spent_seconds,
+        \"answered_at\": datetime.now(timezone.utc).isoformat()
+    }
+    await db.question_attempts.insert_one(attempt_doc)
+    attempt_doc.pop('_id', None)
+    
+    # Award XP if correct
+    if is_correct:
+        xp_reward = question.get(\"points\", 1) * 10  # 10 XP per point
+        await db.users.update_one(
+            {\"user_id\": user.user_id},
+            {\"$inc\": {\"xp\": xp_reward}}
+        )
+        
+        # Update rank if needed
+        updated_user = await db.users.find_one({\"user_id\": user.user_id}, {\"_id\": 0})
+        new_rank = calculate_rank(updated_user.get(\"xp\", 0))
+        if new_rank != updated_user.get(\"rank\"):
+            await db.users.update_one(
+                {\"user_id\": user.user_id},
+                {\"$set\": {\"rank\": new_rank}}
+            )
+    
+    return {
+        \"attempt\": attempt_doc,
+        \"is_correct\": is_correct,
+        \"correct_answer\": correct_answer if not is_correct else None,
+        \"explanation\": question.get(\"explanation\") if not is_correct else None,
+        \"xp_earned\": question.get(\"points\", 1) * 10 if is_correct else 0
+    }
+
+@api_router.delete(\"/study/questions/{question_id}\")
+async def delete_question(request: Request, question_id: str, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Delete a question\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.questions.delete_one({\"question_id\": question_id, \"user_id\": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail=\"Question not found\")
+    
+    # Delete attempts
+    await db.question_attempts.delete_many({\"question_id\": question_id, \"user_id\": user.user_id})
+    
+    return {\"message\": \"Question deleted\"}
+
+@api_router.get(\"/study/questions/stats/overview\")
+async def get_questions_stats(request: Request, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Get comprehensive question statistics\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get all questions
+    questions = await db.questions.find({\"user_id\": user.user_id}, {\"_id\": 0}).to_list(10000)
+    
+    # Get all attempts
+    attempts = await db.question_attempts.find({\"user_id\": user.user_id}, {\"_id\": 0}).to_list(10000)
+    
+    # Calculate basic stats
+    total_questions = len(questions)
+    total_attempts = len(attempts)
+    answered_questions = len(set(a[\"question_id\"] for a in attempts))
+    correct_answers = sum(1 for a in attempts if a.get(\"is_correct\", False))
+    
+    # Stats by subject
+    subject_stats = {}
+    for q in questions:
+        subject = q.get(\"subject\", \"Outros\")
+        if subject not in subject_stats:
+            subject_stats[subject] = {
+                \"total_questions\": 0,
+                \"answered\": 0,
+                \"correct\": 0,
+                \"attempts\": 0,
+                \"accuracy\": 0
+            }
+        subject_stats[subject][\"total_questions\"] += 1
+    
+    for a in attempts:
+        q = next((q for q in questions if q[\"question_id\"] == a[\"question_id\"]), None)
+        if q:
+            subject = q.get(\"subject\", \"Outros\")
+            subject_stats[subject][\"attempts\"] += 1
+            if a.get(\"is_correct\"):
+                subject_stats[subject][\"correct\"] += 1
+    
+    # Calculate accuracy per subject
+    for subject in subject_stats:
+        answered_q = set()
+        for a in attempts:
+            q = next((q for q in questions if q[\"question_id\"] == a[\"question_id\"]), None)
+            if q and q.get(\"subject\") == subject:
+                answered_q.add(a[\"question_id\"])
+        subject_stats[subject][\"answered\"] = len(answered_q)
+        
+        if subject_stats[subject][\"attempts\"] > 0:
+            subject_stats[subject][\"accuracy\"] = round(
+                (subject_stats[subject][\"correct\"] / subject_stats[subject][\"attempts\"]) * 100, 1
+            )
+    
+    # Stats by contest
+    contest_stats = {}
+    for q in questions:
+        contest_id = q.get(\"contest_id\")
+        if contest_id:
+            if contest_id not in contest_stats:
+                contest_stats[contest_id] = {
+                    \"total_questions\": 0,
+                    \"answered\": 0,
+                    \"correct\": 0,
+                    \"attempts\": 0
+                }
+            contest_stats[contest_id][\"total_questions\"] += 1
+    
+    for a in attempts:
+        q = next((q for q in questions if q[\"question_id\"] == a[\"question_id\"]), None)
+        if q and q.get(\"contest_id\"):
+            contest_id = q[\"contest_id\"]
+            contest_stats[contest_id][\"attempts\"] += 1
+            if a.get(\"is_correct\"):
+                contest_stats[contest_id][\"correct\"] += 1
+    
+    # Calculate answered per contest
+    for contest_id in contest_stats:
+        answered_q = set()
+        for a in attempts:
+            q = next((q for q in questions if q[\"question_id\"] == a[\"question_id\"]), None)
+            if q and q.get(\"contest_id\") == contest_id:
+                answered_q.add(a[\"question_id\"])
+        contest_stats[contest_id][\"answered\"] = len(answered_q)
+    
+    # Stats by difficulty
+    difficulty_stats = {\"easy\": 0, \"medium\": 0, \"hard\": 0}
+    for q in questions:
+        diff = q.get(\"difficulty\", \"medium\")
+        difficulty_stats[diff] = difficulty_stats.get(diff, 0) + 1
+    
+    # Recent progress (last 7 days)
+    recent_attempts = []
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    for a in attempts:
+        try:
+            answered_date = datetime.fromisoformat(a.get(\"answered_at\", \"\"))
+            if answered_date >= seven_days_ago:
+                recent_attempts.append(a)
+        except:
+            pass
+    
+    # Daily progress
+    daily_progress = {}
+    for a in recent_attempts:
+        try:
+            date = datetime.fromisoformat(a.get(\"answered_at\", \"\")).strftime(\"%Y-%m-%d\")
+            if date not in daily_progress:
+                daily_progress[date] = {\"total\": 0, \"correct\": 0}
+            daily_progress[date][\"total\"] += 1
+            if a.get(\"is_correct\"):
+                daily_progress[date][\"correct\"] += 1
+        except:
+            pass
+    
+    return {
+        \"overview\": {
+            \"total_questions\": total_questions,
+            \"answered_questions\": answered_questions,
+            \"unanswered_questions\": total_questions - answered_questions,
+            \"total_attempts\": total_attempts,
+            \"correct_answers\": correct_answers,
+            \"incorrect_answers\": total_attempts - correct_answers,
+            \"accuracy_percentage\": round((correct_answers / total_attempts * 100) if total_attempts > 0 else 0, 1)
+        },
+        \"by_subject\": subject_stats,
+        \"by_contest\": contest_stats,
+        \"by_difficulty\": difficulty_stats,
+        \"recent_progress\": {
+            \"last_7_days_attempts\": len(recent_attempts),
+            \"last_7_days_correct\": sum(1 for a in recent_attempts if a.get(\"is_correct\")),
+            \"daily_progress\": daily_progress
+        }
+    }
+
+@api_router.get(\"/study/dashboard/analytics\")
+async def get_dashboard_analytics(request: Request, session_token: Optional[str] = Cookie(None)):
+    \"\"\"Get analytics data for dashboard charts\"\"\"
+    auth_header = request.headers.get(\"Authorization\")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get questions stats
+    questions_stats = await get_questions_stats(request, session_token)
+    
+    # Get study stats
+    study_stats = await get_study_stats(request, session_token)
+    
+    # Get contests
+    contests = await db.contests.find({\"user_id\": user.user_id}, {\"_id\": 0}).to_list(100)
+    
+    # Get notebooks
+    notebooks = await db.notebooks.find({\"user_id\": user.user_id}, {\"_id\": 0}).to_list(100)
+    
+    return {
+        \"questions\": questions_stats,
+        \"study\": study_stats,
+        \"contests_count\": len(contests),
+        \"notebooks_count\": len(notebooks)
+    }
+
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 
