@@ -4060,6 +4060,76 @@ class StudyStats(BaseModel):
     average_quiz_score: float = 0
     tasks_completed: int = 0
 
+    # ========== CONTEST AND QUESTIONS MODELS ==========
+
+class Contest(BaseModel):
+    model_config = ConfigDict(extra=\"ignore\")
+    contest_id: str
+    user_id: str
+    area_id: str
+    name: str
+    description: Optional[str] = None
+    institution: Optional[str] = None
+    exam_date: Optional[str] = None
+    color: str = \"#10B981\"
+    status: str = \"active\"  # active, completed, archived
+    created_at: datetime
+
+class ContestCreate(BaseModel):
+    area_id: str
+    name: str
+    description: Optional[str] = None
+    institution: Optional[str] = None
+    exam_date: Optional[str] = None
+    color: str = \"#10B981\"
+    status: str = \"active\"
+
+class Question(BaseModel):
+    model_config = ConfigDict(extra=\"ignore\")
+    question_id: str
+    user_id: str
+    contest_id: Optional[str] = None
+    notebook_id: Optional[str] = None
+    subject: str  # Matéria/assunto
+    question_text: str
+    question_type: str  # multiple_choice, true_false, essay, open
+    options: List[str] = []  # Para múltipla escolha
+    correct_answer: Optional[str] = None  # Índice da opção correta ou resposta
+    difficulty: str = \"medium\"  # easy, medium, hard
+    tags: List[str] = []
+    source: Optional[str] = None  # De onde veio a questão (ano, banca, etc)
+    explanation: Optional[str] = None
+    points: int = 1
+    created_at: datetime
+
+class QuestionCreate(BaseModel):
+    contest_id: Optional[str] = None
+    notebook_id: Optional[str] = None
+    subject: str
+    question_text: str
+    question_type: str = \"multiple_choice\"
+    options: List[str] = []
+    correct_answer: Optional[str] = None
+    difficulty: str = \"medium\"
+    tags: List[str] = []
+    source: Optional[str] = None
+    explanation: Optional[str] = None
+    points: int = 1
+
+class QuestionAttempt(BaseModel):
+    model_config = ConfigDict(extra=\"ignore\")
+    attempt_id: str
+    user_id: str
+    question_id: str
+    user_answer: str
+    is_correct: bool
+    time_spent_seconds: Optional[int] = None
+    answered_at: datetime
+
+class QuestionAnswerSubmit(BaseModel):
+    user_answer: str
+    time_spent_seconds: Optional[int] = None
+
 # ========== NUTRITION ENDPOINTS ==========
 
 @api_router.get("/nutrition/meals")
