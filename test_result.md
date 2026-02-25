@@ -115,11 +115,6 @@ user_problem_statement: |
   - Aba de controle de alimentação (dietas, controle calórico, dicas de receita com IA)
   - Área de estudos integrada com IA (áreas de estudo, cadernos, notas, flashcards, quizzes, repetição espaçada)
 
-  ATUALIZAÇÃO - SISTEMA DE CONCURSOS E QUESTÕES:
-  - Organização hierárquica: Area → Concurso → Caderno
-  - Sistema completo de questões com contagem
-  - Dashboard com gráficos de desempenho (acertos/erros, por matéria, progresso)
-
 backend:
   - task: "Charge to card with installments"
     implemented: true
@@ -400,55 +395,6 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Transaction pagination fix working correctly. Backend GET /api/transactions returns all transactions without server-side limit. Created 25 test transactions and verified all 26 total transactions were retrieved (no 20-item limit). The old server-side pagination restriction has been successfully removed."
 
-- task: \"Contest management endpoints\"
-    implemented: true
-    working: \"NA\"
-    file: \"backend/server.py\"
-    stuck_count: 0
-    priority: \"high\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Implemented Contest model and CRUD endpoints: GET/POST /api/study/contests, PATCH/DELETE /api/study/contests/{id}, GET /api/study/contests/{id}/stats. Contests provide hierarchical organization for study materials.\"
-
-  - task: \"Questions and answers system\"
-    implemented: true
-    working: \"NA\"
-    file: \"backend/server.py\"
-    stuck_count: 0
-    priority: \"high\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Implemented Question and QuestionAttempt models. Created endpoints: GET/POST /api/study/questions, GET /api/study/questions/{id}, POST /api/study/questions/{id}/answer, DELETE /api/study/questions/{id}. System tracks correct/incorrect answers, awards XP for correct answers.\"
-
-  - task: \"Question statistics and analytics\"
-    implemented: true
-    working: \"NA\"
-    file: \"backend/server.py\"
-    stuck_count: 0
-    priority: \"high\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Created comprehensive statistics endpoints: GET /api/study/questions/stats/overview (overall stats, by subject, by contest, by difficulty, daily progress), GET /api/study/dashboard/analytics (dashboard data with charts).\"
-
-  - task: \"Notebook contest_id field\"
-    implemented: true
-    working: \"NA\"
-    file: \"backend/server.py\"
-    stuck_count: 0
-    priority: \"medium\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Updated Notebook model to include optional contest_id field, allowing notebooks to be linked to specific contests for better organization.\"
-
-
 frontend:
   - task: "Credit card charge with installments UI"
     implemented: true
@@ -498,43 +444,6 @@ frontend:
         agent: "main"
         comment: "Created comprehensive studies page with areas, notebooks, notes, tasks, flashcards, quizzes, schedule, streak tracking, AI suggestions"
 
-    - task: \"Contest management UI\"
-    implemented: true
-    working: \"NA\"
-    file: \"frontend/src/pages/Studies.js\"
-    stuck_count: 0
-    priority: \"high\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Complete rewrite of Studies.js. Added Contests tab with full CRUD: create contest, list contests by area, view contest details, create notebooks within contests. Hierarchical organization: Area → Contest → Notebook.\"
-
-  - task: \"Questions practice UI\"
-    implemented: true
-    working: \"NA\"
-    file: \"frontend/src/pages/Studies.js\"
-    stuck_count: 0
-    priority: \"high\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Implemented Questions tab with full functionality: create questions (multiple choice, true/false), filter by contest/subject/difficulty, answer questions with timer, immediate feedback (correct/incorrect), view explanations, XP rewards.\"
-
-  - task: \"Study dashboard with charts\"
-    implemented: true
-    working: \"NA\"
-    file: \"frontend/src/pages/Studies.js\"
-    stuck_count: 0
-    priority: \"high\"
-    needs_retesting: true
-    status_history:
-      - working: \"NA\"
-        agent: \"main\"
-        comment: \"Created Dashboard tab with Recharts visualizations: Pie chart (correct/incorrect/unanswered), Bar chart (accuracy by subject), Line chart (daily progress last 7 days), detailed stats cards (total questions, accuracy %, progress). All data fetched from /api/study/questions/stats/overview.\"
-
-
 metadata:
   created_by: "main_agent"
   version: "1.0"
@@ -543,12 +452,7 @@ metadata:
 
 test_plan:
   current_focus:
-    - \"Contest management endpoints\"
-    - \"Questions and answers system\"
-    - \"Question statistics and analytics\"
-    - \"Contest management UI\"
-    - \"Questions practice UI\"
-    - \"Study dashboard with charts\"
+    []
   stuck_tasks: 
     - "Image analysis endpoint"
   test_all: false
