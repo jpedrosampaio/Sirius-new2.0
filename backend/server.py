@@ -3886,6 +3886,7 @@ class Notebook(BaseModel):
     notebook_id: str
     user_id: str
     area_id: str
+    contest_id: Optional[str] = None  # Optional: link to a contest
     name: str  # Matéria/Assunto
     description: Optional[str] = None
     color: str = "#007AFF"
@@ -3895,6 +3896,7 @@ class Notebook(BaseModel):
 
 class NotebookCreate(BaseModel):
     area_id: str
+    contest_id: Optional[str] = None
     name: str
     description: Optional[str] = None
     color: str = "#007AFF"
