@@ -51,6 +51,8 @@ export default function Nutrition() {
   const [showRecipeDialog, setShowRecipeDialog] = useState(false);
   const [generatingRecipe, setGeneratingRecipe] = useState(false);
   const [suggestedRecipe, setSuggestedRecipe] = useState(null);
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [showRecipeDetailDialog, setShowRecipeDetailDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
 
   // Meal form state
@@ -930,16 +932,17 @@ export default function Nutrition() {
                 </CardContent>
               </Card>
             ) : (
+              <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {recipes.map(recipe => (
-                  <Card key={recipe.recipe_id} className="bg-[#0A0A0A] border-[#27272A]">
+                  <Card key={recipe.recipe_id} className="bg-[#0A0A0A] border-[#27272A] cursor-pointer hover:border-[#3F3F46] transition-colors" onClick={() => { setSelectedRecipe(recipe); setShowRecipeDetailDialog(true); }}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div>
                           <CardTitle className="text-lg">{recipe.name}</CardTitle>
                           <CardDescription>{recipe.description}</CardDescription>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRecipe(recipe.recipe_id)}>
+                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.recipe_id); }}>
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
                       </div>
@@ -983,10 +986,117 @@ export default function Nutrition() {
                   </Card>
                 ))}
               </div>
+
+              {/* Recipe Detail Dialog */}
+              <Dialog open={showRecipeDetailDialog} onOpenChange={setShowRecipeDetailDialog}>
+                <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[90vh] overflow-y-auto">
+                  {selectedRecipe && (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle className="text-xl">{selectedRecipe.name}</DialogTitle>
+                        <DialogDescription>{selectedRecipe.description}</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-6 py-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div className="bg-[#121212] p-3 rounded-lg text-center">
+                            <Clock className="w-5 h-5 mx-auto mb-1 text-blue-400" />
+                            <p className="text-sm font-bold">{selectedRecipe.prep_time_minutes}min</p>
+                            <p className="text-xs text-[#A1A1AA]">Preparo</p>
+                          </div>
+                          <div className="bg-[#121212] p-3 rounded-lg text-center">
+                            <Flame className="w-5 h-5 mx-auto mb-1 text-orange-400" />
+                            <p className="text-sm font-bold">{selectedRecipe.cook_time_minutes}min</p>
+                            <p className="text-xs text-[#A1A1AA]">Cozimento</p>
+                          </div>
+                          <div className="bg-[#121212] p-3 rounded-lg text-center">
+                            <UtensilsCrossed className="w-5 h-5 mx-auto mb-1 text-green-400" />
+                            <p className="text-sm font-bold">{selectedRecipe.servings}</p>
+                            <p className="text-xs text-[#A1A1AA]">Porções</p>
+                          </div>
+                          <div className="bg-[#121212] p-3 rounded-lg text-center">
+                            <Target className="w-5 h-5 mx-auto mb-1 text-red-400" />
+                            <p className="text-sm font-bold">{selectedRecipe.calories_per_serving}</p>
+                            <p className="text-xs text-[#A1A1AA]">kcal/porção</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="bg-red-500/10 p-3 rounded-lg text-center">
+                            <p className="text-lg font-bold text-red-400">{selectedRecipe.protein_per_serving}g</p>
+                            <p className="text-xs text-[#A1A1AA]">Proteínas</p>
+                          </div>
+                          <div className="bg-yellow-500/10 p-3 rounded-lg text-center">
+                            <p className="text-lg font-bold text-yellow-400">{selectedRecipe.carbs_per_serving}g</p>
+                            <p className="text-xs text-[#A1A1AA]">Carboidratos</p>
+                          </div>
+                          <div className="bg-purple-500/10 p-3 rounded-lg text-center">
+                            <p className="text-lg font-bold text-purple-400">{selectedRecipe.fat_per_serving}g</p>
+                            <p className="text-xs text-[#A1A1AA]">Gorduras</p>
+                          </div>
+                        </div>
+                        {selectedRecipe.ingredients && selectedRecipe.ingredients.length > 0 && (
+                          <div>
+                            <h3 className="font-bold text-base mb-3 flex items-center gap-2">
+                              <Apple className="w-4 h-4 text-green-400" /> Ingredientes
+                            </h3>
+                            <div className="bg-[#121212] rounded-lg p-4">
+                              <ul className="space-y-2">
+                                {selectedRecipe.ingredients.map((ingredient, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-sm">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 mt-2 shrink-0" />
+                                    <span className="text-[#E4E4E7]">{ingredient}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecipe.instructions && selectedRecipe.instructions.length > 0 && (
+                          <div>
+                            <h3 className="font-bold text-base mb-3 flex items-center gap-2">
+                              <ChefHat className="w-4 h-4 text-orange-400" /> Modo de Preparo
+                            </h3>
+                            <div className="space-y-3">
+                              {selectedRecipe.instructions.map((step, idx) => (
+                                <div key={idx} className="flex items-start gap-3 bg-[#121212] p-3 rounded-lg">
+                                  <span className="bg-orange-500/20 text-orange-400 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{idx + 1}</span>
+                                  <p className="text-sm text-[#E4E4E7]">{step}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecipe.tips && selectedRecipe.tips.length > 0 && (
+                          <div>
+                            <h3 className="font-bold text-base mb-3 flex items-center gap-2">
+                              <Sparkles className="w-4 h-4 text-[#00F0FF]" /> Dicas
+                            </h3>
+                            <div className="bg-[#00F0FF]/5 border border-[#00F0FF]/20 rounded-lg p-4">
+                              <ul className="space-y-2">
+                                {selectedRecipe.tips.map((tip, idx) => (
+                                  <li key={idx} className="flex items-start gap-2 text-sm">
+                                    <span className="text-[#00F0FF]">💡</span>
+                                    <span className="text-[#E4E4E7]">{tip}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        )}
+                        {selectedRecipe.tags && selectedRecipe.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedRecipe.tags.map((tag, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">{tag}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
+              </>
             )}
           </TabsContent>
-
-          {/* Diets Tab */}
           <TabsContent value="diets" className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold">Planos de Dieta</h2>
