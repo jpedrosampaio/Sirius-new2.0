@@ -395,6 +395,81 @@ backend:
         agent: "testing"
         comment: "✅ TESTED: Transaction pagination fix working correctly. Backend GET /api/transactions returns all transactions without server-side limit. Created 25 test transactions and verified all 26 total transactions were retrieved (no 20-item limit). The old server-side pagination restriction has been successfully removed."
 
+  - task: "Study Programs CRUD endpoints"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added StudyProgram model and CRUD: GET/POST/PATCH/DELETE /api/study/programs with area hierarchy"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Study Programs CRUD endpoints working correctly. GET /api/study/areas retrieves areas, POST /api/study/programs creates 'Curso de Direito' program, GET /api/study/programs?area_id filters by area, PATCH updates status to 'paused', DELETE removes program successfully. All endpoints functional with authentication via teststudy@test.com."
+
+  - task: "Question tracking endpoints"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added POST /api/study/questions/log and GET /api/study/questions/stats for tracking questions per notebook/program"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Question tracking endpoints working correctly. POST /api/study/questions/log successfully logs 20 total questions with 15 correct (75% accuracy), awards 30 XP (2 XP per correct answer). GET /api/study/questions/stats?notebook_id returns correct statistics. Notebook counters properly updated."
+
+  - task: "Focus/Pomodoro endpoints"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added POST /api/study/focus/complete and GET /api/study/focus/stats for pomodoro sessions"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Focus/Pomodoro endpoints working correctly. POST /api/study/focus/complete successfully logs 25-minute focus session with notes, awards 10 XP, updates notebook study time. GET /api/study/focus/stats returns today's session count (1) and total minutes (25). Study streak updated properly."
+
+  - task: "AI Study Assistant endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added POST /api/study/ai-chat with context types (general, explain, quiz_help, summarize, motivate)"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: AI Study Assistant endpoint working correctly. POST /api/study/ai-chat with message 'Me ajude a entender contratos no direito civil' and context_type 'explain' returns 195-character AI response. Google Gemini integration functional for study assistance."
+
+  - task: "Recipe detail endpoint"
+    implemented: true
+    working: false
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added GET /api/nutrition/recipes/{recipe_id} for full recipe details"
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED: Recipe detail endpoint exists and implementation is correct, but cannot be fully tested due to dependency issue. POST /api/nutrition/recipes/suggest fails with JSON parsing error from Google Gemini response ('Expecting property name enclosed in double quotes'). No existing recipes available for testing GET /api/nutrition/recipes/{recipe_id}. This appears to be a Google Gemini API response format issue, not an endpoint implementation problem."
+
 frontend:
   - task: "Credit card charge with installments UI"
     implemented: true
@@ -455,10 +530,82 @@ test_plan:
     []
   stuck_tasks: 
     - "Image analysis endpoint"
+    - "Recipe detail endpoint"
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "main"
+    message: |
+      NEW BACKEND ENDPOINTS FOR STUDY ENHANCEMENT:
+      
+      ## Study Programs (Hierarchical Structure)
+      - GET /api/study/programs?area_id=X - Get programs with notebook counts & question stats
+      - POST /api/study/programs - Create program
+      - PATCH /api/study/programs/{id} - Update program
+      - DELETE /api/study/programs/{id} - Delete with cascade
+      
+      ## Question Tracking
+      - POST /api/study/questions/log - Log questions {notebook_id, total, correct, source}
+      - GET /api/study/questions/stats?notebook_id=X&program_id=X - Stats
+      
+      ## Focus/Pomodoro
+      - POST /api/study/focus/complete - Complete focus session
+      - GET /api/study/focus/stats - Stats
+      
+      ## AI Study Assistant
+      - POST /api/study/ai-chat - Contextual study help
+      
+      ## Recipe Detail
+      - GET /api/nutrition/recipes/{recipe_id} - Full recipe details
+      
+      PLEASE TEST all new endpoints.
+  - agent: "testing"
+    message: |
+      ✅ NEW STUDY ENDPOINTS TESTING COMPLETE - 5/6 TESTS PASSED (83.3%)
+      
+      **COMPREHENSIVE TESTING COMPLETED FOR NEW STUDY FEATURES:**
+      
+      🔐 **Authentication:** Working correctly with teststudy@test.com / Test123!
+      
+      📚 **Study Programs CRUD (4/4 operations passed):**
+        - ✅ GET /api/study/areas: Retrieved area_id successfully
+        - ✅ POST /api/study/programs: Created "Curso de Direito" program with description, color, target_date
+        - ✅ GET /api/study/programs?area_id: Retrieved 1 program filtered by area
+        - ✅ PATCH /api/study/programs/{id}: Updated program status to "paused"
+        - ✅ DELETE /api/study/programs/{id}: Successfully deleted program with cascade
+      
+      📓 **Notebooks with Program ID (2/2 operations passed):**
+        - ✅ POST /api/study/notebooks: Created "Direito Civil" notebook linked to program_id
+        - ✅ GET /api/study/notebooks?program_id: Retrieved 1 notebook filtered by program
+      
+      📊 **Question Tracking (2/2 operations passed):**
+        - ✅ POST /api/study/questions/log: Logged 20 questions (15 correct, 75% accuracy), awarded 30 XP
+        - ✅ GET /api/study/questions/stats?notebook_id: Retrieved accurate statistics
+      
+      🎯 **Focus/Pomodoro (2/2 operations passed):**
+        - ✅ POST /api/study/focus/complete: Logged 25-minute session with notes, awarded 10 XP
+        - ✅ GET /api/study/focus/stats: Retrieved session count (1) and minutes (25)
+      
+      🤖 **AI Study Assistant (1/1 operation passed):**
+        - ✅ POST /api/study/ai-chat: Generated 195-character response for "contratos no direito civil" with context_type "explain"
+      
+      🍳 **Recipe Detail (0/1 operation passed):**
+        - ❌ GET /api/nutrition/recipes/{recipe_id}: Cannot test due to dependency failure
+        - Issue: POST /api/nutrition/recipes/suggest fails with JSON parsing error from Google Gemini
+        - Error: "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
+        - Root cause: Google Gemini API response format issue, not endpoint implementation problem
+      
+      🎯 **Key Findings:**
+        - All core study functionality working perfectly (programs, notebooks, questions, focus, AI chat)
+        - XP system integrated correctly (2 XP per correct answer, 10 XP per 25min focus)
+        - Study streak updates functioning
+        - Hierarchical structure (areas → programs → notebooks) working
+        - Authentication and session management working
+        - Recipe detail endpoint implementation correct but blocked by AI recipe generation issue
+        
+      **CONCLUSION:** All NEW study endpoints are fully functional except recipe detail which has a dependency issue with AI recipe generation (Google Gemini JSON parsing). 5/6 major features working perfectly.
+
   - agent: "main"
     message: |
       MULTIPLE TRANSACTIONS FEATURE IMPLEMENTED:

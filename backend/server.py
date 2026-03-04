@@ -3881,24 +3881,89 @@ class StudyAreaCreate(BaseModel):
     color: str = "#007AFF"
     icon: str = "book"
 
+class StudyProgram(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    program_id: str
+    user_id: str
+    area_id: str
+    name: str  # Ex: "Curso de Direito", "Concurso TRF5"
+    description: Optional[str] = None
+    color: str = "#007AFF"
+    icon: str = "book"
+    target_date: Optional[str] = None  # Meta date (exam date, graduation, etc.)
+    status: str = "active"  # active, completed, paused
+    total_questions: int = 0
+    correct_questions: int = 0
+    created_at: datetime
+
+class StudyProgramCreate(BaseModel):
+    area_id: str
+    name: str
+    description: Optional[str] = None
+    color: str = "#007AFF"
+    icon: str = "book"
+    target_date: Optional[str] = None
+
 class Notebook(BaseModel):
     model_config = ConfigDict(extra="ignore")
     notebook_id: str
     user_id: str
     area_id: str
+    program_id: Optional[str] = None  # Optional link to a program
     name: str  # Matéria/Assunto
     description: Optional[str] = None
     color: str = "#007AFF"
     tags: List[str] = []
     total_study_time_minutes: int = 0
+    total_questions: int = 0
+    correct_questions: int = 0
     created_at: datetime
 
 class NotebookCreate(BaseModel):
     area_id: str
+    program_id: Optional[str] = None
     name: str
     description: Optional[str] = None
     color: str = "#007AFF"
     tags: List[str] = []
+
+class QuestionLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    log_id: str
+    user_id: str
+    notebook_id: str
+    program_id: Optional[str] = None
+    total: int = 0
+    correct: int = 0
+    incorrect: int = 0
+    source: str = "manual"  # manual, quiz, ai
+    date: str
+    created_at: datetime
+
+class QuestionLogCreate(BaseModel):
+    notebook_id: str
+    total: int
+    correct: int
+    source: str = "manual"
+
+class FocusSession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    focus_id: str
+    user_id: str
+    notebook_id: Optional[str] = None
+    focus_minutes: int = 25
+    break_minutes: int = 5
+    completed: bool = False
+    date: str
+    notes: Optional[str] = None
+    xp_earned: int = 0
+    created_at: datetime
+
+class FocusSessionCreate(BaseModel):
+    notebook_id: Optional[str] = None
+    focus_minutes: int = 25
+    break_minutes: int = 5
+    notes: Optional[str] = None
 
 class StudyNote(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -4403,6 +4468,17 @@ Forneça a resposta em formato JSON com a seguinte estrutura:
         logging.error(f"Recipe suggestion failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate recipe: {str(e)}")
 
+@api_router.get("/nutrition/recipes/{recipe_id}")
+async def get_recipe_detail(request: Request, recipe_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get full recipe details"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    recipe = await db.recipes.find_one({"recipe_id": recipe_id, "user_id": user.user_id}, {"_id": 0})
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+    return recipe
+
 @api_router.delete("/nutrition/recipes/{recipe_id}")
 async def delete_recipe(request: Request, recipe_id: str, session_token: Optional[str] = Cookie(None)):
     """Delete a recipe"""
@@ -4484,18 +4560,352 @@ async def delete_study_area(request: Request, area_id: str, session_token: Optio
     
     # Also delete related notebooks
     await db.notebooks.delete_many({"area_id": area_id, "user_id": user.user_id})
+    # Also delete related programs
+    await db.study_programs.delete_many({"area_id": area_id, "user_id": user.user_id})
     
     return {"message": "Area deleted"}
 
-@api_router.get("/study/notebooks")
-async def get_notebooks(request: Request, area_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
-    """Get notebooks, optionally filtered by area"""
+# ========== STUDY PROGRAMS ==========
+
+@api_router.get("/study/programs")
+async def get_study_programs(request: Request, area_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get study programs, optionally filtered by area"""
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
     query = {"user_id": user.user_id}
     if area_id:
         query["area_id"] = area_id
+    
+    programs = await db.study_programs.find(query, {"_id": 0}).to_list(100)
+    
+    # Enrich with notebook counts and question stats
+    for prog in programs:
+        nb_count = await db.notebooks.count_documents({"program_id": prog["program_id"], "user_id": user.user_id})
+        prog["notebooks_count"] = nb_count
+        # Get aggregated questions from notebooks in this program
+        nbs = await db.notebooks.find({"program_id": prog["program_id"], "user_id": user.user_id}, {"_id": 0}).to_list(100)
+        prog["total_questions"] = sum(n.get("total_questions", 0) for n in nbs)
+        prog["correct_questions"] = sum(n.get("correct_questions", 0) for n in nbs)
+        total_time = sum(n.get("total_study_time_minutes", 0) for n in nbs)
+        prog["total_study_time_minutes"] = total_time
+    
+    return programs
+
+@api_router.post("/study/programs")
+async def create_study_program(request: Request, program_data: StudyProgramCreate, session_token: Optional[str] = Cookie(None)):
+    """Create a new study program/course"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    program_id = f"prog_{uuid.uuid4().hex[:12]}"
+    program_doc = {
+        "program_id": program_id,
+        "user_id": user.user_id,
+        "area_id": program_data.area_id,
+        "name": program_data.name,
+        "description": program_data.description,
+        "color": program_data.color,
+        "icon": program_data.icon,
+        "target_date": program_data.target_date,
+        "status": "active",
+        "total_questions": 0,
+        "correct_questions": 0,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.study_programs.insert_one(program_doc)
+    program_doc.pop('_id', None)
+    return program_doc
+
+@api_router.patch("/study/programs/{program_id}")
+async def update_study_program(request: Request, program_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Update a study program"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_fields = {}
+    for field in ["name", "description", "color", "icon", "target_date", "status"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    if update_fields:
+        await db.study_programs.update_one(
+            {"program_id": program_id, "user_id": user.user_id},
+            {"$set": update_fields}
+        )
+    
+    updated = await db.study_programs.find_one({"program_id": program_id, "user_id": user.user_id}, {"_id": 0})
+    if not updated:
+        raise HTTPException(status_code=404, detail="Program not found")
+    return updated
+
+@api_router.delete("/study/programs/{program_id}")
+async def delete_study_program(request: Request, program_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a study program and its notebooks"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.study_programs.delete_one({"program_id": program_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Program not found")
+    
+    # Delete related notebooks and their content
+    notebooks = await db.notebooks.find({"program_id": program_id, "user_id": user.user_id}, {"_id": 0}).to_list(100)
+    for nb in notebooks:
+        nb_id = nb.get("notebook_id")
+        await db.study_notes.delete_many({"notebook_id": nb_id, "user_id": user.user_id})
+        await db.flashcards.delete_many({"notebook_id": nb_id, "user_id": user.user_id})
+        await db.quizzes.delete_many({"notebook_id": nb_id, "user_id": user.user_id})
+    await db.notebooks.delete_many({"program_id": program_id, "user_id": user.user_id})
+    
+    return {"message": "Program deleted"}
+
+# ========== QUESTION TRACKING ==========
+
+@api_router.post("/study/questions/log")
+async def log_questions(request: Request, data: QuestionLogCreate, session_token: Optional[str] = Cookie(None)):
+    """Log questions answered for a notebook/subject"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    incorrect = data.total - data.correct
+    
+    # Get notebook to find program_id
+    notebook = await db.notebooks.find_one({"notebook_id": data.notebook_id, "user_id": user.user_id}, {"_id": 0})
+    program_id = notebook.get("program_id") if notebook else None
+    
+    log_id = f"qlog_{uuid.uuid4().hex[:12]}"
+    log_doc = {
+        "log_id": log_id,
+        "user_id": user.user_id,
+        "notebook_id": data.notebook_id,
+        "program_id": program_id,
+        "total": data.total,
+        "correct": data.correct,
+        "incorrect": incorrect,
+        "source": data.source,
+        "date": today,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.question_logs.insert_one(log_doc)
+    
+    # Update notebook question counters
+    await db.notebooks.update_one(
+        {"notebook_id": data.notebook_id, "user_id": user.user_id},
+        {"$inc": {"total_questions": data.total, "correct_questions": data.correct}}
+    )
+    
+    # Award XP: 2 XP per correct answer
+    xp_earned = data.correct * 2
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    # Update study streak
+    await update_study_streak(user.user_id)
+    
+    log_doc.pop('_id', None)
+    log_doc["xp_earned"] = xp_earned
+    log_doc["new_xp"] = new_xp
+    return log_doc
+
+@api_router.get("/study/questions/stats")
+async def get_question_stats(request: Request, notebook_id: Optional[str] = None, program_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get question statistics"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    if program_id:
+        query["program_id"] = program_id
+    
+    logs = await db.question_logs.find(query, {"_id": 0}).to_list(5000)
+    
+    total = sum(log.get("total", 0) for log in logs)
+    correct = sum(log.get("correct", 0) for log in logs)
+    incorrect = sum(log.get("incorrect", 0) for log in logs)
+    
+    # Stats by date (last 30 days)
+    daily_stats = {}
+    for log in logs:
+        date = log.get("date", "")
+        if date not in daily_stats:
+            daily_stats[date] = {"total": 0, "correct": 0, "incorrect": 0}
+        daily_stats[date]["total"] += log.get("total", 0)
+        daily_stats[date]["correct"] += log.get("correct", 0)
+        daily_stats[date]["incorrect"] += log.get("incorrect", 0)
+    
+    # Stats by notebook
+    by_notebook = {}
+    for log in logs:
+        nb_id = log.get("notebook_id", "")
+        if nb_id not in by_notebook:
+            by_notebook[nb_id] = {"total": 0, "correct": 0, "incorrect": 0}
+        by_notebook[nb_id]["total"] += log.get("total", 0)
+        by_notebook[nb_id]["correct"] += log.get("correct", 0)
+        by_notebook[nb_id]["incorrect"] += log.get("incorrect", 0)
+    
+    return {
+        "total_questions": total,
+        "correct": correct,
+        "incorrect": incorrect,
+        "accuracy": round((correct / total * 100), 1) if total > 0 else 0,
+        "daily_stats": daily_stats,
+        "by_notebook": by_notebook
+    }
+
+# ========== FOCUS/POMODORO ==========
+
+@api_router.post("/study/focus/complete")
+async def complete_focus_session(request: Request, data: FocusSessionCreate, session_token: Optional[str] = Cookie(None)):
+    """Complete a focus/pomodoro session"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # XP: 10 XP per 25 min completed
+    xp_earned = max(5, (data.focus_minutes // 25) * 10)
+    
+    focus_id = f"focus_{uuid.uuid4().hex[:12]}"
+    focus_doc = {
+        "focus_id": focus_id,
+        "user_id": user.user_id,
+        "notebook_id": data.notebook_id,
+        "focus_minutes": data.focus_minutes,
+        "break_minutes": data.break_minutes,
+        "completed": True,
+        "date": today,
+        "notes": data.notes,
+        "xp_earned": xp_earned,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.focus_sessions.insert_one(focus_doc)
+    
+    # Update notebook study time if linked
+    if data.notebook_id:
+        await db.notebooks.update_one(
+            {"notebook_id": data.notebook_id, "user_id": user.user_id},
+            {"$inc": {"total_study_time_minutes": data.focus_minutes}}
+        )
+    
+    # Award XP
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    # Update study streak
+    await update_study_streak(user.user_id)
+    
+    focus_doc.pop('_id', None)
+    focus_doc["new_xp"] = new_xp
+    focus_doc["new_rank"] = new_rank
+    return focus_doc
+
+@api_router.get("/study/focus/stats")
+async def get_focus_stats(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get focus/pomodoro statistics"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    # Today's sessions
+    today_sessions = await db.focus_sessions.find({"user_id": user.user_id, "date": today}, {"_id": 0}).to_list(100)
+    
+    # Last 7 days
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    week_sessions = await db.focus_sessions.find({
+        "user_id": user.user_id,
+        "date": {"$gte": seven_days_ago}
+    }, {"_id": 0}).to_list(500)
+    
+    # All time
+    all_sessions = await db.focus_sessions.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    
+    return {
+        "today": {
+            "sessions": len(today_sessions),
+            "total_minutes": sum(s.get("focus_minutes", 0) for s in today_sessions),
+            "xp_earned": sum(s.get("xp_earned", 0) for s in today_sessions)
+        },
+        "week": {
+            "sessions": len(week_sessions),
+            "total_minutes": sum(s.get("focus_minutes", 0) for s in week_sessions),
+            "daily_minutes": {s.get("date"): 0 for s in week_sessions}  # Will be enriched below
+        },
+        "all_time": {
+            "sessions": len(all_sessions),
+            "total_minutes": sum(s.get("focus_minutes", 0) for s in all_sessions),
+            "total_hours": round(sum(s.get("focus_minutes", 0) for s in all_sessions) / 60, 1)
+        }
+    }
+
+# ========== AI STUDY ASSISTANT ==========
+
+@api_router.post("/study/ai-chat")
+async def study_ai_chat(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    """AI study assistant - contextual help for studying"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    message = data.get("message", "")
+    notebook_id = data.get("notebook_id")
+    context_type = data.get("context_type", "general")  # general, explain, quiz_help, summarize, motivate
+    
+    # Build context from notebook if provided
+    context = ""
+    if notebook_id:
+        notebook = await db.notebooks.find_one({"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0})
+        if notebook:
+            context += f"\nMatéria: {notebook.get('name', '')}"
+            notes = await db.study_notes.find({"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0}).to_list(10)
+            if notes:
+                context += "\n\nNotas do aluno:\n"
+                for note in notes[:5]:
+                    context += f"- {note.get('title', '')}: {note.get('content', '')[:300]}\n"
+    
+    # Get study stats for motivation context
+    streak = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+    streak_info = f"Streak atual: {streak.get('current_streak', 0)} dias" if streak else "Sem streak"
+    
+    system_messages = {
+        "general": "Você é um tutor de estudos inteligente e paciente. Ajude o aluno a entender conceitos, organize seus estudos e dê dicas práticas. Seja conciso e use linguagem clara em português.",
+        "explain": "Você é um professor especialista. Explique conceitos de forma clara, use exemplos práticos e analogias simples. Responda em português.",
+        "quiz_help": "Você é um especialista em preparação para provas. Ajude a resolver questões, explique a lógica por trás das respostas e dê dicas para questões similares. Responda em português.",
+        "summarize": "Você é um especialista em resumos e técnicas de estudo. Crie resumos objetivos e organizados. Use bullet points e destaque conceitos-chave. Responda em português.",
+        "motivate": f"Você é um coach motivacional de estudos. O aluno tem {streak_info}. Motive-o a continuar estudando, dê dicas de produtividade e foco. Seja energético e positivo. Responda em português."
+    }
+    
+    system_msg = system_messages.get(context_type, system_messages["general"])
+    
+    full_prompt = f"{context}\n\nPergunta do aluno: {message}" if context else message
+    
+    try:
+        response = await call_llm(
+            full_prompt,
+            session_id=f"study_{user.user_id}",
+            system_message=system_msg
+        )
+        return {"response": response, "context_type": context_type}
+    except Exception as e:
+        logging.error(f"Study AI chat failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/study/notebooks")
+async def get_notebooks(request: Request, area_id: Optional[str] = None, program_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get notebooks, optionally filtered by area or program"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if area_id:
+        query["area_id"] = area_id
+    if program_id:
+        query["program_id"] = program_id
     
     notebooks = await db.notebooks.find(query, {"_id": 0}).to_list(1000)
     return notebooks
@@ -4511,11 +4921,14 @@ async def create_notebook(request: Request, notebook_data: NotebookCreate, sessi
         "notebook_id": notebook_id,
         "user_id": user.user_id,
         "area_id": notebook_data.area_id,
+        "program_id": notebook_data.program_id,
         "name": notebook_data.name,
         "description": notebook_data.description,
         "color": notebook_data.color,
         "tags": notebook_data.tags,
         "total_study_time_minutes": 0,
+        "total_questions": 0,
+        "correct_questions": 0,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.notebooks.insert_one(notebook_doc)
@@ -4529,7 +4942,7 @@ async def update_notebook(request: Request, notebook_id: str, data: dict, sessio
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
     update_fields = {}
-    for field in ["name", "description", "color", "tags", "area_id"]:
+    for field in ["name", "description", "color", "tags", "area_id", "program_id"]:
         if field in data:
             update_fields[field] = data[field]
     
