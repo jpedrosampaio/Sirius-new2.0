@@ -1,422 +1,460 @@
 #!/usr/bin/env python3
 """
-Backend testing script for Simulados (Mock Exam) endpoints
-Testing user: testsimulado@test.com / Test123!
-Backend URL: https://quiz-simulator-2.preview.emergentagent.com
+Backend Test Script for Simulados (Mock Exam) Feature
+Tests the newly implemented Simulados endpoints with updated Google Gemini API key
 """
 
 import requests
 import json
 import time
 import sys
-from typing import Dict, Any, Optional
+from datetime import datetime
 
 # Configuration
 BASE_URL = "https://quiz-simulator-2.preview.emergentagent.com/api"
-TEST_USER = {
-    "email": "testsimulado@test.com",
-    "password": "Test123!",
-    "name": "Test Simulado User"
-}
+TEST_EMAIL = "testsimulado2@test.com"
+TEST_PASSWORD = "Test123!"
+TIMEOUT_SECONDS = 120  # Extended timeout for AI generation
 
-class SimuladoTester:
-    def __init__(self):
-        self.session = requests.Session()
-        self.user_token = None
-        self.simulado_id = None
+# Test session variables
+session_token = None
+simulado_id = None
+test_results = []
+
+def log_test(test_name, passed, message="", details=""):
+    """Log test results"""
+    status = "✅ PASS" if passed else "❌ FAIL"
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    result = {
+        "test": test_name,
+        "status": status,
+        "timestamp": timestamp,
+        "message": message,
+        "details": details
+    }
+    test_results.append(result)
+    print(f"[{timestamp}] {status} - {test_name}")
+    if message:
+        print(f"    {message}")
+    if details and not passed:
+        print(f"    Details: {details}")
+
+def make_request(method, endpoint, data=None, timeout=30):
+    """Make HTTP request with session token"""
+    url = f"{BASE_URL}{endpoint}"
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    cookies = {}
+    if session_token:
+        cookies["session_token"] = session_token
+    
+    try:
+        if method.upper() == "GET":
+            response = requests.get(url, headers=headers, cookies=cookies, timeout=timeout)
+        elif method.upper() == "POST":
+            response = requests.post(url, headers=headers, cookies=cookies, 
+                                   json=data if data else {}, timeout=timeout)
+        elif method.upper() == "DELETE":
+            response = requests.delete(url, headers=headers, cookies=cookies, timeout=timeout)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
         
-    def log(self, message: str, level: str = "INFO"):
-        """Log messages with timestamp"""
-        print(f"[{level}] {message}")
+        return response
+    except requests.Timeout:
+        return None
+    except Exception as e:
+        print(f"Request error: {str(e)}")
+        return None
+
+def test_authentication():
+    """Test user registration and authentication"""
+    global session_token
+    
+    # Try to register user
+    register_data = {
+        "email": TEST_EMAIL,
+        "password": TEST_PASSWORD,
+        "name": "Test Simulado User"
+    }
+    
+    response = make_request("POST", "/auth/register", register_data)
+    
+    if response and response.status_code in [200, 400]:
+        # Registration successful or user already exists
+        # Now try to login
+        login_data = {
+            "email": TEST_EMAIL,
+            "password": TEST_PASSWORD
+        }
         
-    def register_and_login(self) -> bool:
-        """Register and login test user"""
-        try:
-            # Try to register user first (might fail if already exists)
-            self.log("Attempting to register test user...")
-            register_data = {
-                "name": TEST_USER["name"],
-                "email": TEST_USER["email"],
-                "password": TEST_USER["password"]
-            }
-            
-            register_response = self.session.post(f"{BASE_URL}/auth/register", json=register_data)
-            if register_response.status_code in [200, 201]:
-                self.log("✅ User registered successfully")
-            elif register_response.status_code == 400:
-                self.log("ℹ️ User already exists, proceeding to login")
-            else:
-                self.log(f"⚠️ Registration response: {register_response.status_code}")
-                
-            # Login
-            self.log("Logging in...")
-            login_data = {
-                "email": TEST_USER["email"],
-                "password": TEST_USER["password"]
-            }
-            
-            login_response = self.session.post(f"{BASE_URL}/auth/login", json=login_data)
-            
-            if login_response.status_code == 200:
-                self.log("✅ Login successful")
+        response = make_request("POST", "/auth/login", login_data)
+        
+        if response and response.status_code == 200:
+            data = response.json()
+            session_token = data.get("session_token")
+            if session_token:
+                log_test("User Authentication", True, f"Logged in as {TEST_EMAIL}")
                 return True
             else:
-                self.log(f"❌ Login failed: {login_response.status_code}")
-                self.log(f"Response: {login_response.text}")
+                log_test("User Authentication", False, "No session token returned")
                 return False
-                
-        except Exception as e:
-            self.log(f"❌ Auth error: {str(e)}", "ERROR")
+        else:
+            log_test("User Authentication", False, 
+                    f"Login failed: {response.status_code if response else 'timeout'}")
             return False
-            
-    def test_generate_simulado(self) -> bool:
-        """Test POST /api/study/simulados/generate - Generate a simulado with AI"""
+    else:
+        log_test("User Authentication", False, 
+                f"Registration failed: {response.status_code if response else 'timeout'}")
+        return False
+
+def test_generate_simulado():
+    """Test POST /api/study/simulados/generate endpoint"""
+    global simulado_id
+    
+    if not session_token:
+        log_test("Generate Simulado", False, "Not authenticated")
+        return False
+    
+    generate_data = {
+        "title": "Simulado Direito Constitucional",
+        "banca": "CESPE/CEBRASPE",
+        "disciplina": "Direito Constitucional",
+        "question_type": "multipla_escolha",
+        "num_questions": 5,
+        "difficulty": "medio"
+    }
+    
+    print(f"Generating simulado... (may take up to {TIMEOUT_SECONDS} seconds)")
+    response = make_request("POST", "/study/simulados/generate", generate_data, timeout=TIMEOUT_SECONDS)
+    
+    if response is None:
+        log_test("Generate Simulado", False, f"Request timeout after {TIMEOUT_SECONDS} seconds")
+        return False
+    
+    if response.status_code == 200:
         try:
-            self.log("Testing POST /api/study/simulados/generate...")
-            
-            data = {
-                "title": "Simulado Teste Direito",
-                "banca": "CESPE/CEBRASPE", 
-                "disciplina": "Direito Constitucional",
-                "question_type": "multipla_escolha",
-                "num_questions": 5,
-                "difficulty": "medio"
-            }
-            
-            # Set high timeout for AI generation (120 seconds as specified)
-            response = self.session.post(
-                f"{BASE_URL}/study/simulados/generate", 
-                json=data,
-                timeout=120
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success") and "simulado" in result:
-                    simulado = result["simulado"]
-                    self.simulado_id = simulado.get("simulado_id")
-                    questions_count = len(simulado.get("questions", []))
+            data = response.json()
+            if data.get("success") and data.get("simulado"):
+                simulado = data["simulado"]
+                simulado_id = simulado.get("simulado_id")
+                questions = simulado.get("questions", [])
+                
+                if len(questions) == 5:
+                    # Verify question structure
+                    first_question = questions[0]
+                    required_fields = ["question_text", "options", "correct_answer", "explanation"]
                     
-                    self.log(f"✅ Simulado generated successfully!")
-                    self.log(f"   - Simulado ID: {self.simulado_id}")
-                    self.log(f"   - Questions count: {questions_count}")
-                    self.log(f"   - Expected: 5 questions")
-                    
-                    if questions_count == 5:
-                        self.log("✅ Question count matches expectation")
-                        return True
+                    if all(field in first_question for field in required_fields):
+                        if len(first_question["options"]) == 5:
+                            log_test("Generate Simulado", True, 
+                                   f"Generated simulado with {len(questions)} questions")
+                            return True
+                        else:
+                            log_test("Generate Simulado", False, 
+                                   f"Question has {len(first_question['options'])} options, expected 5")
+                            return False
                     else:
-                        self.log(f"⚠️ Question count mismatch: expected 5, got {questions_count}")
+                        missing = [f for f in required_fields if f not in first_question]
+                        log_test("Generate Simulado", False, 
+                               f"Missing required question fields: {missing}")
                         return False
                 else:
-                    self.log(f"❌ Invalid response structure: {result}")
+                    log_test("Generate Simulado", False, 
+                           f"Generated {len(questions)} questions, expected 5")
                     return False
             else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
+                log_test("Generate Simulado", False, 
+                       f"Invalid response structure: {data}")
                 return False
-                
-        except requests.exceptions.Timeout:
-            self.log("❌ Request timed out after 120 seconds", "ERROR")
+        except json.JSONDecodeError:
+            log_test("Generate Simulado", False, "Invalid JSON response")
             return False
-        except Exception as e:
-            self.log(f"❌ Generate simulado error: {str(e)}", "ERROR")
-            return False
-            
-    def test_list_simulados(self) -> bool:
-        """Test GET /api/study/simulados - List all simulados"""
+    else:
         try:
-            self.log("Testing GET /api/study/simulados...")
+            error_data = response.json()
+            log_test("Generate Simulado", False, 
+                   f"HTTP {response.status_code}: {error_data.get('detail', 'Unknown error')}")
+        except:
+            log_test("Generate Simulado", False, 
+                   f"HTTP {response.status_code}: {response.text[:200]}")
+        return False
+
+def test_list_simulados():
+    """Test GET /api/study/simulados endpoint"""
+    if not session_token:
+        log_test("List Simulados", False, "Not authenticated")
+        return False
+    
+    response = make_request("GET", "/study/simulados")
+    
+    if response and response.status_code == 200:
+        try:
+            data = response.json()
+            if isinstance(data, list):
+                if simulado_id:
+                    # Find our created simulado
+                    found = any(s.get("simulado_id") == simulado_id for s in data)
+                    if found:
+                        # Check that questions are removed but questions_count is present
+                        simulado = next((s for s in data if s.get("simulado_id") == simulado_id), None)
+                        if simulado:
+                            if "questions" not in simulado and "questions_count" in simulado:
+                                log_test("List Simulados", True, 
+                                       f"Found {len(data)} simulados, questions removed from list")
+                                return True
+                            else:
+                                log_test("List Simulados", False, 
+                                       "Questions not properly removed from list view")
+                                return False
+                        else:
+                            log_test("List Simulados", False, "Simulado not found in list")
+                            return False
+                    else:
+                        log_test("List Simulados", False, 
+                               f"Created simulado {simulado_id} not found in list")
+                        return False
+                else:
+                    log_test("List Simulados", True, f"Retrieved {len(data)} simulados")
+                    return True
+            else:
+                log_test("List Simulados", False, "Response is not a list")
+                return False
+        except json.JSONDecodeError:
+            log_test("List Simulados", False, "Invalid JSON response")
+            return False
+    else:
+        log_test("List Simulados", False, 
+               f"HTTP {response.status_code if response else 'timeout'}")
+        return False
+
+def test_get_simulado_detail():
+    """Test GET /api/study/simulados/{simulado_id} endpoint"""
+    if not session_token or not simulado_id:
+        log_test("Get Simulado Detail", False, "Not authenticated or no simulado ID")
+        return False
+    
+    response = make_request("GET", f"/study/simulados/{simulado_id}")
+    
+    if response and response.status_code == 200:
+        try:
+            data = response.json()
+            if data.get("simulado_id") == simulado_id:
+                questions = data.get("questions", [])
+                if len(questions) > 0:
+                    log_test("Get Simulado Detail", True, 
+                           f"Retrieved simulado with {len(questions)} questions")
+                    return True
+                else:
+                    log_test("Get Simulado Detail", False, "No questions in simulado detail")
+                    return False
+            else:
+                log_test("Get Simulado Detail", False, "Wrong simulado returned")
+                return False
+        except json.JSONDecodeError:
+            log_test("Get Simulado Detail", False, "Invalid JSON response")
+            return False
+    else:
+        log_test("Get Simulado Detail", False, 
+               f"HTTP {response.status_code if response else 'timeout'}")
+        return False
+
+def test_submit_simulado():
+    """Test POST /api/study/simulados/{simulado_id}/submit endpoint"""
+    if not session_token or not simulado_id:
+        log_test("Submit Simulado", False, "Not authenticated or no simulado ID")
+        return False
+    
+    # Submit answers for all 5 questions (using letters A-E as specified)
+    submit_data = {
+        "answers": [
+            {"question_idx": 0, "selected_answer": "A"},
+            {"question_idx": 1, "selected_answer": "B"},
+            {"question_idx": 2, "selected_answer": "C"},
+            {"question_idx": 3, "selected_answer": "D"},
+            {"question_idx": 4, "selected_answer": "E"}
+        ],
+        "time_spent_seconds": 300
+    }
+    
+    response = make_request("POST", f"/study/simulados/{simulado_id}/submit", submit_data)
+    
+    if response and response.status_code == 200:
+        try:
+            data = response.json()
+            required_fields = ["score", "correct_count", "total_questions", "answers", 
+                             "by_disciplina", "xp_earned"]
             
-            response = self.session.get(f"{BASE_URL}/study/simulados")
-            
-            if response.status_code == 200:
-                simulados = response.json()
-                
-                if isinstance(simulados, list):
-                    self.log(f"✅ Simulados list retrieved successfully!")
-                    self.log(f"   - Total simulados: {len(simulados)}")
-                    
-                    # Look for our created simulado
-                    found_simulado = False
-                    for sim in simulados:
-                        if sim.get("simulado_id") == self.simulado_id:
-                            found_simulado = True
-                            self.log(f"   - Found created simulado: {sim.get('title')}")
-                            break
-                            
-                    if found_simulado or len(simulados) > 0:
-                        self.log("✅ List contains simulados")
+            if all(field in data for field in required_fields):
+                answers = data.get("answers", [])
+                if len(answers) == 5:
+                    # Check answer structure
+                    first_answer = answers[0]
+                    if "is_correct" in first_answer and "explanation" in first_answer:
+                        log_test("Submit Simulado", True, 
+                               f"Score: {data['score']}%, Correct: {data['correct_count']}/5, XP: {data['xp_earned']}")
                         return True
                     else:
-                        self.log("⚠️ No simulados found in list")
-                        return True  # Empty list is still valid
+                        log_test("Submit Simulado", False, 
+                               "Answer missing is_correct or explanation")
+                        return False
                 else:
-                    self.log(f"❌ Expected array, got: {type(simulados)}")
+                    log_test("Submit Simulado", False, 
+                           f"Got {len(answers)} answers, expected 5")
                     return False
             else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
+                missing = [f for f in required_fields if f not in data]
+                log_test("Submit Simulado", False, 
+                       f"Missing required fields: {missing}")
                 return False
-                
-        except Exception as e:
-            self.log(f"❌ List simulados error: {str(e)}", "ERROR")
+        except json.JSONDecodeError:
+            log_test("Submit Simulado", False, "Invalid JSON response")
             return False
-            
-    def test_get_simulado(self) -> bool:
-        """Test GET /api/study/simulados/{simulado_id} - Get single simulado"""
+    else:
         try:
-            if not self.simulado_id:
-                self.log("❌ No simulado_id available for testing")
-                return False
-                
-            self.log(f"Testing GET /api/study/simulados/{self.simulado_id}...")
-            
-            response = self.session.get(f"{BASE_URL}/study/simulados/{self.simulado_id}")
-            
-            if response.status_code == 200:
-                simulado = response.json()
-                
-                if "simulado_id" in simulado and "questions" in simulado:
-                    questions = simulado.get("questions", [])
-                    self.log(f"✅ Simulado retrieved successfully!")
-                    self.log(f"   - Simulado ID: {simulado.get('simulado_id')}")
-                    self.log(f"   - Title: {simulado.get('title')}")
-                    self.log(f"   - Questions count: {len(questions)}")
-                    self.log(f"   - Banca: {simulado.get('banca')}")
-                    self.log(f"   - Disciplina: {simulado.get('disciplina')}")
-                    
-                    return True
-                else:
-                    self.log(f"❌ Invalid simulado structure: {simulado.keys()}")
-                    return False
-            else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
-                return False
-                
-        except Exception as e:
-            self.log(f"❌ Get simulado error: {str(e)}", "ERROR")
-            return False
-            
-    def test_submit_simulado(self) -> bool:
-        """Test POST /api/study/simulados/{simulado_id}/submit - Submit answers"""
+            error_data = response.json()
+            log_test("Submit Simulado", False, 
+                   f"HTTP {response.status_code}: {error_data.get('detail', 'Unknown error')}")
+        except:
+            log_test("Submit Simulado", False, 
+                   f"HTTP {response.status_code}: {response.text[:200]}")
+        return False
+
+def test_get_simulado_results():
+    """Test GET /api/study/simulados/{simulado_id}/results endpoint"""
+    if not session_token or not simulado_id:
+        log_test("Get Simulado Results", False, "Not authenticated or no simulado ID")
+        return False
+    
+    response = make_request("GET", f"/study/simulados/{simulado_id}/results")
+    
+    if response and response.status_code == 200:
         try:
-            if not self.simulado_id:
-                self.log("❌ No simulado_id available for testing")
-                return False
-                
-            self.log(f"Testing POST /api/study/simulados/{self.simulado_id}/submit...")
-            
-            # Submit test answers as specified in review request
-            data = {
-                "answers": [
-                    {"question_idx": 0, "selected_answer": "A"},
-                    {"question_idx": 1, "selected_answer": "B"}, 
-                    {"question_idx": 2, "selected_answer": "C"},
-                    {"question_idx": 3, "selected_answer": "D"},
-                    {"question_idx": 4, "selected_answer": "E"}
-                ],
-                "time_spent_seconds": 300
-            }
-            
-            response = self.session.post(
-                f"{BASE_URL}/study/simulados/{self.simulado_id}/submit", 
-                json=data
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                
-                required_fields = ["score", "correct_count", "total_questions", "by_disciplina", "xp_earned"]
-                missing_fields = [field for field in required_fields if field not in result]
-                
-                if not missing_fields:
-                    self.log(f"✅ Simulado submitted successfully!")
-                    self.log(f"   - Score: {result.get('score')}%")
-                    self.log(f"   - Correct: {result.get('correct_count')}/{result.get('total_questions')}")
-                    self.log(f"   - XP Earned: {result.get('xp_earned')}")
-                    self.log(f"   - By Disciplina: {result.get('by_disciplina')}")
-                    
-                    return True
+            data = response.json()
+            if isinstance(data, list):
+                if len(data) > 0:
+                    # Should have at least 1 attempt from previous test
+                    attempt = data[0]
+                    if "score" in attempt and "correct_count" in attempt:
+                        log_test("Get Simulado Results", True, 
+                               f"Retrieved {len(data)} attempt(s)")
+                        return True
+                    else:
+                        log_test("Get Simulado Results", False, 
+                               "Attempt missing required fields")
+                        return False
                 else:
-                    self.log(f"❌ Missing required fields: {missing_fields}")
-                    return False
+                    log_test("Get Simulado Results", True, "No attempts yet (valid state)")
+                    return True
             else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
+                log_test("Get Simulado Results", False, "Response is not a list")
                 return False
-                
-        except Exception as e:
-            self.log(f"❌ Submit simulado error: {str(e)}", "ERROR")
+        except json.JSONDecodeError:
+            log_test("Get Simulado Results", False, "Invalid JSON response")
             return False
-            
-    def test_get_results(self) -> bool:
-        """Test GET /api/study/simulados/{simulado_id}/results - Get results"""
+    else:
+        log_test("Get Simulado Results", False, 
+               f"HTTP {response.status_code if response else 'timeout'}")
+        return False
+
+def test_get_simulado_stats():
+    """Test GET /api/study/simulados/stats endpoint"""
+    if not session_token:
+        log_test("Get Simulado Stats", False, "Not authenticated")
+        return False
+    
+    response = make_request("GET", "/study/simulados/stats")
+    
+    if response and response.status_code == 200:
         try:
-            if not self.simulado_id:
-                self.log("❌ No simulado_id available for testing")
-                return False
-                
-            self.log(f"Testing GET /api/study/simulados/{self.simulado_id}/results...")
+            data = response.json()
+            required_fields = ["total_simulados", "total_attempts", "accuracy_rate", 
+                             "by_banca", "by_disciplina"]
             
-            response = self.session.get(f"{BASE_URL}/study/simulados/{self.simulado_id}/results")
-            
-            if response.status_code == 200:
-                attempts = response.json()
-                
-                if isinstance(attempts, list):
-                    self.log(f"✅ Results retrieved successfully!")
-                    self.log(f"   - Total attempts: {len(attempts)}")
-                    
-                    if attempts:
-                        latest_attempt = attempts[0]  # Should be sorted by date desc
-                        self.log(f"   - Latest attempt score: {latest_attempt.get('score')}%")
-                        self.log(f"   - Latest attempt date: {latest_attempt.get('completed_at')}")
-                    
-                    return True
-                else:
-                    self.log(f"❌ Expected array, got: {type(attempts)}")
-                    return False
+            if all(field in data for field in required_fields):
+                log_test("Get Simulado Stats", True, 
+                       f"Stats: {data['total_simulados']} simulados, {data['total_attempts']} attempts")
+                return True
             else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
+                missing = [f for f in required_fields if f not in data]
+                log_test("Get Simulado Stats", False, 
+                       f"Missing required fields: {missing}")
                 return False
-                
-        except Exception as e:
-            self.log(f"❌ Get results error: {str(e)}", "ERROR")
+        except json.JSONDecodeError:
+            log_test("Get Simulado Stats", False, "Invalid JSON response")
             return False
-            
-    def test_get_stats(self) -> bool:
-        """Test GET /api/study/simulados/stats - Get statistics"""
+    else:
+        log_test("Get Simulado Stats", False, 
+               f"HTTP {response.status_code if response else 'timeout'}")
+        return False
+
+def test_delete_simulado():
+    """Test DELETE /api/study/simulados/{simulado_id} endpoint"""
+    if not session_token or not simulado_id:
+        log_test("Delete Simulado", False, "Not authenticated or no simulado ID")
+        return False
+    
+    response = make_request("DELETE", f"/study/simulados/{simulado_id}")
+    
+    if response and response.status_code == 200:
         try:
-            self.log("Testing GET /api/study/simulados/stats...")
-            
-            response = self.session.get(f"{BASE_URL}/study/simulados/stats")
-            
-            if response.status_code == 200:
-                stats = response.json()
-                
-                expected_fields = ["total_simulados", "total_attempts", "accuracy_rate", 
-                                 "by_banca", "by_disciplina"]
-                missing_fields = [field for field in expected_fields if field not in stats]
-                
-                if not missing_fields:
-                    self.log(f"✅ Statistics retrieved successfully!")
-                    self.log(f"   - Total simulados: {stats.get('total_simulados')}")
-                    self.log(f"   - Total attempts: {stats.get('total_attempts')}")
-                    self.log(f"   - Accuracy rate: {stats.get('accuracy_rate')}%")
-                    self.log(f"   - By banca: {stats.get('by_banca')}")
-                    self.log(f"   - By disciplina: {stats.get('by_disciplina')}")
-                    
-                    return True
-                else:
-                    self.log(f"❌ Missing expected fields: {missing_fields}")
-                    return False
+            data = response.json()
+            if "message" in data:
+                log_test("Delete Simulado", True, "Simulado deleted successfully")
+                return True
             else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
+                log_test("Delete Simulado", False, "No success message in response")
                 return False
-                
-        except Exception as e:
-            self.log(f"❌ Get stats error: {str(e)}", "ERROR")
+        except json.JSONDecodeError:
+            log_test("Delete Simulado", False, "Invalid JSON response")
             return False
-            
-    def test_delete_simulado(self) -> bool:
-        """Test DELETE /api/study/simulados/{simulado_id} - Delete simulado"""
+    else:
+        log_test("Delete Simulado", False, 
+               f"HTTP {response.status_code if response else 'timeout'}")
+        return False
+
+def main():
+    """Run all Simulados endpoint tests"""
+    print("🧪 Starting Simulados Backend Tests")
+    print(f"Backend URL: {BASE_URL}")
+    print(f"Test User: {TEST_EMAIL}")
+    print("=" * 60)
+    
+    # Test sequence as specified in the review request
+    tests = [
+        ("Authentication", test_authentication),
+        ("Generate Simulado", test_generate_simulado),
+        ("List Simulados", test_list_simulados),
+        ("Get Simulado Detail", test_get_simulado_detail),
+        ("Submit Simulado", test_submit_simulado),
+        ("Get Simulado Results", test_get_simulado_results),
+        ("Get Simulado Stats", test_get_simulado_stats),
+        ("Delete Simulado", test_delete_simulado),
+    ]
+    
+    passed = 0
+    total = len(tests)
+    
+    for test_name, test_func in tests:
         try:
-            if not self.simulado_id:
-                self.log("❌ No simulado_id available for testing")
-                return False
-                
-            self.log(f"Testing DELETE /api/study/simulados/{self.simulado_id}...")
-            
-            response = self.session.delete(f"{BASE_URL}/study/simulados/{self.simulado_id}")
-            
-            if response.status_code == 200:
-                result = response.json()
-                
-                if "message" in result:
-                    self.log(f"✅ Simulado deleted successfully!")
-                    self.log(f"   - Message: {result.get('message')}")
-                    
-                    return True
-                else:
-                    self.log(f"❌ Invalid response structure: {result}")
-                    return False
-            else:
-                self.log(f"❌ Request failed: {response.status_code}")
-                self.log(f"Response: {response.text}")
-                return False
-                
+            if test_func():
+                passed += 1
         except Exception as e:
-            self.log(f"❌ Delete simulado error: {str(e)}", "ERROR")
-            return False
-            
-    def run_all_tests(self):
-        """Run all Simulados endpoint tests in sequence"""
-        self.log("🚀 Starting Simulados Backend Testing")
-        self.log(f"Backend URL: {BASE_URL}")
-        self.log(f"Test User: {TEST_USER['email']}")
-        
-        tests = [
-            ("Authentication", self.register_and_login),
-            ("Generate Simulado (AI)", self.test_generate_simulado),
-            ("List Simulados", self.test_list_simulados), 
-            ("Get Single Simulado", self.test_get_simulado),
-            ("Submit Answers", self.test_submit_simulado),
-            ("Get Results", self.test_get_results),
-            ("Get Statistics", self.test_get_stats),
-            ("Delete Simulado", self.test_delete_simulado)
-        ]
-        
-        results = {}
-        
-        for test_name, test_func in tests:
-            self.log(f"\n{'='*50}")
-            self.log(f"🧪 Running Test: {test_name}")
-            self.log(f"{'='*50}")
-            
-            try:
-                success = test_func()
-                results[test_name] = success
-                
-                if success:
-                    self.log(f"✅ {test_name}: PASSED")
-                else:
-                    self.log(f"❌ {test_name}: FAILED")
-                    
-            except Exception as e:
-                self.log(f"💥 {test_name}: ERROR - {str(e)}", "ERROR")
-                results[test_name] = False
-                
-            # Small delay between tests
-            time.sleep(1)
-            
-        # Print summary
-        self.log(f"\n{'='*50}")
-        self.log("📊 TEST SUMMARY")
-        self.log(f"{'='*50}")
-        
-        passed = sum(1 for result in results.values() if result)
-        total = len(results)
-        
-        for test_name, result in results.items():
-            status = "✅ PASSED" if result else "❌ FAILED"
-            self.log(f"{test_name}: {status}")
-            
-        self.log(f"\nTotal: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
-        
-        if passed == total:
-            self.log("🎉 ALL TESTS PASSED!")
-            return True
-        else:
-            self.log("⚠️ Some tests failed. Check logs above for details.")
-            return False
+            log_test(test_name, False, f"Test exception: {str(e)}")
+    
+    print("\n" + "=" * 60)
+    print(f"📊 Test Results: {passed}/{total} passed ({passed/total*100:.1f}%)")
+    
+    # Print summary
+    print("\n📋 Detailed Results:")
+    for result in test_results:
+        print(f"{result['status']} {result['test']}")
+        if result['message']:
+            print(f"    {result['message']}")
+    
+    # Return exit code
+    return 0 if passed == total else 1
 
 if __name__ == "__main__":
-    tester = SimuladoTester()
-    success = tester.run_all_tests()
-    
-    # Exit with appropriate code
-    sys.exit(0 if success else 1)
+    sys.exit(main())
