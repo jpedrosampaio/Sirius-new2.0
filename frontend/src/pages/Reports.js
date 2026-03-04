@@ -17,6 +17,7 @@ export default function Reports() {
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState("diário");
   const [period, setPeriod] = useState("hoje");
+  const [expandedReports, setExpandedReports] = useState(new Set());
 
   useEffect(() => {
     fetchUser();
@@ -55,7 +56,19 @@ export default function Reports() {
       setLoading(false);
     }
   };
-
+  
+  const toggleReport = (reportId) => {
+    setExpandedReports(prev => {
+      const next = new Set(prev);
+      if (next.has(reportId)) {
+        next.delete(reportId);
+      } else {
+        next.add(reportId);
+      }
+      return next;
+    });
+  };
+  
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
@@ -118,9 +131,14 @@ export default function Reports() {
                 <p className="text-[#A1A1AA]">Nenhum relatório gerado ainda</p>
               </Card>
             ) : (
-              reports.map((report) => (
-                <Card key={report.report_id} className="bg-[#0A0A0A] border-[#27272A] p-6">
-                  <div className="flex items-start justify-between mb-4">
+              reports.map((report) => {
+                const isExpanded = expandedReports.has(report.report_id);
+                return (
+                <Card key={report.report_id} className=\"bg-[#0A0A0A] border-[#27272A] overflow-hidden\">
+                  <div
+                    className=\"flex items-center justify-between p-6 cursor-pointer hover:bg-[#121212] transition-colors\"
+                    onClick={() => toggleReport(report.report_id)}
+                  >
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-[#00F0FF]/20 rounded-sm flex items-center justify-center">
                         <FileText className="w-6 h-6 text-[#00F0FF]" />
