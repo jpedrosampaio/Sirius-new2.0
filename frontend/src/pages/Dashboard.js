@@ -3,7 +3,12 @@ import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { CheckSquare, TrendingUp, DollarSign, Target, Award, Zap, Dumbbell, Utensils, BookOpen, Droplets, Flame, Clock, Brain } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  CheckSquare, TrendingUp, DollarSign, Target, Award, Zap,
+  Dumbbell, Utensils, BookOpen, Droplets, Flame, Clock, Brain,
+  ClipboardList, BarChart3, Trophy, ListChecks, Hash, Percent
+} from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -70,6 +75,8 @@ export default function Dashboard() {
   }
 
   const nextRank = getNextRank();
+  const simStats = stats?.simulado_stats || {};
+  const qOverview = stats?.question_overview || {};
 
   return (
     <div className="flex min-h-screen bg-[#050505]">
@@ -83,6 +90,7 @@ export default function Dashboard() {
 
           {stats && (
             <>
+              {/* Row 1: Quick Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
                   <div className="flex items-center justify-between mb-2 md:mb-4">
@@ -117,7 +125,7 @@ export default function Dashboard() {
                 </Card>
               </div>
 
-              {/* Treino, Nutrição e Estudos */}
+              {/* Row 2: Treino, Nutrição, Estudos */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
                 {/* Card de Treino */}
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
@@ -130,21 +138,15 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA] flex items-center gap-2">
-                        <Flame className="w-4 h-4" /> Sessões
-                      </span>
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Flame className="w-4 h-4" /> Sessões</span>
                       <span className="font-data text-[#FF6B6B]">{stats.workout_stats?.workouts_this_week || 0}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA] flex items-center gap-2">
-                        <Clock className="w-4 h-4" /> Duração
-                      </span>
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Clock className="w-4 h-4" /> Duração</span>
                       <span className="font-data">{stats.workout_stats?.total_duration_minutes || 0} min</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA] flex items-center gap-2">
-                        <Flame className="w-4 h-4" /> Calorias
-                      </span>
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Flame className="w-4 h-4" /> Calorias</span>
                       <span className="font-data text-[#FF9500]">{stats.workout_stats?.total_calories_burned || 0} kcal</span>
                     </div>
                   </div>
@@ -174,9 +176,7 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[#A1A1AA] text-sm flex items-center gap-1">
-                          <Droplets className="w-3 h-3" /> Água
-                        </span>
+                        <span className="text-[#A1A1AA] text-sm flex items-center gap-1"><Droplets className="w-3 h-3" /> Água</span>
                         <span className="font-data text-sm text-[#00B4D8]">
                           {((stats.nutrition_stats?.water_consumed_ml || 0) / 1000).toFixed(1)}L / {((stats.nutrition_stats?.water_goal_ml || 2000) / 1000).toFixed(1)}L
                         </span>
@@ -204,44 +204,107 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA] flex items-center gap-2">
-                        <Clock className="w-4 h-4" /> Hoje
-                      </span>
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Clock className="w-4 h-4" /> Hoje</span>
                       <span className="font-data">{stats.study_stats?.study_time_today_minutes || 0} min</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA] flex items-center gap-2">
-                        <Flame className="w-4 h-4" /> Streak
-                      </span>
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Flame className="w-4 h-4" /> Streak</span>
                       <span className="font-data text-[#FFD700]">{stats.study_stats?.current_streak || 0} dias</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-[#A1A1AA] flex items-center gap-2">
-                        <Brain className="w-4 h-4" /> Flashcards
-                      </span>
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Brain className="w-4 h-4" /> Flashcards</span>
                       <span className={`font-data ${(stats.study_stats?.flashcards_due || 0) > 0 ? 'text-[#FF9500]' : 'text-[#39FF14]'}`}>
                         {stats.study_stats?.flashcards_due || 0} pendentes
                       </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] flex items-center gap-2"><Hash className="w-4 h-4" /> Matérias</span>
+                      <span className="font-data">{stats.study_stats?.notebooks_count || 0}</span>
                     </div>
                   </div>
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4 mb-8">
+              {/* Row 3: Simulados + Questões + Rank + Finanças */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+                {/* Card de Simulados */}
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
-                  <div className="flex items-center space-x-3 md:space-x-4 mb-3 md:mb-4">
-                    <Award className="w-8 h-8 md:w-10 md:h-10 text-[#FFD700]" />
+                  <div className="flex items-center space-x-3 mb-3">
+                    <ClipboardList className="w-8 h-8 text-[#007AFF]" />
+                    <div>
+                      <p className="text-xs text-[#A1A1AA] uppercase tracking-wider">Simulados</p>
+                      <p className="font-heading text-lg">Desempenho</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] text-sm">Total</span>
+                      <span className="font-data text-[#007AFF]">{simStats.total_simulados || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] text-sm">Tentativas</span>
+                      <span className="font-data">{simStats.total_attempts || 0}</span>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[#A1A1AA] text-sm">Média</span>
+                        <span className={`font-data text-sm ${(simStats.average_score || 0) >= 70 ? 'text-[#39FF14]' : (simStats.average_score || 0) >= 50 ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
+                          {simStats.average_score || 0}%
+                        </span>
+                      </div>
+                      <Progress value={simStats.average_score || 0} className="h-2" />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#A1A1AA] text-sm">Melhor</span>
+                      <span className="font-data text-[#39FF14]">{simStats.best_score || 0}%</span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Card de Questões */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <ListChecks className="w-8 h-8 text-[#FF6B6B]" />
+                    <div>
+                      <p className="text-xs text-[#A1A1AA] uppercase tracking-wider">Questões</p>
+                      <p className="font-heading text-lg">Respondidas</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="text-center py-2">
+                      <span className="font-data text-3xl text-white">{qOverview.total_answered || 0}</span>
+                      <p className="text-xs text-[#A1A1AA] mt-1">total respondidas</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="bg-[#121212] rounded-lg p-2">
+                        <p className="font-data text-lg text-[#39FF14]">{qOverview.total_correct || 0}</p>
+                        <p className="text-[10px] text-[#A1A1AA]">Acertos</p>
+                      </div>
+                      <div className="bg-[#121212] rounded-lg p-2">
+                        <p className={`font-data text-lg ${(qOverview.accuracy_rate || 0) >= 70 ? 'text-[#39FF14]' : (qOverview.accuracy_rate || 0) >= 50 ? 'text-[#FFD700]' : 'text-[#FF3B30]'}`}>
+                          {qOverview.accuracy_rate || 0}%
+                        </p>
+                        <p className="text-[10px] text-[#A1A1AA]">Taxa</p>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Rank Card */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <Award className="w-8 h-8 text-[#FFD700]" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Rank Atual</p>
-                      <p className="font-heading text-2xl md:text-3xl">{user?.rank || 'Recruta'}</p>
+                      <p className="text-xs text-[#A1A1AA] uppercase tracking-wider">Rank</p>
+                      <p className="font-heading text-lg">{user?.rank || 'Recruta'}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="font-data text-xl md:text-2xl">{user?.xp ?? 0}</p>
-                      <p className="text-xs text-[#A1A1AA]">XP</p>
+                      <p className="font-data text-xl">{user?.xp ?? 0}</p>
+                      <p className="text-[10px] text-[#A1A1AA]">XP</p>
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
+                    <div className="flex justify-between text-xs">
                       <span className="text-[#A1A1AA]">Próximo: {nextRank.name}</span>
                       <span className="font-data text-[#A1A1AA]">{nextRank.xp} XP</span>
                     </div>
@@ -249,27 +312,28 @@ export default function Dashboard() {
                   </div>
                 </Card>
 
+                {/* Resumo Financeiro */}
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
-                  <div className="flex items-center space-x-3 md:space-x-4 mb-3 md:mb-4">
-                    <Zap className="w-8 h-8 md:w-10 md:h-10 text-[#007AFF]" />
+                  <div className="flex items-center space-x-3 mb-3">
+                    <Zap className="w-8 h-8 text-[#007AFF]" />
                     <div>
-                      <p className="text-sm text-[#A1A1AA] uppercase tracking-wider mb-1">Resumo Financeiro</p>
-                      <p className="font-heading text-xl md:text-2xl">Mês Atual</p>
+                      <p className="text-xs text-[#A1A1AA] uppercase tracking-wider">Finanças</p>
+                      <p className="font-heading text-lg">Mês Atual</p>
                     </div>
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-[#A1A1AA] text-sm">Receitas</span>
-                      <span className="font-data text-sm text-[#39FF14]">+R$ {(stats.income ?? 0).toFixed(2)}</span>
+                      <span className="font-data text-sm text-[#39FF14]">+R$ {(stats.income ?? 0).toFixed(0)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-[#A1A1AA] text-sm">Despesas</span>
-                      <span className="font-data text-sm text-[#FF3B30]">-R$ {(stats.expenses ?? 0).toFixed(2)}</span>
+                      <span className="font-data text-sm text-[#FF3B30]">-R$ {(stats.expenses ?? 0).toFixed(0)}</span>
                     </div>
-                    <div className="border-t border-[#27272A] pt-3 flex justify-between items-center">
+                    <div className="border-t border-[#27272A] pt-2 flex justify-between items-center">
                       <span className="font-medium text-sm">Saldo</span>
-                      <span className={`font-data text-base md:text-lg ${(stats.balance ?? 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
-                        R$ {(stats.balance ?? 0).toFixed(2)}
+                      <span className={`font-data text-base ${(stats.balance ?? 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                        R$ {(stats.balance ?? 0).toFixed(0)}
                       </span>
                     </div>
                   </div>

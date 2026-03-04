@@ -1861,6 +1861,34 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
         "notebooks_count": len(notebooks)
     }
     
+    # ===== SIMULADOS STATS =====
+    simulados_list = await db.simulados.find({"user_id": user.user_id}, {"_id": 0, "simulado_id": 1}).to_list(200)
+    simulado_attempts = await db.simulado_attempts.find({"user_id": user.user_id}, {"_id": 0}).to_list(500)
+    sim_scores = [a.get("score", 0) for a in simulado_attempts]
+    sim_correct = sum(a.get("correct_count", 0) for a in simulado_attempts)
+    sim_total_q = sum(a.get("total_questions", 0) for a in simulado_attempts)
+    
+    simulado_stats = {
+        "total_simulados": len(simulados_list),
+        "total_attempts": len(simulado_attempts),
+        "average_score": round(sum(sim_scores) / len(sim_scores), 1) if sim_scores else 0,
+        "best_score": round(max(sim_scores), 1) if sim_scores else 0,
+        "total_questions_answered": sim_total_q,
+        "total_correct": sim_correct,
+        "accuracy_rate": round(sim_correct / sim_total_q * 100, 1) if sim_total_q > 0 else 0
+    }
+    
+    # ===== QUESTION LOGS FOR OVERVIEW =====
+    all_question_logs = await db.question_logs.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    total_questions_all = sum(q.get("total", 0) for q in all_question_logs)
+    total_correct_all = sum(q.get("correct", 0) for q in all_question_logs)
+    
+    question_overview = {
+        "total_answered": total_questions_all,
+        "total_correct": total_correct_all,
+        "accuracy_rate": round(total_correct_all / total_questions_all * 100, 1) if total_questions_all > 0 else 0
+    }
+    
     return {
         "user": {"name": user.name, "xp": user.xp, "rank": user.rank, "picture": user.picture},
         "tasks_today": tasks_today,
@@ -1874,7 +1902,9 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
         "goals_avg_progress": avg_progress,
         "workout_stats": workout_stats,
         "nutrition_stats": nutrition_stats,
-        "study_stats": study_stats
+        "study_stats": study_stats,
+        "simulado_stats": simulado_stats,
+        "question_overview": question_overview
     }
 
 @api_router.post("/goals/{goal_id}/check")
@@ -5906,6 +5936,223 @@ Responda de forma concisa e motivadora em português."""
     except Exception as e:
         logging.error(f"AI suggestions failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ========== PDF CONTENT ANALYSIS ENDPOINT ==========
+
+@api_router.post("/study/content/analyze-pdf")
+async def analyze_content_pdf(
+    request: Request,
+    file: UploadFile = File(...),
+    notebook_id: Optional[str] = Form(None),
+    generate_notes: bool = Form(True),
+    generate_flashcards: bool = Form(True),
+    generate_quiz: bool = Form(True),
+    num_flashcards: int = Form(10),
+    num_quiz_questions: int = Form(5),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Analyze a PDF of study content and generate review notes, flashcards, and quizzes"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+    
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        uploaded_file = gemini_client.files.upload(file=tmp_path)
+        
+        # Build generation instructions
+        gen_parts = []
+        if generate_notes:
+            gen_parts.append(f"""
+"review_notes": {{
+  "title": "Título da revisão",
+  "summary": "Resumo completo e detalhado do conteúdo (mínimo 500 palavras), cobrindo TODOS os tópicos principais",
+  "key_topics": ["Tópico 1", "Tópico 2", ...],
+  "important_points": ["Ponto importante 1", "Ponto importante 2", ...],
+  "study_tips": ["Dica de estudo 1", "Dica 2", ...]
+}}""")
+        
+        if generate_flashcards:
+            gen_parts.append(f"""
+"flashcards": [
+  {{"front": "Pergunta/conceito", "back": "Resposta/definição", "deck_name": "Tema"}},
+  ... (gere exatamente {num_flashcards} flashcards cobrindo os conceitos mais importantes)
+]""")
+        
+        if generate_quiz:
+            gen_parts.append(f"""
+"quiz": {{
+  "title": "Quiz sobre o conteúdo",
+  "questions": [
+    {{
+      "question_text": "Pergunta sobre o conteúdo",
+      "options": ["A) opção", "B) opção", "C) opção", "D) opção", "E) opção"],
+      "correct_answer": "A",
+      "explanation": "Explicação da resposta"
+    }},
+    ... (gere exatamente {num_quiz_questions} questões de múltipla escolha)
+  ]
+}}""")
+        
+        system_msg = f"""Você é um especialista em educação e criação de materiais de estudo.
+Analise o conteúdo do documento PDF e gere materiais de estudo de alta qualidade.
+
+Identifique os temas principais, conceitos-chave, definições importantes e relações entre os tópicos.
+
+Responda APENAS com JSON válido contendo:
+{{
+  {",".join(gen_parts)}
+}}
+
+REGRAS:
+- A revisão deve ser completa e educativa
+- Flashcards devem cobrir conceitos-chave e definições
+- Quiz deve ter questões que testem compreensão real do conteúdo
+- Tudo em português
+- JSON deve ser válido e bem formatado"""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_file.uri, mime_type="application/pdf"),
+                "Analise este documento de estudo e gere materiais de revisão completos em JSON:"
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        os.unlink(tmp_path)
+        
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        parsed = json.loads(json_str.strip())
+        
+        results = {"filename": file.filename, "notebook_id": notebook_id}
+        xp_earned = 0
+        
+        # Save review notes
+        if generate_notes and "review_notes" in parsed:
+            review = parsed["review_notes"]
+            note_id = f"note_{uuid.uuid4().hex[:12]}"
+            topics = review.get("key_topics", [])
+            important = review.get("important_points", [])
+            tips = review.get("study_tips", [])
+            
+            content_text = f"# {review.get('title', 'Revisão')}\n\n"
+            content_text += f"{review.get('summary', '')}\n\n"
+            if important:
+                content_text += "## Pontos Importantes\n" + "\n".join(f"• {p}" for p in important) + "\n\n"
+            if tips:
+                content_text += "## Dicas de Estudo\n" + "\n".join(f"• {t}" for t in tips) + "\n"
+            
+            note_doc = {
+                "note_id": note_id,
+                "user_id": user.user_id,
+                "notebook_id": notebook_id,
+                "title": f"📝 Revisão: {review.get('title', file.filename)}",
+                "content": content_text,
+                "tags": topics[:10],
+                "links": [],
+                "ai_generated": True,
+                "source_pdf": file.filename,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.study_notes.insert_one(note_doc)
+            note_doc.pop("_id", None)
+            results["note"] = note_doc
+            xp_earned += 5
+        
+        # Save flashcards
+        if generate_flashcards and "flashcards" in parsed:
+            saved_flashcards = []
+            for fc in parsed["flashcards"]:
+                fc_id = f"fc_{uuid.uuid4().hex[:12]}"
+                fc_doc = {
+                    "flashcard_id": fc_id,
+                    "user_id": user.user_id,
+                    "notebook_id": notebook_id,
+                    "front": fc.get("front", ""),
+                    "back": fc.get("back", ""),
+                    "deck_name": fc.get("deck_name", "PDF Import"),
+                    "ease_factor": 2.5,
+                    "interval_days": 0,
+                    "repetitions": 0,
+                    "next_review": datetime.now().strftime("%Y-%m-%d"),
+                    "ai_generated": True,
+                    "source_pdf": file.filename,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.flashcards.insert_one(fc_doc)
+                fc_doc.pop("_id", None)
+                saved_flashcards.append(fc_doc)
+            results["flashcards"] = saved_flashcards
+            results["flashcards_count"] = len(saved_flashcards)
+            xp_earned += len(saved_flashcards)
+        
+        # Save quiz
+        if generate_quiz and "quiz" in parsed:
+            quiz_data = parsed["quiz"]
+            quiz_id = f"quiz_{uuid.uuid4().hex[:12]}"
+            quiz_doc = {
+                "quiz_id": quiz_id,
+                "user_id": user.user_id,
+                "notebook_id": notebook_id,
+                "title": quiz_data.get("title", f"Quiz: {file.filename}"),
+                "questions": quiz_data.get("questions", []),
+                "ai_generated": True,
+                "source_pdf": file.filename,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.quizzes.insert_one(quiz_doc)
+            quiz_doc.pop("_id", None)
+            results["quiz"] = quiz_doc
+            xp_earned += 5
+        
+        # Award XP
+        if xp_earned > 0:
+            await db.users.update_one({"user_id": user.user_id}, {"$inc": {"xp": xp_earned}})
+        results["xp_earned"] = xp_earned
+        
+        generated_items = []
+        if "note" in results: generated_items.append("revisão")
+        if "flashcards" in results: generated_items.append(f"{results['flashcards_count']} flashcards")
+        if "quiz" in results: generated_items.append("quiz")
+        
+        results["message"] = f"Conteúdo analisado! Gerado: {', '.join(generated_items)}. +{xp_earned} XP"
+        results["success"] = True
+        
+        return results
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse content analysis JSON: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao processar o conteúdo do PDF. Tente novamente.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Content PDF analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao analisar PDF: {str(e)}")
 
 
 # ========== SIMULADOS ENDPOINTS ==========

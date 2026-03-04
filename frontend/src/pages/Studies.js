@@ -407,7 +407,7 @@ export default function Studies() {
   const [simuladoGenerating, setSimuladoGenerating] = useState(false);
   const [simuladoImporting, setSimuladoImporting] = useState(false);
   const [currentSimulado, setCurrentSimulado] = useState(null);
-  const [simuladoMode, setSimuladoMode] = useState(null); // null, "taking", "results"
+  const [simuladoMode, setSimuladoMode] = useState(null); // null, "taking", "results", "viewing"
   const [simuladoAnswers, setSimuladoAnswers] = useState({});
   const [simuladoCurrentQ, setSimuladoCurrentQ] = useState(0);
   const [simuladoMarked, setSimuladoMarked] = useState(new Set());
@@ -427,6 +427,16 @@ export default function Studies() {
     question_type: "multipla_escolha"
   });
   const [importFile, setImportFile] = useState(null);
+
+  // PDF Content Analysis
+  const [showContentPdfDialog, setShowContentPdfDialog] = useState(false);
+  const [contentPdfFile, setContentPdfFile] = useState(null);
+  const [contentPdfAnalyzing, setContentPdfAnalyzing] = useState(false);
+  const [contentPdfOptions, setContentPdfOptions] = useState({
+    generate_notes: true, generate_flashcards: true, generate_quiz: true,
+    num_flashcards: 10, num_quiz_questions: 5
+  });
+  const [contentPdfResult, setContentPdfResult] = useState(null);
 
   // Loading states
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
@@ -626,6 +636,15 @@ export default function Studies() {
     } catch { toast.error("Erro ao carregar resultados"); }
   };
 
+  const handleViewSimulado = async (simulado) => {
+    try {
+      const res = await axios.get(`${API}/study/simulados/${simulado.simulado_id}`, { withCredentials: true });
+      setCurrentSimulado(res.data);
+      setSimuladoCurrentQ(0);
+      setSimuladoMode("viewing");
+    } catch { toast.error("Erro ao carregar simulado"); }
+  };
+
   const handleDeleteSimulado = async (simuladoId) => {
     try {
       await axios.delete(`${API}/study/simulados/${simuladoId}`, { withCredentials: true });
@@ -642,6 +661,32 @@ export default function Studies() {
     setSimuladoCurrentQ(0);
     setSimuladoMarked(new Set());
     setSimuladoTimer(0);
+  };
+
+  const handleAnalyzeContentPdf = async () => {
+    if (!contentPdfFile) { toast.error("Selecione um arquivo PDF"); return; }
+    setContentPdfAnalyzing(true);
+    setContentPdfResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", contentPdfFile);
+      if (selectedNotebook) formData.append("notebook_id", selectedNotebook.notebook_id);
+      formData.append("generate_notes", contentPdfOptions.generate_notes);
+      formData.append("generate_flashcards", contentPdfOptions.generate_flashcards);
+      formData.append("generate_quiz", contentPdfOptions.generate_quiz);
+      formData.append("num_flashcards", contentPdfOptions.num_flashcards);
+      formData.append("num_quiz_questions", contentPdfOptions.num_quiz_questions);
+
+      const res = await axios.post(`${API}/study/content/analyze-pdf`, formData, {
+        withCredentials: true, headers: { "Content-Type": "multipart/form-data" }, timeout: 120000
+      });
+      setContentPdfResult(res.data);
+      toast.success(res.data.message || "Conteúdo analisado com sucesso!");
+      fetchAllData();
+      if (selectedNotebook) fetchNotebookData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao analisar PDF");
+    } finally { setContentPdfAnalyzing(false); }
   };
 
   // CRUD Handlers
@@ -1217,6 +1262,66 @@ export default function Studies() {
                     <Button size="sm" onClick={handleGenerateQuiz} className="bg-purple-600 h-8 text-xs" disabled={generatingQuiz}>
                       {generatingQuiz ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Sparkles className="w-3 h-3 mr-1" />Quiz IA</>}
                     </Button>
+                    <Dialog open={showContentPdfDialog} onOpenChange={(open) => { setShowContentPdfDialog(open); if (!open) { setContentPdfResult(null); setContentPdfFile(null); } }}>
+                      <DialogTrigger asChild><Button size="sm" variant="outline" className="h-8 text-xs border-orange-500/30 text-orange-400 hover:bg-orange-500/10"><Upload className="w-3 h-3 mr-1" />PDF → Estudo</Button></DialogTrigger>
+                      <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-lg max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-orange-400" />Analisar Conteúdo PDF</DialogTitle>
+                          <DialogDescription>Envie um PDF de conteúdo e a IA gerará materiais de estudo automaticamente</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Arquivo PDF *</Label>
+                            <Input type="file" accept=".pdf" onChange={e => setContentPdfFile(e.target.files[0])}
+                              className="bg-[#121212] border-[#27272A] file:bg-orange-500 file:text-white file:border-0 file:rounded file:px-3 file:py-1 file:mr-3 file:cursor-pointer" />
+                          </div>
+                          <div className="space-y-3">
+                            <Label className="text-sm font-medium">O que gerar:</Label>
+                            <div className="grid grid-cols-1 gap-2">
+                              <label className="flex items-center gap-3 p-3 rounded-lg bg-[#121212] border border-[#27272A] cursor-pointer hover:border-[#3F3F46]">
+                                <input type="checkbox" checked={contentPdfOptions.generate_notes} onChange={e => setContentPdfOptions({...contentPdfOptions, generate_notes: e.target.checked})} className="rounded" />
+                                <FileText className="w-4 h-4 text-blue-400" />
+                                <div><p className="text-sm font-medium">Revisão / Resumo</p><p className="text-xs text-[#A1A1AA]">Resumo completo com pontos-chave</p></div>
+                              </label>
+                              <label className="flex items-center gap-3 p-3 rounded-lg bg-[#121212] border border-[#27272A] cursor-pointer hover:border-[#3F3F46]">
+                                <input type="checkbox" checked={contentPdfOptions.generate_flashcards} onChange={e => setContentPdfOptions({...contentPdfOptions, generate_flashcards: e.target.checked})} className="rounded" />
+                                <Brain className="w-4 h-4 text-yellow-400" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">Flashcards</p>
+                                  <p className="text-xs text-[#A1A1AA]">Cartões de memorização</p>
+                                </div>
+                                <Input type="number" min={1} max={50} value={contentPdfOptions.num_flashcards} onChange={e => setContentPdfOptions({...contentPdfOptions, num_flashcards: parseInt(e.target.value) || 5})}
+                                  className="w-16 h-7 text-xs bg-[#0A0A0A] border-[#27272A]" />
+                              </label>
+                              <label className="flex items-center gap-3 p-3 rounded-lg bg-[#121212] border border-[#27272A] cursor-pointer hover:border-[#3F3F46]">
+                                <input type="checkbox" checked={contentPdfOptions.generate_quiz} onChange={e => setContentPdfOptions({...contentPdfOptions, generate_quiz: e.target.checked})} className="rounded" />
+                                <ListChecks className="w-4 h-4 text-purple-400" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">Quiz</p>
+                                  <p className="text-xs text-[#A1A1AA]">Questões sobre o conteúdo</p>
+                                </div>
+                                <Input type="number" min={1} max={30} value={contentPdfOptions.num_quiz_questions} onChange={e => setContentPdfOptions({...contentPdfOptions, num_quiz_questions: parseInt(e.target.value) || 5})}
+                                  className="w-16 h-7 text-xs bg-[#0A0A0A] border-[#27272A]" />
+                              </label>
+                            </div>
+                          </div>
+                          <Button onClick={handleAnalyzeContentPdf} className="w-full bg-orange-500 hover:bg-orange-600" disabled={contentPdfAnalyzing || !contentPdfFile}>
+                            {contentPdfAnalyzing ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Analisando conteúdo...</> : <><Sparkles className="w-4 h-4 mr-2" />Analisar e Gerar Materiais</>}
+                          </Button>
+                          {contentPdfResult && (
+                            <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                              <p className="text-green-400 font-medium text-sm mb-2 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" />Conteúdo processado!</p>
+                              <div className="space-y-1 text-xs text-[#A1A1AA]">
+                                {contentPdfResult.note && <p>✅ Revisão criada: {contentPdfResult.note.title}</p>}
+                                {contentPdfResult.flashcards_count && <p>✅ {contentPdfResult.flashcards_count} flashcards gerados</p>}
+                                {contentPdfResult.quiz && <p>✅ Quiz criado: {contentPdfResult.quiz.title}</p>}
+                                <p className="text-yellow-400">+{contentPdfResult.xp_earned} XP</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                     <Dialog open={showSessionDialog} onOpenChange={setShowSessionDialog}>
                       <DialogTrigger asChild><Button size="sm" className="bg-green-600 h-8 text-xs"><Timer className="w-3 h-3 mr-1" />Sessão</Button></DialogTrigger>
                       <DialogContent className="bg-[#0A0A0A] border-[#27272A]">
@@ -1566,6 +1671,68 @@ export default function Studies() {
                 </div>
               </div>
 
+            ) : simuladoMode === "viewing" && currentSimulado ? (
+              /* VIEWING MODE - Browse questions with answers */
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Button variant="ghost" size="icon" onClick={handleExitSimulado}><ArrowLeft className="w-5 h-5" /></Button>
+                    <div>
+                      <h3 className="text-lg font-bold">{currentSimulado.title}</h3>
+                      <p className="text-xs text-[#A1A1AA]">
+                        {currentSimulado.banca && <span className="mr-2">{currentSimulado.banca}</span>}
+                        {currentSimulado.disciplina && <span>• {currentSimulado.disciplina}</span>}
+                        <span className="ml-2">• {currentSimulado.questions?.length || 0} questões</span>
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={() => handleStartSimulado(currentSimulado)} className="bg-[#007AFF]">
+                    <Play className="w-4 h-4 mr-1" />Iniciar Simulado
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {(currentSimulado.questions || []).map((q, idx) => (
+                    <Card key={idx} className="bg-[#0A0A0A] border-[#27272A]">
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between mb-3">
+                          <Badge className="bg-[#1A1A2E] text-[#A1A1AA]">
+                            Questão {q.question_number || idx + 1}
+                            {q.disciplina && ` • ${q.disciplina}`}
+                          </Badge>
+                          {q.difficulty && <Badge variant="outline" className="text-xs border-[#27272A]">{q.difficulty}</Badge>}
+                        </div>
+                        <p className="text-white text-sm leading-relaxed mb-4 whitespace-pre-wrap">{q.question_text}</p>
+                        <div className="space-y-2 mb-4">
+                          {(q.options || []).map((opt, optIdx) => {
+                            const letter = opt.match(/^([A-E]\))/)?.[1]?.replace(")", "") || (q.type === "certo_errado" ? opt : String.fromCharCode(65 + optIdx));
+                            const isCorrect = letter === q.correct_answer || opt === q.correct_answer;
+                            return (
+                              <div key={optIdx} className={`p-3 rounded-lg border text-sm ${isCorrect ? 'border-green-500/40 bg-green-500/10 text-green-300' : 'border-[#27272A] bg-[#121212] text-[#A1A1AA]'}`}>
+                                <span className={`font-bold mr-2 ${isCorrect ? 'text-green-400' : ''}`}>{letter})</span>
+                                {opt.replace(/^[A-E]\)\s*/, "")}
+                                {isCorrect && <CheckCircle2 className="w-4 h-4 inline ml-2 text-green-400" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {q.explanation && (
+                          <div className="bg-[#1A1A2E] p-3 rounded-lg border border-[#27272A]">
+                            <p className="text-xs text-[#A1A1AA] font-medium mb-1 flex items-center gap-1"><Lightbulb className="w-3 h-3 text-yellow-400" />Explicação</p>
+                            <p className="text-sm text-[#D4D4D8]">{q.explanation}</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 justify-center">
+                  <Button variant="outline" onClick={handleExitSimulado} className="border-[#27272A]"><ArrowLeft className="w-4 h-4 mr-1" />Voltar</Button>
+                  <Button onClick={() => handleStartSimulado(currentSimulado)} className="bg-[#007AFF]"><Play className="w-4 h-4 mr-1" />Iniciar Simulado</Button>
+                </div>
+              </div>
+
             ) : simuladoMode === "results" && simuladoResult ? (
               /* RESULTS VIEW */
               <div className="space-y-4">
@@ -1901,9 +2068,12 @@ export default function Studies() {
                             <Button size="sm" className="flex-1 bg-[#007AFF] text-xs" onClick={() => handleStartSimulado(sim)}>
                               <Play className="w-3 h-3 mr-1" />{sim.attempts_count > 0 ? "Refazer" : "Iniciar"}
                             </Button>
+                            <Button size="sm" variant="outline" className="border-[#27272A] text-xs" onClick={() => handleViewSimulado(sim)}>
+                              <Eye className="w-3 h-3 mr-1" />Ver
+                            </Button>
                             {sim.attempts_count > 0 && (
                               <Button size="sm" variant="outline" className="border-[#27272A] text-xs" onClick={() => handleViewResults(sim)}>
-                                <Eye className="w-3 h-3 mr-1" />Resultado
+                                <BarChart3 className="w-3 h-3 mr-1" />Resultado
                               </Button>
                             )}
                           </div>
