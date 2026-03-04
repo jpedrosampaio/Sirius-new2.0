@@ -4103,6 +4103,26 @@ class QuizAttempt(BaseModel):
     answers: List[Dict[str, Any]] = []  # [{question_idx, selected_answer, correct}]
     completed_at: datetime
 
+# ========== SIMULADO MODELS ==========
+
+class SimuladoCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    banca: Optional[str] = None  # CESPE, FCC, VUNESP, FGV, etc.
+    disciplina: Optional[str] = None  # Direito, Português, Matemática, etc.
+    concurso: Optional[str] = None  # TRF, TJ, Receita Federal, etc.
+    question_type: str = "multipla_escolha"  # multipla_escolha, certo_errado, misto
+    num_questions: int = 10
+    difficulty: str = "medio"  # facil, medio, dificil, misto
+    area_id: Optional[str] = None
+    program_id: Optional[str] = None
+
+class SimuladoSubmit(BaseModel):
+    answers: List[Dict[str, Any]]  # [{question_idx: int, selected_answer: str}]
+    time_spent_seconds: int = 0
+
+
+
 class StudyStreak(BaseModel):
     model_config = ConfigDict(extra="ignore")
     streak_id: str
@@ -5886,6 +5906,611 @@ Responda de forma concisa e motivadora em português."""
     except Exception as e:
         logging.error(f"AI suggestions failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== SIMULADOS ENDPOINTS ==========
+
+@api_router.get("/study/simulados")
+async def get_simulados(request: Request, area_id: Optional[str] = None, program_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get all simulados for the user"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if area_id:
+        query["area_id"] = area_id
+    if program_id:
+        query["program_id"] = program_id
+    
+    simulados = await db.simulados.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with attempt data
+    for sim in simulados:
+        attempts = await db.simulado_attempts.find(
+            {"simulado_id": sim["simulado_id"], "user_id": user.user_id}, {"_id": 0}
+        ).sort("completed_at", -1).to_list(50)
+        sim["attempts_count"] = len(attempts)
+        sim["best_score"] = max((a.get("score", 0) for a in attempts), default=0)
+        sim["last_attempt"] = attempts[0] if attempts else None
+        # Remove questions from list view to save bandwidth
+        sim["questions_count"] = len(sim.get("questions", []))
+        sim.pop("questions", None)
+    
+    return simulados
+
+
+@api_router.get("/study/simulados/stats")
+async def get_simulado_stats(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get simulado statistics"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    attempts = await db.simulado_attempts.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).to_list(5000)
+    
+    simulados = await db.simulados.find(
+        {"user_id": user.user_id}, {"_id": 0}
+    ).to_list(200)
+    
+    if not attempts:
+        return {
+            "total_simulados": len(simulados),
+            "total_attempts": 0,
+            "average_score": 0,
+            "best_score": 0,
+            "total_questions_answered": 0,
+            "total_correct": 0,
+            "accuracy_rate": 0,
+            "total_time_minutes": 0,
+            "by_banca": {},
+            "by_disciplina": {},
+            "by_concurso": {},
+            "recent_attempts": []
+        }
+    
+    total_correct = sum(a.get("correct_count", 0) for a in attempts)
+    total_questions = sum(a.get("total_questions", 0) for a in attempts)
+    total_time = sum(a.get("time_spent_seconds", 0) for a in attempts)
+    scores = [a.get("score", 0) for a in attempts]
+    
+    # Stats by banca
+    by_banca = {}
+    by_disciplina = {}
+    by_concurso = {}
+    
+    for a in attempts:
+        banca = a.get("banca", "Outros")
+        disciplina = a.get("disciplina", "Outros")
+        concurso = a.get("concurso", "Outros")
+        
+        if banca:
+            if banca not in by_banca:
+                by_banca[banca] = {"attempts": 0, "total_score": 0, "total_correct": 0, "total_questions": 0}
+            by_banca[banca]["attempts"] += 1
+            by_banca[banca]["total_score"] += a.get("score", 0)
+            by_banca[banca]["total_correct"] += a.get("correct_count", 0)
+            by_banca[banca]["total_questions"] += a.get("total_questions", 0)
+        
+        if disciplina:
+            if disciplina not in by_disciplina:
+                by_disciplina[disciplina] = {"attempts": 0, "total_score": 0, "total_correct": 0, "total_questions": 0}
+            by_disciplina[disciplina]["attempts"] += 1
+            by_disciplina[disciplina]["total_score"] += a.get("score", 0)
+            by_disciplina[disciplina]["total_correct"] += a.get("correct_count", 0)
+            by_disciplina[disciplina]["total_questions"] += a.get("total_questions", 0)
+        
+        if concurso:
+            if concurso not in by_concurso:
+                by_concurso[concurso] = {"attempts": 0, "total_score": 0, "total_correct": 0, "total_questions": 0}
+            by_concurso[concurso]["attempts"] += 1
+            by_concurso[concurso]["total_score"] += a.get("score", 0)
+            by_concurso[concurso]["total_correct"] += a.get("correct_count", 0)
+            by_concurso[concurso]["total_questions"] += a.get("total_questions", 0)
+    
+    # Calculate averages
+    for group in [by_banca, by_disciplina, by_concurso]:
+        for key in group:
+            group[key]["avg_score"] = round(group[key]["total_score"] / group[key]["attempts"], 1) if group[key]["attempts"] > 0 else 0
+            group[key]["accuracy"] = round(group[key]["total_correct"] / group[key]["total_questions"] * 100, 1) if group[key]["total_questions"] > 0 else 0
+    
+    # Recent attempts (last 10)
+    recent = sorted(attempts, key=lambda x: x.get("completed_at", ""), reverse=True)[:10]
+    
+    return {
+        "total_simulados": len(simulados),
+        "total_attempts": len(attempts),
+        "average_score": round(sum(scores) / len(scores), 1) if scores else 0,
+        "best_score": round(max(scores), 1) if scores else 0,
+        "total_questions_answered": total_questions,
+        "total_correct": total_correct,
+        "accuracy_rate": round(total_correct / total_questions * 100, 1) if total_questions > 0 else 0,
+        "total_time_minutes": round(total_time / 60, 1),
+        "by_banca": by_banca,
+        "by_disciplina": by_disciplina,
+        "by_concurso": by_concurso,
+        "recent_attempts": recent
+    }
+
+
+@api_router.get("/study/simulados/{simulado_id}")
+async def get_simulado(request: Request, simulado_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get a single simulado with all questions"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    simulado = await db.simulados.find_one(
+        {"simulado_id": simulado_id, "user_id": user.user_id}, {"_id": 0}
+    )
+    if not simulado:
+        raise HTTPException(status_code=404, detail="Simulado not found")
+    
+    # Get attempts
+    attempts = await db.simulado_attempts.find(
+        {"simulado_id": simulado_id, "user_id": user.user_id}, {"_id": 0}
+    ).sort("completed_at", -1).to_list(50)
+    simulado["attempts"] = attempts
+    
+    return simulado
+
+
+@api_router.post("/study/simulados/import-pdf")
+async def import_simulado_pdf(
+    request: Request,
+    file: UploadFile = File(...),
+    title: str = Form("Simulado Importado"),
+    banca: Optional[str] = Form(None),
+    disciplina: Optional[str] = Form(None),
+    concurso: Optional[str] = Form(None),
+    question_type: str = Form("multipla_escolha"),
+    area_id: Optional[str] = Form(None),
+    program_id: Optional[str] = Form(None),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Import a PDF with questions/answer sheet and create a simulado"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
+    
+    content = await file.read()
+    
+    if len(content) > 20 * 1024 * 1024:  # 20MB limit
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+    
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        uploaded_file = gemini_client.files.upload(file=tmp_path)
+        
+        type_instruction = ""
+        if question_type == "multipla_escolha":
+            type_instruction = """Cada questão DEVE ter exatamente 5 alternativas (A, B, C, D, E).
+O campo "correct_answer" deve ser a LETRA da alternativa correta (ex: "A", "B", "C", "D" ou "E")."""
+        elif question_type == "certo_errado":
+            type_instruction = """Cada questão é do tipo CERTO ou ERRADO.
+O campo "options" deve ser ["Certo", "Errado"].
+O campo "correct_answer" deve ser "Certo" ou "Errado"."""
+        else:
+            type_instruction = """As questões podem ser de múltipla escolha (5 alternativas A-E) ou certo/errado.
+Para múltipla escolha: options com 5 alternativas, correct_answer = letra (A-E).
+Para certo/errado: options = ["Certo", "Errado"], correct_answer = "Certo" ou "Errado".
+Adicione o campo "type": "multipla_escolha" ou "certo_errado" em cada questão."""
+        
+        system_msg = f"""Você é um especialista em extrair questões de provas e concursos de documentos PDF.
+Sua tarefa é analisar o documento e extrair TODAS as questões encontradas.
+{type_instruction}
+
+REGRAS:
+- Extraia TODAS as questões do documento, sem pular nenhuma
+- Se houver gabarito no documento, use-o para determinar a resposta correta
+- Se não houver gabarito, analise e determine a resposta correta
+- Mantenha a numeração original das questões
+- Preserve o texto completo de cada questão e alternativas
+- Se possível, identifique a disciplina/matéria de cada questão
+- Adicione uma breve explicação para cada resposta correta
+
+Responda APENAS com um JSON válido no formato:
+{{
+  "questions": [
+    {{
+      "question_number": 1,
+      "question_text": "Texto completo da questão",
+      "options": ["A) texto", "B) texto", "C) texto", "D) texto", "E) texto"],
+      "correct_answer": "A",
+      "explanation": "Breve explicação",
+      "disciplina": "Matéria identificada",
+      "type": "multipla_escolha"
+    }}
+  ],
+  "metadata": {{
+    "total_questions": 10,
+    "banca_detected": "Nome da banca se identificada",
+    "concurso_detected": "Nome do concurso se identificado",
+    "year_detected": "Ano da prova se identificado"
+  }}
+}}"""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_file.uri, mime_type="application/pdf"),
+                "Extraia todas as questões deste documento de prova/simulado e retorne em JSON:"
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        # Clean up temp file
+        os.unlink(tmp_path)
+        
+        # Parse JSON response
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        parsed = json.loads(json_str.strip())
+        questions = parsed.get("questions", [])
+        metadata = parsed.get("metadata", {})
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="Não foi possível extrair questões do PDF. Verifique se o documento contém questões válidas.")
+        
+        # Use detected metadata if user didn't provide
+        final_banca = banca or metadata.get("banca_detected")
+        final_concurso = concurso or metadata.get("concurso_detected")
+        
+        simulado_id = f"sim_{uuid.uuid4().hex[:12]}"
+        simulado_doc = {
+            "simulado_id": simulado_id,
+            "user_id": user.user_id,
+            "title": title,
+            "description": f"Importado de: {file.filename}",
+            "source_type": "pdf_import",
+            "banca": final_banca,
+            "disciplina": disciplina,
+            "concurso": final_concurso,
+            "question_type": question_type,
+            "difficulty": "misto",
+            "questions": questions,
+            "questions_count": len(questions),
+            "area_id": area_id,
+            "program_id": program_id,
+            "pdf_filename": file.filename,
+            "year_detected": metadata.get("year_detected"),
+            "status": "ready",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.simulados.insert_one(simulado_doc)
+        simulado_doc.pop("_id", None)
+        
+        return {
+            "success": True,
+            "simulado": simulado_doc,
+            "message": f"Simulado criado com {len(questions)} questões extraídas do PDF!"
+        }
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse PDF questions JSON: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao interpretar as questões do PDF. Tente novamente.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"PDF simulado import failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao processar PDF: {str(e)}")
+
+
+@api_router.post("/study/simulados/generate")
+async def generate_simulado(request: Request, data: SimuladoCreate, session_token: Optional[str] = Cookie(None)):
+    """Generate a simulado with AI based on banca/disciplina/concurso"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    num_q = data.num_questions
+    
+    type_instruction = ""
+    if data.question_type == "multipla_escolha":
+        type_instruction = """Todas as questões devem ser de MÚLTIPLA ESCOLHA com exatamente 5 alternativas (A, B, C, D, E).
+O campo "correct_answer" deve ser a LETRA da alternativa correta (ex: "A", "B", "C", "D" ou "E").
+O campo "type" deve ser "multipla_escolha"."""
+    elif data.question_type == "certo_errado":
+        type_instruction = """Todas as questões devem ser do tipo CERTO ou ERRADO (estilo CESPE/CEBRASPE).
+O campo "options" deve ser ["Certo", "Errado"].
+O campo "correct_answer" deve ser "Certo" ou "Errado".
+O campo "type" deve ser "certo_errado"."""
+    else:
+        type_instruction = """Misture questões de múltipla escolha (5 alternativas A-E) e certo/errado.
+Para múltipla escolha: options com 5 alternativas, correct_answer = letra (A-E), type = "multipla_escolha".
+Para certo/errado: options = ["Certo", "Errado"], correct_answer = "Certo" ou "Errado", type = "certo_errado"."""
+    
+    difficulty_instruction = ""
+    if data.difficulty == "facil":
+        difficulty_instruction = "Nível FÁCIL: questões básicas e conceituais."
+    elif data.difficulty == "medio":
+        difficulty_instruction = "Nível MÉDIO: questões intermediárias que exigem compreensão aprofundada."
+    elif data.difficulty == "dificil":
+        difficulty_instruction = "Nível DIFÍCIL: questões complexas, com pegadinhas e que exigem raciocínio avançado."
+    else:
+        difficulty_instruction = "Misture questões de diferentes níveis de dificuldade (fácil, médio e difícil)."
+    
+    banca_info = f"Banca: {data.banca}. Siga o ESTILO e formato típico desta banca." if data.banca else "Sem banca específica."
+    disciplina_info = f"Disciplina: {data.disciplina}." if data.disciplina else ""
+    concurso_info = f"Concurso: {data.concurso}." if data.concurso else ""
+    
+    system_msg = f"""Você é um especialista em elaboração de questões para concursos públicos brasileiros.
+Gere questões ORIGINAIS, realistas e de alta qualidade, no estilo de provas reais.
+
+CONTEXTO:
+{banca_info}
+{disciplina_info}
+{concurso_info}
+{difficulty_instruction}
+
+{type_instruction}
+
+REGRAS:
+- Gere exatamente {num_q} questões
+- As questões devem ser originais mas no estilo de questões reais de concursos
+- Cada questão deve ter enunciado claro e completo
+- As alternativas devem ser plausíveis (não deve ser óbvio qual é a correta)
+- A explicação deve ser detalhada e educativa
+- Identifique a subdisciplina/tópico de cada questão
+- Questões devem cobrir diferentes tópicos dentro da disciplina
+
+Responda APENAS com JSON válido no formato:
+{{
+  "questions": [
+    {{
+      "question_number": 1,
+      "question_text": "Texto completo da questão",
+      "options": ["A) texto", "B) texto", "C) texto", "D) texto", "E) texto"],
+      "correct_answer": "A",
+      "explanation": "Explicação detalhada da resposta correta",
+      "disciplina": "{data.disciplina or 'Geral'}",
+      "subdisciplina": "Tópico específico",
+      "difficulty": "medio",
+      "type": "multipla_escolha"
+    }}
+  ]
+}}"""
+
+    prompt = f"Gere {num_q} questões de simulado para concurso público com as seguintes especificações:\n"
+    if data.banca:
+        prompt += f"- Banca: {data.banca}\n"
+    if data.disciplina:
+        prompt += f"- Disciplina: {data.disciplina}\n"
+    if data.concurso:
+        prompt += f"- Concurso: {data.concurso}\n"
+    prompt += f"- Tipo: {data.question_type}\n- Dificuldade: {data.difficulty}\n"
+    prompt += "\nRetorne APENAS o JSON com as questões."
+    
+    try:
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        parsed = json.loads(json_str.strip())
+        questions = parsed.get("questions", [])
+        
+        if not questions:
+            raise HTTPException(status_code=500, detail="A IA não conseguiu gerar as questões. Tente novamente.")
+        
+        simulado_id = f"sim_{uuid.uuid4().hex[:12]}"
+        simulado_doc = {
+            "simulado_id": simulado_id,
+            "user_id": user.user_id,
+            "title": data.title,
+            "description": data.description or f"Simulado gerado por IA - {data.banca or ''} {data.disciplina or ''} {data.concurso or ''}".strip(),
+            "source_type": "ai_generated",
+            "banca": data.banca,
+            "disciplina": data.disciplina,
+            "concurso": data.concurso,
+            "question_type": data.question_type,
+            "difficulty": data.difficulty,
+            "questions": questions,
+            "questions_count": len(questions),
+            "area_id": data.area_id,
+            "program_id": data.program_id,
+            "status": "ready",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.simulados.insert_one(simulado_doc)
+        simulado_doc.pop("_id", None)
+        
+        # Award XP for creating simulado
+        xp_earned = 5
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$inc": {"xp": xp_earned}}
+        )
+        
+        return {
+            "success": True,
+            "simulado": simulado_doc,
+            "message": f"Simulado gerado com {len(questions)} questões! +{xp_earned} XP",
+            "xp_earned": xp_earned
+        }
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse generated simulado JSON: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao gerar simulado. Tente novamente.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Simulado generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar simulado: {str(e)}")
+
+
+@api_router.post("/study/simulados/{simulado_id}/submit")
+async def submit_simulado(request: Request, simulado_id: str, submission: SimuladoSubmit, session_token: Optional[str] = Cookie(None)):
+    """Submit answers for a simulado and get correction"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    simulado = await db.simulados.find_one(
+        {"simulado_id": simulado_id, "user_id": user.user_id}, {"_id": 0}
+    )
+    if not simulado:
+        raise HTTPException(status_code=404, detail="Simulado not found")
+    
+    questions = simulado.get("questions", [])
+    answers = submission.answers
+    
+    # Correct answers
+    results = []
+    correct_count = 0
+    by_disciplina = {}
+    
+    for ans in answers:
+        q_idx = ans.get("question_idx", 0)
+        selected = ans.get("selected_answer", "")
+        
+        if q_idx < 0 or q_idx >= len(questions):
+            continue
+        
+        question = questions[q_idx]
+        correct_answer = question.get("correct_answer", "")
+        is_correct = selected.strip().upper() == correct_answer.strip().upper()
+        
+        if is_correct:
+            correct_count += 1
+        
+        disc = question.get("disciplina", "Geral")
+        if disc not in by_disciplina:
+            by_disciplina[disc] = {"total": 0, "correct": 0}
+        by_disciplina[disc]["total"] += 1
+        if is_correct:
+            by_disciplina[disc]["correct"] += 1
+        
+        results.append({
+            "question_idx": q_idx,
+            "question_number": question.get("question_number", q_idx + 1),
+            "selected_answer": selected,
+            "correct_answer": correct_answer,
+            "is_correct": is_correct,
+            "explanation": question.get("explanation", ""),
+            "disciplina": disc
+        })
+    
+    total_answered = len(results)
+    total_questions = len(questions)
+    score = round((correct_count / total_answered * 100), 1) if total_answered > 0 else 0
+    
+    # Calculate by_disciplina percentages
+    for disc in by_disciplina:
+        t = by_disciplina[disc]["total"]
+        c = by_disciplina[disc]["correct"]
+        by_disciplina[disc]["accuracy"] = round(c / t * 100, 1) if t > 0 else 0
+    
+    attempt_id = f"sattempt_{uuid.uuid4().hex[:12]}"
+    attempt_doc = {
+        "attempt_id": attempt_id,
+        "simulado_id": simulado_id,
+        "user_id": user.user_id,
+        "title": simulado.get("title", ""),
+        "banca": simulado.get("banca"),
+        "disciplina": simulado.get("disciplina"),
+        "concurso": simulado.get("concurso"),
+        "answers": results,
+        "score": score,
+        "correct_count": correct_count,
+        "total_questions": total_questions,
+        "total_answered": total_answered,
+        "unanswered": total_questions - total_answered,
+        "time_spent_seconds": submission.time_spent_seconds,
+        "by_disciplina": by_disciplina,
+        "completed_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.simulado_attempts.insert_one(attempt_doc)
+    attempt_doc.pop("_id", None)
+    
+    # Award XP (2 XP per correct answer)
+    xp_earned = correct_count * 2
+    new_user = await db.users.find_one_and_update(
+        {"user_id": user.user_id},
+        {"$inc": {"xp": xp_earned}},
+        return_document=True
+    )
+    attempt_doc["xp_earned"] = xp_earned
+    attempt_doc["new_xp"] = new_user.get("xp", 0) if new_user else 0
+    
+    # Update study streak
+    await update_study_streak(user.user_id)
+    
+    # Log questions for stats
+    await db.question_logs.insert_one({
+        "log_id": f"qlog_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "notebook_id": None,
+        "simulado_id": simulado_id,
+        "total": total_answered,
+        "correct": correct_count,
+        "source": "simulado",
+        "banca": simulado.get("banca"),
+        "disciplina": simulado.get("disciplina"),
+        "concurso": simulado.get("concurso"),
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return attempt_doc
+
+
+@api_router.get("/study/simulados/{simulado_id}/results")
+async def get_simulado_results(request: Request, simulado_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get all attempt results for a simulado"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    attempts = await db.simulado_attempts.find(
+        {"simulado_id": simulado_id, "user_id": user.user_id}, {"_id": 0}
+    ).sort("completed_at", -1).to_list(50)
+    
+    return attempts
+
+
+@api_router.delete("/study/simulados/{simulado_id}")
+async def delete_simulado(request: Request, simulado_id: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a simulado and its attempts"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.simulados.delete_one({"simulado_id": simulado_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Simulado not found")
+    
+    # Delete all attempts
+    await db.simulado_attempts.delete_many({"simulado_id": simulado_id, "user_id": user.user_id})
+    
+    return {"message": "Simulado e tentativas excluídos com sucesso"}
+
 
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
