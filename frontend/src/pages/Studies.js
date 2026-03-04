@@ -58,6 +58,22 @@ function PomodoroTimer({ notebooks, onComplete }) {
   const [showSettings, setShowSettings] = useState(false);
   const intervalRef = useRef(null);
 
+  const handleFocusComplete = useCallback(async () => {
+    try {
+      await axios.post(`${API}/study/focus/complete`, {
+        notebook_id: selectedNb || null,
+        focus_minutes: focusMinutes,
+        break_minutes: breakMinutes,
+        notes: null
+      }, { withCredentials: true });
+      setSessionsCompleted(prev => prev + 1);
+      toast.success(`Sessão concluída! +XP 🎉`);
+      if (onComplete) onComplete();
+    } catch (err) {
+      console.error(err);
+    }
+  }, [selectedNb, focusMinutes, breakMinutes, onComplete]);
+
   useEffect(() => {
     if (isRunning && !isPaused) {
       intervalRef.current = setInterval(() => {
@@ -82,23 +98,7 @@ function PomodoroTimer({ notebooks, onComplete }) {
       }, 1000);
     }
     return () => clearInterval(intervalRef.current);
-  }, [isRunning, isPaused, isBreak, breakMinutes, focusMinutes]);
-
-  const handleFocusComplete = async () => {
-    try {
-      await axios.post(`${API}/study/focus/complete`, {
-        notebook_id: selectedNb || null,
-        focus_minutes: focusMinutes,
-        break_minutes: breakMinutes,
-        notes: null
-      }, { withCredentials: true });
-      setSessionsCompleted(prev => prev + 1);
-      toast.success(`Sessão concluída! +XP 🎉`);
-      if (onComplete) onComplete();
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  }, [isRunning, isPaused, isBreak, breakMinutes, focusMinutes, handleFocusComplete]);
 
   const startTimer = () => {
     setIsRunning(true);
@@ -413,8 +413,8 @@ export default function Studies() {
   const [newLink, setNewLink] = useState({ title: "", url: "" });
 
   useEffect(() => { fetchUser(); }, []);
-  useEffect(() => { if (user) fetchAllData(); }, [user]);
-  useEffect(() => { if (user && selectedNotebook) fetchNotebookData(); }, [selectedNotebook]);
+  useEffect(() => { if (user) fetchAllData(); }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (user && selectedNotebook) fetchNotebookData(); }, [user, selectedNotebook]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchUser = async () => {
     try {
