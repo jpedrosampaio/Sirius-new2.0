@@ -152,14 +152,25 @@ export default function Reports() {
                         </p>
                       </div>
                     </div>
+                    <div className=\"flex items-center space-x-2\">
                     <Button
                       variant="outline"
                       size="icon"
                       className="border-[#27272A] hover:bg-[#121212]"
+                      onClick={(e) => { e.stopPropagation(); }}
                     >
                       <Download className="w-4 h-4" />
                     </Button>
+                    <ChevronDown
+                      className={`w-5 h-5 text-[#A1A1AA] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                      />
+                    </div>
                   </div>
+
+                    <div
+                    className={`transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+                  >
+                    <div className=\"px-6 pb-6\">
 
                   <div className="bg-[#121212] border border-[#27272A] rounded-sm p-4 mb-4">
                     <h4 className="font-heading text-sm text-[#A1A1AA] uppercase tracking-wider mb-3">Dados do Período</h4>
@@ -174,11 +185,11 @@ export default function Reports() {
                       </div>
                       <div>
                         <p className="text-xs text-[#A1A1AA] mb-1">Receitas</p>
-                        <p className="font-data text-lg text-[#39FF14]">R$ {(report.data.income ?? 0).toFixed(2)}</p>
+                        <p className=\"font-data text-lg text-[#39FF14]\">R$ {(report.data?.income ?? 0).toFixed(2)}</p>
                       </div>
                       <div>
                         <p className="text-xs text-[#A1A1AA] mb-1">Despesas</p>
-                        <p className="font-data text-lg text-[#FF3B30]">R$ {(report.data.expenses ?? 0).toFixed(2)}</p>
+                        <p className=\"font-data text-lg text-[#FF3B30]\">R$ {(report.data?.expenses ?? 0).toFixed(2)}</p>
                       </div>
                     </div>
                   </div>
@@ -190,10 +201,13 @@ export default function Reports() {
                     </h4>
                     <div className="prose prose-invert max-w-none">
                       <p className="text-sm text-white whitespace-pre-wrap">{report.insights}</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Card>
-              ))
+                );
+              })
             )}
           </div>
         </div>
