@@ -1043,7 +1043,11 @@ export default function Nutrition() {
                                 {selectedRecipe.ingredients.map((ingredient, idx) => (
                                   <li key={idx} className="flex items-start gap-2 text-sm">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 mt-2 shrink-0" />
-                                    <span className="text-[#E4E4E7]">{ingredient}</span>
+                                    <span className="text-[#E4E4E7]">
+                                      {typeof ingredient === 'object' && ingredient !== null
+                                        ? `${ingredient.quantity || ''} ${ingredient.unit || ''} de ${ingredient.name || ''}`.trim()
+                                        : String(ingredient)}
+                                    </span>
                                   </li>
                                 ))}
                               </ul>
@@ -1059,23 +1063,23 @@ export default function Nutrition() {
                               {selectedRecipe.instructions.map((step, idx) => (
                                 <div key={idx} className="flex items-start gap-3 bg-[#121212] p-3 rounded-lg">
                                   <span className="bg-orange-500/20 text-orange-400 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0">{idx + 1}</span>
-                                  <p className="text-sm text-[#E4E4E7]">{step}</p>
+                                  <p className="text-sm text-[#E4E4E7]">{typeof step === 'object' ? JSON.stringify(step) : String(step)}</p>
                                 </div>
                               ))}
                             </div>
                           </div>
                         )}
-                        {selectedRecipe.tips && selectedRecipe.tips.length > 0 && (
+                        {selectedRecipe.tips && (Array.isArray(selectedRecipe.tips) ? selectedRecipe.tips.length > 0 : selectedRecipe.tips.length > 0) && (
                           <div>
                             <h3 className="font-bold text-base mb-3 flex items-center gap-2">
                               <Sparkles className="w-4 h-4 text-[#00F0FF]" /> Dicas
                             </h3>
                             <div className="bg-[#00F0FF]/5 border border-[#00F0FF]/20 rounded-lg p-4">
                               <ul className="space-y-2">
-                                {selectedRecipe.tips.map((tip, idx) => (
+                                {(Array.isArray(selectedRecipe.tips) ? selectedRecipe.tips : [selectedRecipe.tips]).map((tip, idx) => (
                                   <li key={idx} className="flex items-start gap-2 text-sm">
                                     <span className="text-[#00F0FF]">💡</span>
-                                    <span className="text-[#E4E4E7]">{tip}</span>
+                                    <span className="text-[#E4E4E7]">{typeof tip === 'object' ? JSON.stringify(tip) : String(tip)}</span>
                                   </li>
                                 ))}
                               </ul>
