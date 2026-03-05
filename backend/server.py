@@ -4710,6 +4710,364 @@ async def delete_study_program(request: Request, program_id: str, session_token:
     
     return {"message": "Program deleted"}
 
+# ========== IMPORT EDITAL - AI STUDY PROGRAM GENERATOR ==========
+
+@api_router.post("/study/programs/import-edital")
+async def import_edital(
+    request: Request,
+    file: UploadFile = File(...),
+    area_id: str = Form(...),
+    target_date: Optional[str] = Form(None),
+    hours_per_day: float = Form(4.0),
+    days_per_week: int = Form(5),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Upload a PDF of an edital (public exam notice) and generate a complete study program with AI"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+    
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        uploaded_file = gemini_client.files.upload(file=tmp_path)
+        
+        system_msg = f"""Você é um especialista em concursos públicos brasileiros e planejamento de estudos.
+Analise o edital do concurso contido neste PDF e extraia TODAS as informações relevantes para criar um programa de estudos completo.
+
+O aluno tem {hours_per_day} horas disponíveis por dia, {days_per_week} dias por semana para estudar.
+{"A data da prova é: " + target_date + ". Considere o tempo disponível até a prova para o cronograma." if target_date else "Não há data definida para a prova."}
+
+Responda APENAS com JSON válido no formato abaixo. NÃO inclua texto antes ou depois do JSON.
+
+{{
+  "concurso": {{
+    "nome": "Nome completo do concurso",
+    "orgao": "Órgão/instituição",
+    "banca": "Banca organizadora",
+    "cargo": "Cargo(s) principal(is)",
+    "vagas": "Número de vagas se informado",
+    "remuneracao": "Remuneração se informada",
+    "escolaridade": "Nível de escolaridade exigido",
+    "data_prova": "Data da prova se informada no edital"
+  }},
+  "disciplinas": [
+    {{
+      "nome": "Nome da Disciplina/Matéria",
+      "peso": 3,
+      "num_questoes": 10,
+      "topicos": ["Tópico 1", "Tópico 2", "Tópico 3"],
+      "dificuldade": "alta",
+      "dicas_estudo": "Dica específica para esta matéria",
+      "recursos_recomendados": "Livros, materiais recomendados"
+    }}
+  ],
+  "cronograma_semanal": [
+    {{
+      "dia": "Segunda",
+      "blocos": [
+        {{
+          "disciplina": "Nome da Disciplina",
+          "duracao_minutos": 120,
+          "tipo_estudo": "Teoria + Questões",
+          "prioridade": "alta"
+        }}
+      ]
+    }}
+  ],
+  "estrategia": {{
+    "resumo": "Resumo da estratégia de estudo recomendada",
+    "fase_1": "Descrição da primeira fase de estudo (base teórica)",
+    "fase_2": "Descrição da segunda fase (aprofundamento + questões)",
+    "fase_3": "Descrição da terceira fase (revisão + simulados)",
+    "dicas_gerais": ["Dica 1", "Dica 2", "Dica 3"],
+    "materias_prioritarias": ["Matéria com maior peso/importância"],
+    "horas_semanais_total": {hours_per_day * days_per_week}
+  }}
+}}
+
+REGRAS IMPORTANTES:
+- Extraia TODAS as disciplinas/matérias mencionadas no edital
+- O campo "peso" deve refletir a importância relativa (1-5, sendo 5 o mais importante) baseado no número de questões e peso na nota
+- "num_questoes" é o número de questões da disciplina conforme o edital
+- O cronograma deve distribuir as matérias pela semana priorizando as de maior peso
+- A soma dos minutos por dia deve respeitar o limite de {int(hours_per_day * 60)} minutos
+- Inclua APENAS {days_per_week} dias no cronograma (ex: Segunda a Sexta se 5 dias)
+- Alterne matérias pesadas com leves no mesmo dia
+- Reserve tempo para revisão e questões
+- Os tópicos devem ser os do conteúdo programático do edital
+- Tudo em português brasileiro
+- "dificuldade" deve ser: "baixa", "media" ou "alta"
+- Os dias devem ser: "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"
+"""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_file.uri, mime_type="application/pdf"),
+                "Analise este edital de concurso e gere um programa de estudos completo em JSON conforme as instruções:"
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        os.unlink(tmp_path)
+        
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        parsed = json.loads(json_str.strip())
+        
+        concurso_info = parsed.get("concurso", {})
+        disciplinas = parsed.get("disciplinas", [])
+        cronograma = parsed.get("cronograma_semanal", [])
+        estrategia = parsed.get("estrategia", {})
+        
+        if not disciplinas:
+            raise HTTPException(status_code=400, detail="Não foi possível extrair disciplinas do edital. Verifique se o PDF contém o conteúdo programático.")
+        
+        # Create the study program
+        program_id = f"prog_{uuid.uuid4().hex[:12]}"
+        program_name = concurso_info.get("nome", "Programa do Concurso")
+        if concurso_info.get("cargo"):
+            program_name = f"{concurso_info['nome']} - {concurso_info['cargo']}"
+        
+        program_doc = {
+            "program_id": program_id,
+            "user_id": user.user_id,
+            "area_id": area_id,
+            "name": program_name[:100],
+            "description": f"Programa gerado a partir do edital. Banca: {concurso_info.get('banca', 'N/A')} | Órgão: {concurso_info.get('orgao', 'N/A')}",
+            "color": "#8B5CF6",
+            "icon": "file-text",
+            "target_date": target_date or concurso_info.get("data_prova"),
+            "status": "active",
+            "total_questions": 0,
+            "correct_questions": 0,
+            "source_type": "edital_import",
+            "edital_data": {
+                "concurso": concurso_info,
+                "estrategia": estrategia,
+                "total_disciplinas": len(disciplinas),
+                "hours_per_day": hours_per_day,
+                "days_per_week": days_per_week,
+                "pdf_filename": file.filename
+            },
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.study_programs.insert_one(program_doc)
+        program_doc.pop('_id', None)
+        
+        # Create notebooks for each discipline
+        created_notebooks = []
+        color_palette = ["#007AFF", "#34C759", "#FF9500", "#FF3B30", "#AF52DE", "#5AC8FA", "#FF2D55", "#FFCC00", "#30D158", "#64D2FF", "#BF5AF2", "#FF6482"]
+        
+        for i, disc in enumerate(disciplinas):
+            nb_id = f"nb_{uuid.uuid4().hex[:12]}"
+            nb_color = color_palette[i % len(color_palette)]
+            
+            nb_doc = {
+                "notebook_id": nb_id,
+                "user_id": user.user_id,
+                "area_id": area_id,
+                "program_id": program_id,
+                "name": disc.get("nome", f"Disciplina {i+1}"),
+                "description": disc.get("dicas_estudo", ""),
+                "color": nb_color,
+                "tags": disc.get("topicos", [])[:10],
+                "total_study_time_minutes": 0,
+                "total_questions": 0,
+                "correct_questions": 0,
+                "weight": disc.get("peso", 1),
+                "num_questoes_edital": disc.get("num_questoes", 0),
+                "dificuldade": disc.get("dificuldade", "media"),
+                "topicos": disc.get("topicos", []),
+                "recursos_recomendados": disc.get("recursos_recomendados", ""),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.notebooks.insert_one(nb_doc)
+            nb_doc.pop('_id', None)
+            created_notebooks.append(nb_doc)
+        
+        # Create study schedule entries from cronograma
+        created_schedules = []
+        day_map = {
+            "Segunda": "monday", "Terça": "tuesday", "Quarta": "wednesday",
+            "Quinta": "thursday", "Sexta": "friday", "Sábado": "saturday", "Domingo": "sunday"
+        }
+        
+        for day_entry in cronograma:
+            dia = day_entry.get("dia", "")
+            day_of_week = day_map.get(dia, dia.lower())
+            blocos = day_entry.get("blocos", [])
+            
+            current_hour = 8
+            current_min = 0
+            
+            for bloco in blocos:
+                disc_name = bloco.get("disciplina", "")
+                duracao = bloco.get("duracao_minutos", 60)
+                
+                matching_nb = None
+                for nb in created_notebooks:
+                    if nb["name"].lower() == disc_name.lower():
+                        matching_nb = nb
+                        break
+                if not matching_nb:
+                    for nb in created_notebooks:
+                        if disc_name.lower() in nb["name"].lower() or nb["name"].lower() in disc_name.lower():
+                            matching_nb = nb
+                            break
+                
+                if matching_nb:
+                    start_time = f"{current_hour:02d}:{current_min:02d}"
+                    end_min_total = current_min + duracao
+                    end_hour = current_hour + end_min_total // 60
+                    end_min = end_min_total % 60
+                    end_time = f"{end_hour:02d}:{end_min:02d}"
+                    
+                    sched_id = f"sched_{uuid.uuid4().hex[:12]}"
+                    sched_doc = {
+                        "schedule_id": sched_id,
+                        "user_id": user.user_id,
+                        "notebook_id": matching_nb["notebook_id"],
+                        "program_id": program_id,
+                        "day_of_week": day_of_week,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "repeat": True,
+                        "tipo_estudo": bloco.get("tipo_estudo", "Teoria + Questões"),
+                        "prioridade": bloco.get("prioridade", "media"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.study_schedules.insert_one(sched_doc)
+                    sched_doc.pop('_id', None)
+                    created_schedules.append(sched_doc)
+                    
+                    current_hour = end_hour
+                    current_min = end_min
+        
+        # Award XP
+        xp_earned = 50
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$inc": {"xp": xp_earned}}
+        )
+        
+        return {
+            "success": True,
+            "program": program_doc,
+            "concurso": concurso_info,
+            "disciplinas": created_notebooks,
+            "cronograma": cronograma,
+            "estrategia": estrategia,
+            "schedules_created": len(created_schedules),
+            "xp_earned": xp_earned,
+            "message": f"Programa de estudos criado com {len(disciplinas)} disciplinas e cronograma semanal de {len(created_schedules)} blocos!"
+        }
+        
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA. Tente novamente. Detalhe: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao analisar edital: {str(e)}")
+
+
+@api_router.get("/study/programs/{program_id}/cronograma")
+async def get_program_cronograma(request: Request, program_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get the study schedule/cronograma for a specific program"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    program = await db.study_programs.find_one({"program_id": program_id, "user_id": user.user_id}, {"_id": 0})
+    if not program:
+        raise HTTPException(status_code=404, detail="Programa não encontrado")
+    
+    schedules = await db.study_schedules.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(200)
+    
+    notebooks = await db.notebooks.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(100)
+    
+    nb_lookup = {nb["notebook_id"]: nb for nb in notebooks}
+    
+    for sched in schedules:
+        nb = nb_lookup.get(sched.get("notebook_id"))
+        if nb:
+            sched["disciplina_nome"] = nb["name"]
+            sched["disciplina_color"] = nb.get("color", "#007AFF")
+            sched["weight"] = nb.get("weight", 1)
+    
+    days_order = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    day_labels = {"monday": "Segunda", "tuesday": "Terça", "wednesday": "Quarta", "thursday": "Quinta", "friday": "Sexta", "saturday": "Sábado", "sunday": "Domingo"}
+    
+    cronograma_by_day = []
+    for day in days_order:
+        day_schedules = [s for s in schedules if s.get("day_of_week") == day]
+        if day_schedules:
+            day_schedules.sort(key=lambda x: x.get("start_time", "00:00"))
+            total_minutes = 0
+            for s in day_schedules:
+                try:
+                    start_parts = s.get("start_time", "00:00").split(":")
+                    end_parts = s.get("end_time", "00:00").split(":")
+                    start_min = int(start_parts[0]) * 60 + int(start_parts[1])
+                    end_min = int(end_parts[0]) * 60 + int(end_parts[1])
+                    total_minutes += (end_min - start_min)
+                except (ValueError, IndexError):
+                    pass
+            cronograma_by_day.append({
+                "day": day,
+                "day_label": day_labels.get(day, day),
+                "blocos": day_schedules,
+                "total_minutes": total_minutes
+            })
+    
+    weight_summary = []
+    total_weight = sum(nb.get("weight", 1) for nb in notebooks)
+    for nb in sorted(notebooks, key=lambda x: x.get("weight", 1), reverse=True):
+        w = nb.get("weight", 1)
+        weight_summary.append({
+            "disciplina": nb["name"],
+            "peso": w,
+            "percentual": round((w / total_weight * 100) if total_weight > 0 else 0, 1),
+            "num_questoes": nb.get("num_questoes_edital", 0),
+            "dificuldade": nb.get("dificuldade", "media"),
+            "color": nb.get("color", "#007AFF")
+        })
+    
+    return {
+        "program": program,
+        "cronograma": cronograma_by_day,
+        "disciplinas": weight_summary,
+        "notebooks": notebooks,
+        "estrategia": program.get("edital_data", {}).get("estrategia", {}),
+        "total_schedules": len(schedules)
+    }
+
+
+
 # ========== QUESTION TRACKING ==========
 
 @api_router.post("/study/questions/log")

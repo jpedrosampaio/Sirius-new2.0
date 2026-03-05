@@ -22,7 +22,7 @@ import {
   Send, ArrowLeft, BarChart3, HelpCircle, Zap, Coffee,
   MessageSquare, ChevronDown, ChevronUp, Hash, Award, TrendingUp,
   Upload, ListChecks, ClipboardList, Eye, EyeOff, ChevronLeft, CircleDot,
-  SkipForward, Flag, StopCircle
+  SkipForward, Flag, StopCircle, FileUp, Scale, LayoutGrid
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -429,6 +429,17 @@ export default function Studies() {
   });
   const [importFile, setImportFile] = useState(null);
 
+  // Edital Import
+  const [showEditalDialog, setShowEditalDialog] = useState(false);
+  const [editalFile, setEditalFile] = useState(null);
+  const [editalImporting, setEditalImporting] = useState(false);
+  const [editalForm, setEditalForm] = useState({ target_date: "", hours_per_day: 4, days_per_week: 5 });
+  const [editalResult, setEditalResult] = useState(null);
+  const [showEditalResultDialog, setShowEditalResultDialog] = useState(false);
+  const [showCronogramaDialog, setShowCronogramaDialog] = useState(false);
+  const [cronogramaData, setCronogramaData] = useState(null);
+  const [cronogramaLoading, setCronogramaLoading] = useState(false);
+
   // PDF Content Analysis
   const [showContentPdfDialog, setShowContentPdfDialog] = useState(false);
   const [contentPdfFile, setContentPdfFile] = useState(null);
@@ -714,6 +725,46 @@ export default function Studies() {
 
   const handleDeleteProgram = async (programId) => {
     try { await axios.delete(`${API}/study/programs/${programId}`, { withCredentials: true }); toast.success("Programa removido"); setSelectedProgram(null); fetchAllData(); } catch { toast.error("Erro ao remover programa"); }
+  };
+
+  // ========== EDITAL IMPORT HANDLERS ==========
+  const handleImportEdital = async () => {
+    if (!editalFile) { toast.error("Selecione um arquivo PDF do edital"); return; }
+    if (!selectedArea) { toast.error("Selecione uma área primeiro"); return; }
+    setEditalImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", editalFile);
+      formData.append("area_id", selectedArea.area_id);
+      if (editalForm.target_date) formData.append("target_date", editalForm.target_date);
+      formData.append("hours_per_day", editalForm.hours_per_day.toString());
+      formData.append("days_per_week", editalForm.days_per_week.toString());
+
+      const res = await axios.post(`${API}/study/programs/import-edital`, formData, {
+        withCredentials: true, headers: { "Content-Type": "multipart/form-data" }, timeout: 120000
+      });
+      toast.success(res.data.message || "Programa criado com sucesso!");
+      setEditalResult(res.data);
+      setShowEditalDialog(false);
+      setShowEditalResultDialog(true);
+      setEditalFile(null);
+      setEditalForm({ target_date: "", hours_per_day: 4, days_per_week: 5 });
+      fetchAllData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao importar edital");
+    } finally { setEditalImporting(false); }
+  };
+
+  const handleViewCronograma = async (programId) => {
+    setCronogramaLoading(true);
+    setShowCronogramaDialog(true);
+    try {
+      const res = await axios.get(`${API}/study/programs/${programId}/cronograma`, { withCredentials: true });
+      setCronogramaData(res.data);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao carregar cronograma");
+      setShowCronogramaDialog(false);
+    } finally { setCronogramaLoading(false); }
   };
 
   const handleCreateNotebook = async () => {
@@ -1072,7 +1123,77 @@ export default function Studies() {
                     <h2 className="text-lg font-bold">{selectedArea.name}</h2>
                     <p className="text-xs text-[#A1A1AA]">{selectedArea.description || 'Programas e cursos desta área'}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <Dialog open={showEditalDialog} onOpenChange={setShowEditalDialog}>
+                      <DialogTrigger asChild><Button size="sm" className="bg-purple-600 hover:bg-purple-700 h-8 text-xs"><FileUp className="w-3 h-3 mr-1" />Importar Edital</Button></DialogTrigger>
+                      <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2"><FileUp className="w-5 h-5 text-purple-400" />Importar Edital de Concurso</DialogTitle>
+                          <DialogDescription>Faça upload do PDF do edital e a IA criará um programa de estudos completo com disciplinas, pesos e cronograma.</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div>
+                            <Label className="text-sm font-medium">PDF do Edital *</Label>
+                            <div className={`mt-1 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${editalFile ? 'border-purple-500 bg-purple-500/10' : 'border-[#27272A] hover:border-[#3F3F46]'}`}>
+                              {editalFile ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <FileText className="w-5 h-5 text-purple-400" />
+                                  <span className="text-sm text-purple-300">{editalFile.name}</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditalFile(null)}><XCircle className="w-4 h-4 text-red-400" /></Button>
+                                </div>
+                              ) : (
+                                <label className="cursor-pointer">
+                                  <Upload className="w-8 h-8 mx-auto text-[#A1A1AA] mb-2" />
+                                  <p className="text-sm text-[#A1A1AA]">Clique para selecionar o PDF</p>
+                                  <p className="text-xs text-[#52525B] mt-1">Máximo 20MB</p>
+                                  <input type="file" accept=".pdf" className="hidden" onChange={e => setEditalFile(e.target.files?.[0] || null)} />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Data da Prova (opcional)</Label>
+                            <Input type="date" value={editalForm.target_date} onChange={e => setEditalForm({...editalForm, target_date: e.target.value})} className="bg-[#121212] border-[#27272A] mt-1" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-sm font-medium">Horas por dia</Label>
+                              <Select value={String(editalForm.hours_per_day)} onValueChange={v => setEditalForm({...editalForm, hours_per_day: parseFloat(v)})}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  {[1,2,3,4,5,6,7,8,10,12].map(h => <SelectItem key={h} value={String(h)}>{h}h</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium">Dias por semana</Label>
+                              <Select value={String(editalForm.days_per_week)} onValueChange={v => setEditalForm({...editalForm, days_per_week: parseInt(v)})}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  {[3,4,5,6,7].map(d => <SelectItem key={d} value={String(d)}>{d} dias</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="bg-[#121212] border border-[#27272A] rounded-lg p-3">
+                            <p className="text-xs text-[#A1A1AA]"><Sparkles className="w-3 h-3 inline mr-1 text-purple-400" />A IA vai analisar o edital e criar automaticamente:</p>
+                            <ul className="text-xs text-[#A1A1AA] mt-2 space-y-1 ml-4 list-disc">
+                              <li>Todas as disciplinas com pesos e tópicos</li>
+                              <li>Cronograma semanal otimizado</li>
+                              <li>Estratégia de estudo personalizada</li>
+                              <li>Distribuição de tempo por matéria</li>
+                            </ul>
+                          </div>
+                          <Button onClick={handleImportEdital} disabled={!editalFile || editalImporting} className="w-full bg-purple-600 hover:bg-purple-700">
+                            {editalImporting ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando edital... (pode levar até 1 min)</>
+                            ) : (
+                              <><Sparkles className="w-4 h-4 mr-2" />Gerar Programa de Estudos</>
+                            )}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                     <Dialog open={showProgramDialog} onOpenChange={setShowProgramDialog}>
                       <DialogTrigger asChild><Button size="sm" className="bg-[#007AFF] h-8 text-xs"><Plus className="w-3 h-3 mr-1" />Novo Programa</Button></DialogTrigger>
                       <DialogContent className="bg-[#0A0A0A] border-[#27272A]">
@@ -1094,17 +1215,28 @@ export default function Studies() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {areaPrograms.map(prog => {
                     const pctCorrect = prog.total_questions > 0 ? Math.round((prog.correct_questions / prog.total_questions) * 100) : 0;
+                    const isEditalProgram = prog.source_type === "edital_import";
                     return (
-                      <Card key={prog.program_id} className="bg-[#0A0A0A] border-[#27272A] cursor-pointer hover:scale-[1.02] transition-all group" onClick={() => navigateToProgram(prog)}>
+                      <Card key={prog.program_id} className={`bg-[#0A0A0A] border-[#27272A] cursor-pointer hover:scale-[1.02] transition-all group ${isEditalProgram ? 'border-l-2 border-l-purple-500' : ''}`} onClick={() => navigateToProgram(prog)}>
                         <CardHeader className="pb-2">
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: prog.color }} />
                               <CardTitle className="text-base">{prog.name}</CardTitle>
                             </div>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => { e.stopPropagation(); handleDeleteProgram(prog.program_id); }}><Trash2 className="w-3 h-3 text-red-500" /></Button>
+                            <div className="flex items-center gap-1">
+                              {isEditalProgram && (
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => { e.stopPropagation(); handleViewCronograma(prog.program_id); }} title="Ver Cronograma">
+                                  <LayoutGrid className="w-3 h-3 text-purple-400" />
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={e => { e.stopPropagation(); handleDeleteProgram(prog.program_id); }}><Trash2 className="w-3 h-3 text-red-500" /></Button>
+                            </div>
                           </div>
-                          {prog.description && <CardDescription className="text-xs">{prog.description}</CardDescription>}
+                          {isEditalProgram && (
+                            <Badge variant="outline" className="text-[10px] border-purple-500 text-purple-400 w-fit"><FileUp className="w-3 h-3 mr-1" />Gerado via Edital</Badge>
+                          )}
+                          {prog.description && <CardDescription className="text-xs mt-1">{prog.description}</CardDescription>}
                         </CardHeader>
                         <CardContent className="pt-0">
                           <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
@@ -1115,8 +1247,11 @@ export default function Studies() {
                           {prog.target_date && (
                             <Badge variant="outline" className="text-[10px] border-purple-500 text-purple-400"><Calendar className="w-3 h-3 mr-1" />Meta: {prog.target_date}</Badge>
                           )}
-                          <div className="flex items-center justify-end mt-2">
-                            <span className="text-xs text-[#A1A1AA] group-hover:text-white transition-colors flex items-center gap-1">Ver matérias <ChevronRight className="w-3 h-3" /></span>
+                          <div className="flex items-center justify-between mt-2">
+                            {isEditalProgram && (
+                              <span className="text-[10px] text-purple-400 cursor-pointer hover:underline" onClick={e => { e.stopPropagation(); handleViewCronograma(prog.program_id); }}>Ver cronograma</span>
+                            )}
+                            <span className="text-xs text-[#A1A1AA] group-hover:text-white transition-colors flex items-center gap-1 ml-auto">Ver matérias <ChevronRight className="w-3 h-3" /></span>
                           </div>
                         </CardContent>
                       </Card>
@@ -2153,6 +2288,203 @@ export default function Studies() {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* ========== EDITAL RESULT DIALOG ========== */}
+        <Dialog open={showEditalResultDialog} onOpenChange={setShowEditalResultDialog}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-400" />Programa Criado com Sucesso!</DialogTitle>
+              <DialogDescription>Seu programa de estudos foi gerado a partir do edital.</DialogDescription>
+            </DialogHeader>
+            {editalResult && (
+              <div className="space-y-4 py-2">
+                {/* Concurso Info */}
+                {editalResult.concurso && (
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><GraduationCap className="w-4 h-4 text-purple-400" />Informações do Concurso</CardTitle></CardHeader>
+                    <CardContent className="text-xs space-y-1">
+                      {editalResult.concurso.nome && <p><span className="text-[#A1A1AA]">Concurso:</span> <span className="text-white font-medium">{editalResult.concurso.nome}</span></p>}
+                      {editalResult.concurso.orgao && <p><span className="text-[#A1A1AA]">Órgão:</span> <span className="text-white">{editalResult.concurso.orgao}</span></p>}
+                      {editalResult.concurso.banca && <p><span className="text-[#A1A1AA]">Banca:</span> <span className="text-white">{editalResult.concurso.banca}</span></p>}
+                      {editalResult.concurso.cargo && <p><span className="text-[#A1A1AA]">Cargo:</span> <span className="text-white">{editalResult.concurso.cargo}</span></p>}
+                      {editalResult.concurso.vagas && <p><span className="text-[#A1A1AA]">Vagas:</span> <span className="text-white">{editalResult.concurso.vagas}</span></p>}
+                      {editalResult.concurso.remuneracao && <p><span className="text-[#A1A1AA]">Remuneração:</span> <span className="text-green-400 font-medium">{editalResult.concurso.remuneracao}</span></p>}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Disciplines Summary */}
+                <Card className="bg-[#121212] border-[#27272A]">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-400" />{editalResult.disciplinas?.length || 0} Disciplinas Criadas</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {(editalResult.disciplinas || []).map((disc, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-[#0A0A0A] rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: disc.color || '#007AFF' }} />
+                            <span className="text-xs font-medium">{disc.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {disc.weight && <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-400">Peso {disc.weight}</Badge>}
+                            {disc.num_questoes_edital > 0 && <Badge variant="outline" className="text-[10px] border-blue-500 text-blue-400">{disc.num_questoes_edital}q</Badge>}
+                            {disc.dificuldade && (
+                              <Badge variant="outline" className={`text-[10px] ${disc.dificuldade === 'alta' ? 'border-red-500 text-red-400' : disc.dificuldade === 'media' ? 'border-yellow-500 text-yellow-400' : 'border-green-500 text-green-400'}`}>{disc.dificuldade}</Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Strategy */}
+                {editalResult.estrategia && (
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Target className="w-4 h-4 text-green-400" />Estratégia de Estudo</CardTitle></CardHeader>
+                    <CardContent className="text-xs space-y-2">
+                      {editalResult.estrategia.resumo && <p className="text-[#A1A1AA]">{editalResult.estrategia.resumo}</p>}
+                      {editalResult.estrategia.fase_1 && <p><span className="text-blue-400 font-medium">Fase 1:</span> <span className="text-[#A1A1AA]">{editalResult.estrategia.fase_1}</span></p>}
+                      {editalResult.estrategia.fase_2 && <p><span className="text-yellow-400 font-medium">Fase 2:</span> <span className="text-[#A1A1AA]">{editalResult.estrategia.fase_2}</span></p>}
+                      {editalResult.estrategia.fase_3 && <p><span className="text-green-400 font-medium">Fase 3:</span> <span className="text-[#A1A1AA]">{editalResult.estrategia.fase_3}</span></p>}
+                      {editalResult.estrategia.dicas_gerais?.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-purple-400 font-medium mb-1">Dicas:</p>
+                          <ul className="list-disc ml-4 text-[#A1A1AA] space-y-1">
+                            {editalResult.estrategia.dicas_gerais.map((d, i) => <li key={i}>{d}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-3">
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardContent className="p-3 text-center">
+                      <p className="text-2xl font-bold text-purple-400">{editalResult.disciplinas?.length || 0}</p>
+                      <p className="text-xs text-[#A1A1AA]">Disciplinas</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardContent className="p-3 text-center">
+                      <p className="text-2xl font-bold text-blue-400">{editalResult.schedules_created || 0}</p>
+                      <p className="text-xs text-[#A1A1AA]">Blocos/Semana</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardContent className="p-3 text-center">
+                      <p className="text-2xl font-bold text-yellow-400">+{editalResult.xp_earned || 0}</p>
+                      <p className="text-xs text-[#A1A1AA]">XP Ganho</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Button onClick={() => { setShowEditalResultDialog(false); if (editalResult.program) handleViewCronograma(editalResult.program.program_id); }} className="w-full bg-purple-600 hover:bg-purple-700">
+                  <LayoutGrid className="w-4 h-4 mr-2" />Ver Cronograma Completo
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== CRONOGRAMA DIALOG ========== */}
+        <Dialog open={showCronogramaDialog} onOpenChange={setShowCronogramaDialog}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><LayoutGrid className="w-5 h-5 text-purple-400" />Cronograma de Estudos</DialogTitle>
+              <DialogDescription>{cronogramaData?.program?.name || 'Programa de Estudos'}</DialogDescription>
+            </DialogHeader>
+            {cronogramaLoading ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-3" />
+                <p className="text-sm text-[#A1A1AA]">Carregando cronograma...</p>
+              </div>
+            ) : cronogramaData && (
+              <div className="space-y-4 py-2">
+                {/* Weight Distribution */}
+                <Card className="bg-[#121212] border-[#27272A]">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Scale className="w-4 h-4 text-yellow-400" />Distribuição por Peso</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {(cronogramaData.disciplinas || []).map((disc, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: disc.color }} />
+                          <span className="text-xs font-medium w-40 truncate">{disc.disciplina}</span>
+                          <div className="flex-1">
+                            <div className="h-3 bg-[#27272A] rounded-full overflow-hidden">
+                              <div className="h-full rounded-full transition-all" style={{ width: `${disc.percentual}%`, backgroundColor: disc.color }} />
+                            </div>
+                          </div>
+                          <span className="text-xs text-[#A1A1AA] w-12 text-right">{disc.percentual}%</span>
+                          <Badge variant="outline" className={`text-[10px] w-14 justify-center ${disc.dificuldade === 'alta' ? 'border-red-500 text-red-400' : disc.dificuldade === 'media' ? 'border-yellow-500 text-yellow-400' : 'border-green-500 text-green-400'}`}>{disc.dificuldade}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Weekly Schedule */}
+                <Card className="bg-[#121212] border-[#27272A]">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-400" />Cronograma Semanal</CardTitle></CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {(cronogramaData.cronograma || []).map((day, di) => (
+                        <div key={di} className="border border-[#27272A] rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between bg-[#1A1A1A] px-3 py-2">
+                            <span className="text-sm font-bold text-white">{day.day_label}</span>
+                            <Badge variant="outline" className="text-[10px] border-[#3F3F46] text-[#A1A1AA]">
+                              <Clock className="w-3 h-3 mr-1" />{Math.floor(day.total_minutes / 60)}h{day.total_minutes % 60 > 0 ? `${day.total_minutes % 60}min` : ''}
+                            </Badge>
+                          </div>
+                          <div className="p-2 space-y-1">
+                            {(day.blocos || []).map((bloco, bi) => (
+                              <div key={bi} className="flex items-center gap-2 p-2 bg-[#0A0A0A] rounded-md">
+                                <div className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: bloco.disciplina_color || '#007AFF' }} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-white truncate">{bloco.disciplina_nome || bloco.notebook_id}</p>
+                                  <p className="text-[10px] text-[#A1A1AA]">{bloco.tipo_estudo || 'Teoria + Questões'}</p>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="text-xs text-[#A1A1AA]">{bloco.start_time} - {bloco.end_time}</p>
+                                  <Badge variant="outline" className={`text-[10px] ${bloco.prioridade === 'alta' ? 'border-red-500 text-red-400' : bloco.prioridade === 'media' ? 'border-yellow-500 text-yellow-400' : 'border-green-500 text-green-400'}`}>{bloco.prioridade}</Badge>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Strategy */}
+                {cronogramaData.estrategia && cronogramaData.estrategia.resumo && (
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Lightbulb className="w-4 h-4 text-yellow-400" />Estratégia Recomendada</CardTitle></CardHeader>
+                    <CardContent className="text-xs space-y-2">
+                      <p className="text-[#A1A1AA]">{cronogramaData.estrategia.resumo}</p>
+                      {cronogramaData.estrategia.fase_1 && <p><span className="text-blue-400 font-medium">Fase 1:</span> <span className="text-[#A1A1AA]">{cronogramaData.estrategia.fase_1}</span></p>}
+                      {cronogramaData.estrategia.fase_2 && <p><span className="text-yellow-400 font-medium">Fase 2:</span> <span className="text-[#A1A1AA]">{cronogramaData.estrategia.fase_2}</span></p>}
+                      {cronogramaData.estrategia.fase_3 && <p><span className="text-green-400 font-medium">Fase 3:</span> <span className="text-[#A1A1AA]">{cronogramaData.estrategia.fase_3}</span></p>}
+                      {cronogramaData.estrategia.materias_prioritarias?.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-red-400 font-medium mb-1">Matérias Prioritárias:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {cronogramaData.estrategia.materias_prioritarias.map((m, i) => (
+                              <Badge key={i} variant="outline" className="text-[10px] border-red-500 text-red-400">{m}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
       </main>
       <MobileNav user={user} />
     </div>

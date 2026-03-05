@@ -559,6 +559,21 @@ backend:
         agent: "testing"
         comment: "❌ TESTED: Recipe detail endpoint exists and implementation is correct, but cannot be fully tested due to dependency issue. POST /api/nutrition/recipes/suggest fails with JSON parsing error from Google Gemini response ('Expecting property name enclosed in double quotes'). No existing recipes available for testing GET /api/nutrition/recipes/{recipe_id}. This appears to be a Google Gemini API response format issue, not an endpoint implementation problem."
 
+  - task: "Edital Import - AI Study Program Generator"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/study/programs/import-edital and GET /api/study/programs/{id}/cronograma. Upload PDF edital, AI (Gemini) extracts disciplines, weights, topics, generates program with notebooks and weekly schedule."
+      - working: true
+        agent: "testing"
+        comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL TESTS PASSED (5/5 - 100%). **Authentication:** Working correctly with testedital@test.com / Test123!. **GET /api/study/areas:** Successfully retrieved 4 study areas including 'Concursos' area (area_2d44ccc2c39a). **POST /api/study/programs/import-edital (3/3 validation tests passed):** ✅ Correctly rejected request without file (422 error), ✅ Correctly rejected non-PDF file with expected message 'Apenas arquivos PDF são aceitos' (400 error), ✅ Successfully processed realistic PDF with AI extraction - Created program 'Edital de Concurso Público N° 001/2025 - Analista Judiciário' with 5 disciplines (Direito Constitucional peso 4/25 questões, Direito Civil peso 3/20 questões, Direito Penal peso 2/15 questões, Língua Portuguesa peso 2/20 questões, Informática peso 1/10 questões). Generated 15 schedule blocks across 6 days with proper AI strategy including priority subjects. Awarded 50 XP. **GET /api/study/programs/{id}/cronograma:** ✅ Correctly returned 404 for non-existent program_id, ✅ Successfully retrieved cronograma for valid program with 5 schedule days and complete discipline weight summary (33.3% Direito Constitucional, 25.0% Direito Civil). **Google Gemini AI Integration:** Fully functional - AI correctly extracted all disciplines, weights, question counts, and generated comprehensive study strategy with weekly schedule distribution. All endpoints working as designed."
+
 frontend:
   - task: "Credit card charge with installments UI"
     implemented: true
@@ -759,11 +774,10 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Simulados tab in Studies page"
+    []
   stuck_tasks: 
     - "Image analysis endpoint"
     - "Recipe detail endpoint"
-    - "Simulados - Import PDF endpoint"
   test_all: false
   test_priority: "high_first"
 
@@ -1447,5 +1461,53 @@ agent_communication:
       **CONCLUSION:** 
       The Simulados (Mock Exam) feature is now fully functional for the core workflow:
       Generate → List → Take → Submit → Review Results → Statistics → Delete
+  - agent: "testing"
+    message: |
+      ✅ EDITAL IMPORT TESTING COMPLETE - ALL TESTS PASSED (5/5 - 100%)
+      
+      **COMPREHENSIVE TESTING COMPLETED FOR EDITAL IMPORT ENDPOINTS:**
+      
+      🔐 **Authentication:** Working correctly with testedital@test.com / Test123! (credentials from review request)
+      
+      📚 **GET /api/study/areas (1/1 test passed):**
+        - ✅ Successfully retrieved 4 study areas: Faculdade, Concursos, Trabalho, Outros
+        - ✅ Found 'Concursos' area with ID area_2d44ccc2c39a (as mentioned in review request)
+      
+      📄 **POST /api/study/programs/import-edital (3/3 validation tests passed):**
+        - ✅ Test 1: Correctly rejected request without file (422 error)
+        - ✅ Test 2: Correctly rejected non-PDF file with expected message "Apenas arquivos PDF são aceitos" (400 error)
+        - ✅ Test 3: Successfully processed realistic PDF with full AI extraction:
+          * Created program: "Edital de Concurso Público N° 001/2025 - Analista Judiciário"
+          * Extracted 5 disciplines with correct weights and question counts:
+            - Direito Constitucional (peso 4, 25 questões)
+            - Direito Civil (peso 3, 20 questões)  
+            - Direito Penal (peso 2, 15 questões)
+            - Língua Portuguesa (peso 2, 20 questões)
+            - Informática (peso 1, 10 questões)
+          * Generated 15 schedule blocks across 6 study days
+          * AI created comprehensive study strategy with priority subjects
+          * Awarded 50 XP for program creation
+      
+      📅 **GET /api/study/programs/{program_id}/cronograma (2/2 tests passed):**
+        - ✅ Test 1: Correctly returned 404 for non-existent program_id
+        - ✅ Test 2: Successfully retrieved cronograma for valid program:
+          * 5 schedule days with proper time blocks
+          * Complete discipline weight summary (33.3% Direito Constitucional, 25.0% Direito Civil)
+          * All required cronograma structure present
+      
+      🤖 **Google Gemini AI Integration:**
+        - ✅ Fully functional for edital analysis
+        - ✅ Correctly extracts disciplines, weights, question counts from PDF content
+        - ✅ Generates realistic study strategies and weekly schedules
+        - ✅ Properly distributes study time based on discipline priorities
+      
+      🎯 **Key Findings:**
+        - All endpoints exist and are accessible with proper authentication
+        - Input validation working correctly (file requirements, PDF-only restriction)
+        - AI processing successfully analyzes edital content and creates structured study programs
+        - Cronograma endpoint provides complete schedule visualization
+        - Integration between import and schedule endpoints working seamlessly
+        
+      **CONCLUSION:** Edital Import functionality is fully operational and ready for production. All endpoints working as designed with proper AI integration for study program generation.
       
       All 7 main endpoints working perfectly. Ready for frontend integration testing.
