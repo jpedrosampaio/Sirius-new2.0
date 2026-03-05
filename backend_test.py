@@ -11,7 +11,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://quiz-simulator-2.preview.emergentagent.com/api"
+BASE_URL = "https://quiz-answer-toggle.preview.emergentagent.com/api"
 TEST_EMAIL = "testsimulado2@test.com"
 TEST_PASSWORD = "Test123!"
 TIMEOUT_SECONDS = 120  # Extended timeout for AI generation

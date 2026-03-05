@@ -21,7 +21,7 @@ import {
   Edit3, Tag, AlertCircle, Timer, BookMarked, Lightbulb, Repeat,
   Send, ArrowLeft, BarChart3, HelpCircle, Zap, Coffee,
   MessageSquare, ChevronDown, ChevronUp, Hash, Award, TrendingUp,
-  Upload, ListChecks, ClipboardList, Eye, ChevronLeft, CircleDot,
+  Upload, ListChecks, ClipboardList, Eye, EyeOff, ChevronLeft, CircleDot,
   SkipForward, Flag, StopCircle
 } from "lucide-react";
 
@@ -416,6 +416,7 @@ export default function Studies() {
   const [simuladoResult, setSimuladoResult] = useState(null);
   const [simuladoSubmitting, setSimuladoSubmitting] = useState(false);
   const [showSimuladoStatsView, setShowSimuladoStatsView] = useState(false);
+  const [showGabarito, setShowGabarito] = useState(false);
   const simuladoTimerRef = useRef(null);
 
   const [generateForm, setGenerateForm] = useState({
@@ -661,6 +662,7 @@ export default function Studies() {
     setSimuladoCurrentQ(0);
     setSimuladoMarked(new Set());
     setSimuladoTimer(0);
+    setShowGabarito(false);
   };
 
   const handleAnalyzeContentPdf = async () => {
@@ -1672,7 +1674,7 @@ export default function Studies() {
               </div>
 
             ) : simuladoMode === "viewing" && currentSimulado ? (
-              /* VIEWING MODE - Browse questions with answers */
+              /* VIEWING MODE - Browse questions with option to show/hide gabarito */
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1686,9 +1688,20 @@ export default function Studies() {
                       </p>
                     </div>
                   </div>
-                  <Button onClick={() => handleStartSimulado(currentSimulado)} className="bg-[#007AFF]">
-                    <Play className="w-4 h-4 mr-1" />Iniciar Simulado
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={showGabarito ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setShowGabarito(!showGabarito)}
+                      className={showGabarito ? "bg-green-600 hover:bg-green-700 text-white" : "border-[#27272A] text-[#A1A1AA] hover:text-white"}
+                    >
+                      {showGabarito ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
+                      {showGabarito ? "Ocultar Gabarito" : "Ver Gabarito"}
+                    </Button>
+                    <Button onClick={() => handleStartSimulado(currentSimulado)} className="bg-[#007AFF]">
+                      <Play className="w-4 h-4 mr-1" />Iniciar Simulado
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -1708,15 +1721,15 @@ export default function Studies() {
                             const letter = opt.match(/^([A-E]\))/)?.[1]?.replace(")", "") || (q.type === "certo_errado" ? opt : String.fromCharCode(65 + optIdx));
                             const isCorrect = letter === q.correct_answer || opt === q.correct_answer;
                             return (
-                              <div key={optIdx} className={`p-3 rounded-lg border text-sm ${isCorrect ? 'border-green-500/40 bg-green-500/10 text-green-300' : 'border-[#27272A] bg-[#121212] text-[#A1A1AA]'}`}>
-                                <span className={`font-bold mr-2 ${isCorrect ? 'text-green-400' : ''}`}>{letter})</span>
+                              <div key={optIdx} className={`p-3 rounded-lg border text-sm ${showGabarito && isCorrect ? 'border-green-500/40 bg-green-500/10 text-green-300' : 'border-[#27272A] bg-[#121212] text-[#A1A1AA]'}`}>
+                                <span className={`font-bold mr-2 ${showGabarito && isCorrect ? 'text-green-400' : ''}`}>{letter})</span>
                                 {opt.replace(/^[A-E]\)\s*/, "")}
-                                {isCorrect && <CheckCircle2 className="w-4 h-4 inline ml-2 text-green-400" />}
+                                {showGabarito && isCorrect && <CheckCircle2 className="w-4 h-4 inline ml-2 text-green-400" />}
                               </div>
                             );
                           })}
                         </div>
-                        {q.explanation && (
+                        {showGabarito && q.explanation && (
                           <div className="bg-[#1A1A2E] p-3 rounded-lg border border-[#27272A]">
                             <p className="text-xs text-[#A1A1AA] font-medium mb-1 flex items-center gap-1"><Lightbulb className="w-3 h-3 text-yellow-400" />Explicação</p>
                             <p className="text-sm text-[#D4D4D8]">{q.explanation}</p>
