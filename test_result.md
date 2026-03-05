@@ -527,12 +527,29 @@ backend:
         agent: "testing"
         comment: "✅ COMPREHENSIVE TESTING COMPLETE: All endpoints working correctly. GET /api/study/simulados returns list with questions removed but questions_count present. GET /api/study/simulados/{id} returns full simulado with all questions. GET /api/study/simulados/{id}/results returns attempt history. GET /api/study/simulados/stats returns complete statistics (1 simulado, 1 attempt). DELETE /api/study/simulados/{id} successfully removes simulado."
 
+  - task: "Dashboard Tasks counter fix"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: false
+        agent: "user"
+        comment: "Tasks counter in dashboard Centro de Comando always shows 0/0. Profile page also shows '-' for all stats."
+      - working: "NA"
+        agent: "main"
+        comment: "Fixed backend: Dashboard stats were querying db.tasks with date=today and completed=True, but tasks are stored as templates without date field. Completion is tracked in task_instances collection. Changed to: tasks_today = count task templates, tasks_completed_today = count task_instances with date=today and completed=True. Fixed Profile.js: Added fetchStats() call to /api/stats/dashboard and replaced hardcoded '-' with actual values."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Dashboard Tasks counter fix working correctly. Registered/logged in testdashfix@test.com, created task 'Teste tarefa', verified tasks_today=1 (>0). Completed task, verified tasks_completed_today=1 (>0). All required dashboard stats fields present (habits_total, habits_completed_today, goals_avg_progress). Backend endpoint /api/stats/dashboard properly counts task templates for tasks_today and task_instances for tasks_completed_today. Fix implementation confirmed working as expected."
+    stuck_count: 0
+    priority: "high"
   - task: "Recipe detail endpoint"
     implemented: true
     working: false
     file: "backend/server.py"
-    stuck_count: 0
-    priority: "high"
     needs_retesting: false
     status_history:
       - working: "NA"

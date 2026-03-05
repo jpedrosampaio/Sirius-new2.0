@@ -1,460 +1,251 @@
 #!/usr/bin/env python3
 """
-Backend Test Script for Simulados (Mock Exam) Feature
-Tests the newly implemented Simulados endpoints with updated Google Gemini API key
+Backend Testing Script for Dashboard Tasks Counter Fix
 """
 
 import requests
 import json
-import time
-import sys
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 
-# Configuration
-BASE_URL = "https://quiz-answer-toggle.preview.emergentagent.com/api"
-TEST_EMAIL = "testsimulado2@test.com"
+# Load the backend URL from frontend/.env
+def get_backend_url():
+    with open('/app/frontend/.env', 'r') as f:
+        for line in f:
+            if line.startswith('REACT_APP_BACKEND_URL='):
+                return line.strip().split('=', 1)[1]
+    return None
+
+BASE_URL = get_backend_url()
+if not BASE_URL:
+    raise Exception("REACT_APP_BACKEND_URL not found in frontend/.env")
+
+API_URL = f"{BASE_URL}/api"
+print(f"Testing against: {API_URL}")
+
+# Test data
+TEST_EMAIL = "testdashfix@test.com"
 TEST_PASSWORD = "Test123!"
-TIMEOUT_SECONDS = 120  # Extended timeout for AI generation
+TEST_NAME = "Dashboard Test User"
 
-# Test session variables
-session_token = None
-simulado_id = None
-test_results = []
+def print_test_step(step, description):
+    print(f"\n{'='*60}")
+    print(f"Step {step}: {description}")
+    print(f"{'='*60}")
 
-def log_test(test_name, passed, message="", details=""):
-    """Log test results"""
-    status = "✅ PASS" if passed else "❌ FAIL"
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    result = {
-        "test": test_name,
-        "status": status,
-        "timestamp": timestamp,
-        "message": message,
-        "details": details
-    }
-    test_results.append(result)
-    print(f"[{timestamp}] {status} - {test_name}")
-    if message:
-        print(f"    {message}")
-    if details and not passed:
-        print(f"    Details: {details}")
-
-def make_request(method, endpoint, data=None, timeout=30):
-    """Make HTTP request with session token"""
-    url = f"{BASE_URL}{endpoint}"
-    headers = {
-        "Content-Type": "application/json"
-    }
+def register_and_login():
+    """Register/login test user and return session token"""
+    print_test_step(1, "Register/Login Test User")
     
-    cookies = {}
-    if session_token:
-        cookies["session_token"] = session_token
-    
-    try:
-        if method.upper() == "GET":
-            response = requests.get(url, headers=headers, cookies=cookies, timeout=timeout)
-        elif method.upper() == "POST":
-            response = requests.post(url, headers=headers, cookies=cookies, 
-                                   json=data if data else {}, timeout=timeout)
-        elif method.upper() == "DELETE":
-            response = requests.delete(url, headers=headers, cookies=cookies, timeout=timeout)
-        else:
-            raise ValueError(f"Unsupported method: {method}")
-        
-        return response
-    except requests.Timeout:
-        return None
-    except Exception as e:
-        print(f"Request error: {str(e)}")
-        return None
-
-def test_authentication():
-    """Test user registration and authentication"""
-    global session_token
-    
-    # Try to register user
+    # Try to register (might fail if user exists)
     register_data = {
         "email": TEST_EMAIL,
         "password": TEST_PASSWORD,
-        "name": "Test Simulado User"
+        "name": TEST_NAME
     }
     
-    response = make_request("POST", "/auth/register", register_data)
-    
-    if response and response.status_code in [200, 400]:
-        # Registration successful or user already exists
-        # Now try to login
-        login_data = {
-            "email": TEST_EMAIL,
-            "password": TEST_PASSWORD
-        }
-        
-        response = make_request("POST", "/auth/login", login_data)
-        
-        if response and response.status_code == 200:
-            data = response.json()
-            session_token = data.get("session_token")
-            if session_token:
-                log_test("User Authentication", True, f"Logged in as {TEST_EMAIL}")
-                return True
-            else:
-                log_test("User Authentication", False, "No session token returned")
-                return False
+    try:
+        print(f"Registering user: {TEST_EMAIL}")
+        response = requests.post(f"{API_URL}/auth/register", json=register_data)
+        if response.status_code == 200:
+            print("✅ User registered successfully")
+            return response.json()["session_token"]
+        elif response.status_code == 400 and "already registered" in response.text:
+            print("ℹ️ User already exists, attempting login")
         else:
-            log_test("User Authentication", False, 
-                    f"Login failed: {response.status_code if response else 'timeout'}")
-            return False
-    else:
-        log_test("User Authentication", False, 
-                f"Registration failed: {response.status_code if response else 'timeout'}")
-        return False
-
-def test_generate_simulado():
-    """Test POST /api/study/simulados/generate endpoint"""
-    global simulado_id
+            print(f"❌ Registration failed: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Registration error: {e}")
     
-    if not session_token:
-        log_test("Generate Simulado", False, "Not authenticated")
-        return False
-    
-    generate_data = {
-        "title": "Simulado Direito Constitucional",
-        "banca": "CESPE/CEBRASPE",
-        "disciplina": "Direito Constitucional",
-        "question_type": "multipla_escolha",
-        "num_questions": 5,
-        "difficulty": "medio"
+    # Login
+    login_data = {
+        "email": TEST_EMAIL,
+        "password": TEST_PASSWORD
     }
     
-    print(f"Generating simulado... (may take up to {TIMEOUT_SECONDS} seconds)")
-    response = make_request("POST", "/study/simulados/generate", generate_data, timeout=TIMEOUT_SECONDS)
-    
-    if response is None:
-        log_test("Generate Simulado", False, f"Request timeout after {TIMEOUT_SECONDS} seconds")
-        return False
-    
-    if response.status_code == 200:
-        try:
-            data = response.json()
-            if data.get("success") and data.get("simulado"):
-                simulado = data["simulado"]
-                simulado_id = simulado.get("simulado_id")
-                questions = simulado.get("questions", [])
-                
-                if len(questions) == 5:
-                    # Verify question structure
-                    first_question = questions[0]
-                    required_fields = ["question_text", "options", "correct_answer", "explanation"]
-                    
-                    if all(field in first_question for field in required_fields):
-                        if len(first_question["options"]) == 5:
-                            log_test("Generate Simulado", True, 
-                                   f"Generated simulado with {len(questions)} questions")
-                            return True
-                        else:
-                            log_test("Generate Simulado", False, 
-                                   f"Question has {len(first_question['options'])} options, expected 5")
-                            return False
-                    else:
-                        missing = [f for f in required_fields if f not in first_question]
-                        log_test("Generate Simulado", False, 
-                               f"Missing required question fields: {missing}")
-                        return False
-                else:
-                    log_test("Generate Simulado", False, 
-                           f"Generated {len(questions)} questions, expected 5")
-                    return False
-            else:
-                log_test("Generate Simulado", False, 
-                       f"Invalid response structure: {data}")
-                return False
-        except json.JSONDecodeError:
-            log_test("Generate Simulado", False, "Invalid JSON response")
-            return False
-    else:
-        try:
-            error_data = response.json()
-            log_test("Generate Simulado", False, 
-                   f"HTTP {response.status_code}: {error_data.get('detail', 'Unknown error')}")
-        except:
-            log_test("Generate Simulado", False, 
-                   f"HTTP {response.status_code}: {response.text[:200]}")
-        return False
+    try:
+        print(f"Logging in user: {TEST_EMAIL}")
+        response = requests.post(f"{API_URL}/auth/login", json=login_data)
+        if response.status_code == 200:
+            token = response.json()["session_token"]
+            print("✅ User logged in successfully")
+            return token
+        else:
+            print(f"❌ Login failed: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Login error: {e}")
+        return None
 
-def test_list_simulados():
-    """Test GET /api/study/simulados endpoint"""
-    if not session_token:
-        log_test("List Simulados", False, "Not authenticated")
-        return False
+def create_task(session_token):
+    """Create a task via POST /api/tasks"""
+    print_test_step(2, "Create Task via POST /api/tasks")
     
-    response = make_request("GET", "/study/simulados")
-    
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            if isinstance(data, list):
-                if simulado_id:
-                    # Find our created simulado
-                    found = any(s.get("simulado_id") == simulado_id for s in data)
-                    if found:
-                        # Check that questions are removed but questions_count is present
-                        simulado = next((s for s in data if s.get("simulado_id") == simulado_id), None)
-                        if simulado:
-                            if "questions" not in simulado and "questions_count" in simulado:
-                                log_test("List Simulados", True, 
-                                       f"Found {len(data)} simulados, questions removed from list")
-                                return True
-                            else:
-                                log_test("List Simulados", False, 
-                                       "Questions not properly removed from list view")
-                                return False
-                        else:
-                            log_test("List Simulados", False, "Simulado not found in list")
-                            return False
-                    else:
-                        log_test("List Simulados", False, 
-                               f"Created simulado {simulado_id} not found in list")
-                        return False
-                else:
-                    log_test("List Simulados", True, f"Retrieved {len(data)} simulados")
-                    return True
-            else:
-                log_test("List Simulados", False, "Response is not a list")
-                return False
-        except json.JSONDecodeError:
-            log_test("List Simulados", False, "Invalid JSON response")
-            return False
-    else:
-        log_test("List Simulados", False, 
-               f"HTTP {response.status_code if response else 'timeout'}")
-        return False
-
-def test_get_simulado_detail():
-    """Test GET /api/study/simulados/{simulado_id} endpoint"""
-    if not session_token or not simulado_id:
-        log_test("Get Simulado Detail", False, "Not authenticated or no simulado ID")
-        return False
-    
-    response = make_request("GET", f"/study/simulados/{simulado_id}")
-    
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            if data.get("simulado_id") == simulado_id:
-                questions = data.get("questions", [])
-                if len(questions) > 0:
-                    log_test("Get Simulado Detail", True, 
-                           f"Retrieved simulado with {len(questions)} questions")
-                    return True
-                else:
-                    log_test("Get Simulado Detail", False, "No questions in simulado detail")
-                    return False
-            else:
-                log_test("Get Simulado Detail", False, "Wrong simulado returned")
-                return False
-        except json.JSONDecodeError:
-            log_test("Get Simulado Detail", False, "Invalid JSON response")
-            return False
-    else:
-        log_test("Get Simulado Detail", False, 
-               f"HTTP {response.status_code if response else 'timeout'}")
-        return False
-
-def test_submit_simulado():
-    """Test POST /api/study/simulados/{simulado_id}/submit endpoint"""
-    if not session_token or not simulado_id:
-        log_test("Submit Simulado", False, "Not authenticated or no simulado ID")
-        return False
-    
-    # Submit answers for all 5 questions (using letters A-E as specified)
-    submit_data = {
-        "answers": [
-            {"question_idx": 0, "selected_answer": "A"},
-            {"question_idx": 1, "selected_answer": "B"},
-            {"question_idx": 2, "selected_answer": "C"},
-            {"question_idx": 3, "selected_answer": "D"},
-            {"question_idx": 4, "selected_answer": "E"}
-        ],
-        "time_spent_seconds": 300
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    task_data = {
+        "title": "Teste tarefa",
+        "date": today,
+        "priority": "medium",
+        "recurrence": "once"
     }
     
-    response = make_request("POST", f"/study/simulados/{simulado_id}/submit", submit_data)
+    headers = {"Authorization": f"Bearer {session_token}"}
     
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            required_fields = ["score", "correct_count", "total_questions", "answers", 
-                             "by_disciplina", "xp_earned"]
+    try:
+        print(f"Creating task: {task_data}")
+        response = requests.post(f"{API_URL}/tasks", json=task_data, headers=headers)
+        
+        if response.status_code == 200:
+            task = response.json()
+            print(f"✅ Task created successfully: {task['task_id']}")
+            print(f"   Title: {task['title']}")
+            print(f"   Priority: {task['priority']}")
+            print(f"   Date: {task['date']}")
+            print(f"   Is Template: {task.get('is_template', 'Not specified')}")
+            return task["task_id"]
+        else:
+            print(f"❌ Task creation failed: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Task creation error: {e}")
+        return None
+
+def check_dashboard_stats(session_token, step_number, expected_description):
+    """Check GET /api/stats/dashboard"""
+    print_test_step(step_number, expected_description)
+    
+    headers = {"Authorization": f"Bearer {session_token}"}
+    
+    try:
+        print("Calling GET /api/stats/dashboard")
+        response = requests.get(f"{API_URL}/stats/dashboard", headers=headers)
+        
+        if response.status_code == 200:
+            stats = response.json()
+            print("✅ Dashboard stats retrieved successfully")
+            print(f"   tasks_today: {stats.get('tasks_today', 'N/A')}")
+            print(f"   tasks_completed_today: {stats.get('tasks_completed_today', 'N/A')}")
+            print(f"   habits_total: {stats.get('habits_total', 'N/A')}")
+            print(f"   habits_completed_today: {stats.get('habits_completed_today', 'N/A')}")
+            print(f"   goals_avg_progress: {stats.get('goals_avg_progress', 'N/A')}")
             
-            if all(field in data for field in required_fields):
-                answers = data.get("answers", [])
-                if len(answers) == 5:
-                    # Check answer structure
-                    first_answer = answers[0]
-                    if "is_correct" in first_answer and "explanation" in first_answer:
-                        log_test("Submit Simulado", True, 
-                               f"Score: {data['score']}%, Correct: {data['correct_count']}/5, XP: {data['xp_earned']}")
-                        return True
-                    else:
-                        log_test("Submit Simulado", False, 
-                               "Answer missing is_correct or explanation")
-                        return False
+            # Verify tasks_today > 0 after creating task
+            if step_number == 3:
+                if stats.get('tasks_today', 0) > 0:
+                    print(f"✅ VERIFICATION PASSED: tasks_today = {stats['tasks_today']} (should be at least 1)")
                 else:
-                    log_test("Submit Simulado", False, 
-                           f"Got {len(answers)} answers, expected 5")
-                    return False
-            else:
-                missing = [f for f in required_fields if f not in data]
-                log_test("Submit Simulado", False, 
-                       f"Missing required fields: {missing}")
-                return False
-        except json.JSONDecodeError:
-            log_test("Submit Simulado", False, "Invalid JSON response")
-            return False
-    else:
-        try:
-            error_data = response.json()
-            log_test("Submit Simulado", False, 
-                   f"HTTP {response.status_code}: {error_data.get('detail', 'Unknown error')}")
-        except:
-            log_test("Submit Simulado", False, 
-                   f"HTTP {response.status_code}: {response.text[:200]}")
-        return False
-
-def test_get_simulado_results():
-    """Test GET /api/study/simulados/{simulado_id}/results endpoint"""
-    if not session_token or not simulado_id:
-        log_test("Get Simulado Results", False, "Not authenticated or no simulado ID")
-        return False
-    
-    response = make_request("GET", f"/study/simulados/{simulado_id}/results")
-    
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            if isinstance(data, list):
-                if len(data) > 0:
-                    # Should have at least 1 attempt from previous test
-                    attempt = data[0]
-                    if "score" in attempt and "correct_count" in attempt:
-                        log_test("Get Simulado Results", True, 
-                               f"Retrieved {len(data)} attempt(s)")
-                        return True
-                    else:
-                        log_test("Get Simulado Results", False, 
-                               "Attempt missing required fields")
-                        return False
-                else:
-                    log_test("Get Simulado Results", True, "No attempts yet (valid state)")
-                    return True
-            else:
-                log_test("Get Simulado Results", False, "Response is not a list")
-                return False
-        except json.JSONDecodeError:
-            log_test("Get Simulado Results", False, "Invalid JSON response")
-            return False
-    else:
-        log_test("Get Simulado Results", False, 
-               f"HTTP {response.status_code if response else 'timeout'}")
-        return False
-
-def test_get_simulado_stats():
-    """Test GET /api/study/simulados/stats endpoint"""
-    if not session_token:
-        log_test("Get Simulado Stats", False, "Not authenticated")
-        return False
-    
-    response = make_request("GET", "/study/simulados/stats")
-    
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            required_fields = ["total_simulados", "total_attempts", "accuracy_rate", 
-                             "by_banca", "by_disciplina"]
+                    print(f"❌ VERIFICATION FAILED: tasks_today = {stats.get('tasks_today', 0)} (should be at least 1)")
             
-            if all(field in data for field in required_fields):
-                log_test("Get Simulado Stats", True, 
-                       f"Stats: {data['total_simulados']} simulados, {data['total_attempts']} attempts")
-                return True
-            else:
-                missing = [f for f in required_fields if f not in data]
-                log_test("Get Simulado Stats", False, 
-                       f"Missing required fields: {missing}")
-                return False
-        except json.JSONDecodeError:
-            log_test("Get Simulado Stats", False, "Invalid JSON response")
-            return False
-    else:
-        log_test("Get Simulado Stats", False, 
-               f"HTTP {response.status_code if response else 'timeout'}")
-        return False
+            # Verify tasks_completed_today > 0 after completing task
+            if step_number == 5:
+                if stats.get('tasks_completed_today', 0) > 0:
+                    print(f"✅ VERIFICATION PASSED: tasks_completed_today = {stats['tasks_completed_today']} (should be at least 1)")
+                else:
+                    print(f"❌ VERIFICATION FAILED: tasks_completed_today = {stats.get('tasks_completed_today', 0)} (should be at least 1)")
+            
+            return stats
+        else:
+            print(f"❌ Dashboard stats failed: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Dashboard stats error: {e}")
+        return None
 
-def test_delete_simulado():
-    """Test DELETE /api/study/simulados/{simulado_id} endpoint"""
-    if not session_token or not simulado_id:
-        log_test("Delete Simulado", False, "Not authenticated or no simulado ID")
-        return False
+def complete_task(session_token, task_id):
+    """Complete task via PATCH /api/tasks/{task_id}?completed=true&date=today"""
+    print_test_step(4, "Complete Task via PATCH /api/tasks/{task_id}")
     
-    response = make_request("DELETE", f"/study/simulados/{simulado_id}")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    headers = {"Authorization": f"Bearer {session_token}"}
+    params = {"completed": "true", "date": today}
     
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            if "message" in data:
-                log_test("Delete Simulado", True, "Simulado deleted successfully")
-                return True
-            else:
-                log_test("Delete Simulado", False, "No success message in response")
-                return False
-        except json.JSONDecodeError:
-            log_test("Delete Simulado", False, "Invalid JSON response")
+    try:
+        print(f"Completing task {task_id} for date {today}")
+        response = requests.patch(f"{API_URL}/tasks/{task_id}", params=params, headers=headers)
+        
+        if response.status_code == 200:
+            result = response.json()
+            print("✅ Task completed successfully")
+            print(f"   Message: {result.get('message', 'N/A')}")
+            print(f"   XP Earned: {result.get('xp_earned', 'N/A')}")
+            print(f"   New XP: {result.get('new_xp', 'N/A')}")
+            return True
+        else:
+            print(f"❌ Task completion failed: {response.status_code} - {response.text}")
             return False
-    else:
-        log_test("Delete Simulado", False, 
-               f"HTTP {response.status_code if response else 'timeout'}")
+    except Exception as e:
+        print(f"Task completion error: {e}")
         return False
 
 def main():
-    """Run all Simulados endpoint tests"""
-    print("🧪 Starting Simulados Backend Tests")
-    print(f"Backend URL: {BASE_URL}")
+    """Main test execution"""
+    print("🚀 Starting Dashboard Tasks Counter Fix Testing")
+    print(f"Target API: {API_URL}")
     print(f"Test User: {TEST_EMAIL}")
-    print("=" * 60)
     
-    # Test sequence as specified in the review request
-    tests = [
-        ("Authentication", test_authentication),
-        ("Generate Simulado", test_generate_simulado),
-        ("List Simulados", test_list_simulados),
-        ("Get Simulado Detail", test_get_simulado_detail),
-        ("Submit Simulado", test_submit_simulado),
-        ("Get Simulado Results", test_get_simulado_results),
-        ("Get Simulado Stats", test_get_simulado_stats),
-        ("Delete Simulado", test_delete_simulado),
-    ]
+    # Step 1: Register/Login
+    session_token = register_and_login()
+    if not session_token:
+        print("❌ Failed to authenticate. Exiting.")
+        return
     
-    passed = 0
-    total = len(tests)
+    # Step 2: Create Task
+    task_id = create_task(session_token)
+    if not task_id:
+        print("❌ Failed to create task. Exiting.")
+        return
     
-    for test_name, test_func in tests:
-        try:
-            if test_func():
-                passed += 1
-        except Exception as e:
-            log_test(test_name, False, f"Test exception: {str(e)}")
+    # Step 3: Check stats - verify tasks_today > 0
+    stats_before = check_dashboard_stats(session_token, 3, "Verify tasks_today > 0 after creating task")
+    if not stats_before:
+        print("❌ Failed to get dashboard stats. Exiting.")
+        return
     
-    print("\n" + "=" * 60)
-    print(f"📊 Test Results: {passed}/{total} passed ({passed/total*100:.1f}%)")
+    # Step 4: Complete Task
+    success = complete_task(session_token, task_id)
+    if not success:
+        print("❌ Failed to complete task. Exiting.")
+        return
     
-    # Print summary
-    print("\n📋 Detailed Results:")
-    for result in test_results:
-        print(f"{result['status']} {result['test']}")
-        if result['message']:
-            print(f"    {result['message']}")
+    # Step 5: Check stats again - verify tasks_completed_today > 0
+    stats_after = check_dashboard_stats(session_token, 5, "Verify tasks_completed_today > 0 after completing task")
+    if not stats_after:
+        print("❌ Failed to get dashboard stats after completion. Exiting.")
+        return
     
-    # Return exit code
-    return 0 if passed == total else 1
+    # Step 6: Verify other stats are returned properly
+    print_test_step(6, "Verify other dashboard stats are returned properly")
+    
+    required_fields = ["habits_total", "habits_completed_today", "goals_avg_progress"]
+    all_present = True
+    
+    for field in required_fields:
+        if field in stats_after:
+            print(f"✅ {field}: {stats_after[field]}")
+        else:
+            print(f"❌ Missing field: {field}")
+            all_present = False
+    
+    if all_present:
+        print("✅ All required dashboard stats fields are present")
+    else:
+        print("❌ Some required dashboard stats fields are missing")
+    
+    # Final Summary
+    print_test_step("FINAL", "Test Summary")
+    
+    tasks_today_ok = stats_before.get('tasks_today', 0) > 0
+    tasks_completed_ok = stats_after.get('tasks_completed_today', 0) > 0
+    other_stats_ok = all_present
+    
+    print(f"✅ tasks_today > 0: {tasks_today_ok} (value: {stats_before.get('tasks_today', 0)})")
+    print(f"✅ tasks_completed_today > 0: {tasks_completed_ok} (value: {stats_after.get('tasks_completed_today', 0)})")
+    print(f"✅ Other stats present: {other_stats_ok}")
+    
+    if tasks_today_ok and tasks_completed_ok and other_stats_ok:
+        print("\n🎉 ALL TESTS PASSED - Dashboard Tasks Counter Fix is working correctly!")
+    else:
+        print("\n❌ SOME TESTS FAILED - Dashboard Tasks Counter Fix needs attention")
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -18,12 +18,14 @@ export default function Profile() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [achievements, setAchievements] = useState([]);
+  const [stats, setStats] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchUser();
     fetchAchievements();
+    fetchStats();
   }, []);
 
   const fetchUser = async () => {
@@ -32,6 +34,15 @@ export default function Profile() {
       setUser(res.data);
     } catch (error) {
       toast.error("Erro ao carregar usuário");
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await axios.get(`${API}/stats/dashboard`, { withCredentials: true });
+      setStats(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar stats", error);
     }
   };
 
@@ -222,21 +233,21 @@ export default function Profile() {
                     <CheckSquare className="w-5 h-5 text-[#007AFF]" />
                     <span className="text-sm text-[#A1A1AA]">Tarefas</span>
                   </div>
-                  <span className="font-data">-</span>
+                  <span className="font-data">{stats ? `${stats.tasks_completed_today ?? 0}/${stats.tasks_today ?? 0}` : '-'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <TrendingUp className="w-5 h-5 text-[#39FF14]" />
                     <span className="text-sm text-[#A1A1AA]">Hábitos</span>
                   </div>
-                  <span className="font-data">-</span>
+                  <span className="font-data">{stats ? `${stats.habits_completed_today ?? 0}/${stats.habits_total ?? 0}` : '-'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Target className="w-5 h-5 text-[#00F0FF]" />
                     <span className="text-sm text-[#A1A1AA]">Metas</span>
                   </div>
-                  <span className="font-data">-</span>
+                  <span className="font-data">{stats ? `${(stats.goals_avg_progress ?? 0).toFixed(0)}%` : '-'}</span>
                 </div>
               </div>
             </Card>

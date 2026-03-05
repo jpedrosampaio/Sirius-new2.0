@@ -1798,8 +1798,8 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
     
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
-    tasks_today = await db.tasks.count_documents({"user_id": user.user_id, "date": today})
-    tasks_completed_today = await db.tasks.count_documents({"user_id": user.user_id, "date": today, "completed": True})
+    tasks_today = await db.tasks.count_documents({"user_id": user.user_id, "is_template": True})
+    tasks_completed_today = await db.task_instances.count_documents({"user_id": user.user_id, "date": today, "completed": True})
     
     habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     habits_completed_today = len([h for h in habits if today in h['completions']])
