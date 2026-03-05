@@ -29,14 +29,12 @@ def register_and_login():
     try:
         register_response = requests.post(f"{API_BASE}/auth/register", json=user_data)
         print(f"   📝 Register response: {register_response.status_code}")
-        if register_response.status_code == 409:
+        if register_response.status_code == 409 or (register_response.status_code == 400 and "already registered" in register_response.text.lower()):
             print("   ℹ️  User already exists, proceeding to login...")
         elif register_response.status_code not in [200, 201]:
-            print(f"   ❌ Register failed: {register_response.text}")
-            return None
+            print(f"   ⚠️  Register failed but continuing to login: {register_response.text}")
     except Exception as e:
-        print(f"   ❌ Register error: {e}")
-        return None
+        print(f"   ⚠️  Register error but continuing to login: {e}")
     
     # Login
     try:
@@ -319,6 +317,318 @@ def test_get_cronograma(session_token, program_id=None):
     else:
         print("   ⚠️  No program_id available for cronograma test")
 
+def test_get_existing_edital_program(session_token):
+    """Find existing program with source_type='edital_import'"""
+    print("\n🔍 Finding existing edital-imported program...")
+    
+    try:
+        cookies = {'session_token': session_token}
+        response = requests.get(f"{API_BASE}/study/programs", cookies=cookies)
+        
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            programs = response.json()
+            print(f"   ✅ Retrieved {len(programs)} programs")
+            
+            # Look for edital-imported program
+            edital_program = None
+            for program in programs:
+                source_type = program.get('source_type')
+                if source_type == 'edital_import':
+                    edital_program = program
+                    print(f"   🎯 Found edital program: {program.get('name', 'N/A')} (ID: {program.get('program_id', 'N/A')})")
+                    break
+            
+            if edital_program:
+                return edital_program['program_id']
+            else:
+                print("   ⚠️  No edital-imported program found")
+                return None
+        else:
+            print(f"   ❌ Failed to get programs: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"   ❌ Error finding edital program: {e}")
+        return None
+
+def test_get_program_notebooks(session_token, program_id):
+    """Get notebooks/disciplines for a program"""
+    print(f"\n📚 Getting notebooks for program {program_id}...")
+    
+    try:
+        cookies = {'session_token': session_token}
+        response = requests.get(f"{API_BASE}/study/notebooks?program_id={program_id}", cookies=cookies)
+        
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            notebooks = response.json()
+            print(f"   ✅ Retrieved {len(notebooks)} notebooks")
+            
+            if notebooks:
+                # Show notebook details
+                for nb in notebooks[:3]:  # Show first 3
+                    name = nb.get('name', 'N/A')
+                    nb_id = nb.get('notebook_id', 'N/A')
+                    weight = nb.get('weight', 'N/A')
+                    print(f"   📖 {name} (ID: {nb_id}, Weight: {weight})")
+                
+                return notebooks
+            else:
+                print("   ⚠️  No notebooks found")
+                return []
+        else:
+            print(f"   ❌ Failed to get notebooks: {response.text}")
+            return []
+            
+    except Exception as e:
+        print(f"   ❌ Error getting notebooks: {e}")
+        return []
+
+def test_update_disciplinas_endpoint(session_token, program_id, notebooks):
+    """Test POST /api/study/programs/{program_id}/update-disciplinas"""
+    print(f"\n🔧 Testing POST /api/study/programs/{program_id}/update-disciplinas...")
+    
+    if not notebooks:
+        print("   ⚠️  No notebooks available for testing")
+        return False
+    
+    try:
+        cookies = {'session_token': session_token}
+        
+        # Test data as specified in review request
+        test_data = {
+            "program_name": "Meu Programa Editado",
+            "disciplinas": [
+                {
+                    "notebook_id": notebooks[0]["notebook_id"],
+                    "weight": 5,
+                    "dificuldade": "alta",
+                    "user_difficulty": "alta"
+                }
+            ],
+            "regenerate_schedule": True,
+            "hours_per_day": 4,
+            "days_per_week": 5
+        }
+        
+        response = requests.post(
+            f"{API_BASE}/study/programs/{program_id}/update-disciplinas",
+            json=test_data,
+            cookies=cookies
+        )
+        
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            print("   ✅ Update disciplinas endpoint working correctly")
+            print(f"   📋 Updated: {result.get('updated', 'N/A')} disciplinas")
+            
+            if result.get('schedules_regenerated'):
+                print(f"   📅 Schedules regenerated: {result.get('schedules_regenerated', 'N/A')} blocks")
+            
+            return True
+        else:
+            print(f"   ❌ Failed to update disciplinas: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"   ❌ Error testing update disciplinas: {e}")
+        return False
+
+def test_verify_program_name_updated(session_token, program_id):
+    """Verify program name was updated to 'Meu Programa Editado'"""
+    print(f"\n✅ Verifying program name was updated...")
+    
+    try:
+        cookies = {'session_token': session_token}
+        response = requests.get(f"{API_BASE}/study/programs", cookies=cookies)
+        
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            programs = response.json()
+            
+            # Find our program
+            target_program = None
+            for program in programs:
+                if program.get('program_id') == program_id:
+                    target_program = program
+                    break
+            
+            if target_program:
+                program_name = target_program.get('name', '')
+                print(f"   📋 Program name: '{program_name}'")
+                
+                if program_name == "Meu Programa Editado":
+                    print("   ✅ Program name updated successfully")
+                    return True
+                else:
+                    print(f"   ❌ Expected 'Meu Programa Editado', got '{program_name}'")
+                    return False
+            else:
+                print("   ❌ Program not found")
+                return False
+        else:
+            print(f"   ❌ Failed to get programs: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"   ❌ Error verifying program name: {e}")
+        return False
+
+def test_study_indicators_endpoint(session_token, program_id):
+    """Test GET /api/study/programs/{program_id}/study-indicators"""
+    print(f"\n📊 Testing GET /api/study/programs/{program_id}/study-indicators...")
+    
+    try:
+        cookies = {'session_token': session_token}
+        response = requests.get(f"{API_BASE}/study/programs/{program_id}/study-indicators", cookies=cookies)
+        
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            indicators = result.get('indicators', [])
+            print(f"   ✅ Retrieved indicators for {len(indicators)} disciplines")
+            
+            # Verify indicator structure
+            if indicators:
+                indicator = indicators[0]
+                required_fields = [
+                    'name', 'weight', 'accuracy', 'total_questions_answered',
+                    'study_hours', 'flashcards_total', 'flashcards_due',
+                    'notes_count', 'question_progress'
+                ]
+                
+                print("   📋 Checking indicator structure:")
+                for field in required_fields:
+                    value = indicator.get(field, 'MISSING')
+                    print(f"      • {field}: {value}")
+                
+                # Check if all required fields are present
+                missing_fields = [f for f in required_fields if f not in indicator]
+                if not missing_fields:
+                    print("   ✅ All required indicator fields present")
+                    return True
+                else:
+                    print(f"   ❌ Missing fields: {missing_fields}")
+                    return False
+            else:
+                print("   ⚠️  No indicators found (empty program)")
+                return True  # This is acceptable for empty programs
+        else:
+            print(f"   ❌ Failed to get study indicators: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"   ❌ Error testing study indicators: {e}")
+        return False
+
+def test_cronograma_regenerated(session_token, program_id):
+    """Verify cronograma was regenerated"""
+    print(f"\n📅 Verifying cronograma regeneration for program {program_id}...")
+    
+    try:
+        cookies = {'session_token': session_token}
+        response = requests.get(f"{API_BASE}/study/programs/{program_id}/cronograma", cookies=cookies)
+        
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            cronograma = result.get('cronograma', [])
+            disciplinas = result.get('disciplinas', [])
+            
+            print(f"   ✅ Cronograma has {len(cronograma)} schedule days")
+            print(f"   📚 Disciplinas summary: {len(disciplinas)} disciplines")
+            
+            if cronograma:
+                # Show schedule entries
+                for day in cronograma[:2]:  # Show first 2 days
+                    day_label = day.get('day_label', 'N/A')
+                    blocos = day.get('blocos', [])
+                    print(f"   📅 {day_label}: {len(blocos)} study blocks")
+                    
+                    for bloco in blocos[:1]:  # Show first block per day
+                        materia = bloco.get('materia', 'N/A')
+                        horario = f"{bloco.get('start_time', 'N/A')}-{bloco.get('end_time', 'N/A')}"
+                        print(f"      • {materia} ({horario})")
+            
+            return True
+        else:
+            print(f"   ❌ Failed to get cronograma: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"   ❌ Error verifying cronograma: {e}")
+        return False
+
+def run_enhanced_edital_tests():
+    """Main test runner for enhanced edital import functionality"""
+    print("🚀 Starting Enhanced Edital Import Backend Tests")
+    print("=" * 70)
+    
+    # Step 1: Authentication
+    session_token = register_and_login()
+    if not session_token:
+        print("❌ Authentication failed - cannot continue tests")
+        return False
+    
+    # Step 2: Find existing edital program
+    program_id = test_get_existing_edital_program(session_token)
+    if not program_id:
+        print("❌ No edital program found - creating one first...")
+        # Try to create one using existing functionality
+        area_id = test_get_study_areas(session_token)
+        if area_id:
+            program_id = test_import_edital_validations(session_token, area_id)
+        
+        if not program_id:
+            print("❌ Could not get or create edital program - cannot continue tests")
+            return False
+    
+    # Step 3: Get notebooks for the program
+    notebooks = test_get_program_notebooks(session_token, program_id)
+    
+    # Step 4: Test update-disciplinas endpoint
+    update_success = test_update_disciplinas_endpoint(session_token, program_id, notebooks)
+    
+    # Step 5: Verify program name was updated
+    name_success = test_verify_program_name_updated(session_token, program_id)
+    
+    # Step 6: Test study-indicators endpoint
+    indicators_success = test_study_indicators_endpoint(session_token, program_id)
+    
+    # Step 7: Verify cronograma was regenerated
+    cronograma_success = test_cronograma_regenerated(session_token, program_id)
+    
+    print("\n" + "=" * 70)
+    print("🏁 Enhanced Edital Import Backend Tests Completed")
+    
+    # Summary
+    results = {
+        "Update Disciplinas": update_success,
+        "Program Name Update": name_success, 
+        "Study Indicators": indicators_success,
+        "Cronograma Regeneration": cronograma_success
+    }
+    
+    print("\n📊 Test Results Summary:")
+    for test_name, success in results.items():
+        status = "✅ PASSED" if success else "❌ FAILED"
+        print(f"   {test_name}: {status}")
+    
+    passed_count = sum(1 for success in results.values() if success)
+    total_count = len(results)
+    
+    print(f"\n🎯 Overall: {passed_count}/{total_count} tests passed ({passed_count/total_count*100:.1f}%)")
+    
+    return passed_count == total_count
+
 def run_edital_import_tests():
     """Main test runner for edital import functionality"""
     print("🚀 Starting Edital Import Backend Tests")
@@ -348,8 +658,17 @@ def run_edital_import_tests():
     return True
 
 if __name__ == "__main__":
-    success = run_edital_import_tests()
+    print("🎯 Running Enhanced Edital Import Tests (Focus: New Endpoints)\n")
+    success = run_enhanced_edital_tests()
     if success:
-        print("✅ All tests executed successfully")
+        print("✅ All enhanced tests passed successfully")
     else:
-        print("❌ Some tests failed")
+        print("⚠️  Some enhanced tests failed - check details above")
+        
+    print("\n" + "="*50)
+    print("🔄 Running Basic Edital Import Tests (Original)\n") 
+    basic_success = run_edital_import_tests()
+    if basic_success:
+        print("✅ Basic tests executed successfully")
+    else:
+        print("❌ Some basic tests failed")

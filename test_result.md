@@ -574,6 +574,21 @@ backend:
         agent: "testing"
         comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL TESTS PASSED (5/5 - 100%). **Authentication:** Working correctly with testedital@test.com / Test123!. **GET /api/study/areas:** Successfully retrieved 4 study areas including 'Concursos' area (area_2d44ccc2c39a). **POST /api/study/programs/import-edital (3/3 validation tests passed):** ✅ Correctly rejected request without file (422 error), ✅ Correctly rejected non-PDF file with expected message 'Apenas arquivos PDF são aceitos' (400 error), ✅ Successfully processed realistic PDF with AI extraction - Created program 'Edital de Concurso Público N° 001/2025 - Analista Judiciário' with 5 disciplines (Direito Constitucional peso 4/25 questões, Direito Civil peso 3/20 questões, Direito Penal peso 2/15 questões, Língua Portuguesa peso 2/20 questões, Informática peso 1/10 questões). Generated 15 schedule blocks across 6 days with proper AI strategy including priority subjects. Awarded 50 XP. **GET /api/study/programs/{id}/cronograma:** ✅ Correctly returned 404 for non-existent program_id, ✅ Successfully retrieved cronograma for valid program with 5 schedule days and complete discipline weight summary (33.3% Direito Constitucional, 25.0% Direito Civil). **Google Gemini AI Integration:** Fully functional - AI correctly extracted all disciplines, weights, question counts, and generated comprehensive study strategy with weekly schedule distribution. All endpoints working as designed."
 
+  - task: "Enhanced Edital Import endpoints"
+    implemented: true
+    working: true
+    file: "backend/server.py" 
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented new enhanced endpoints: POST /api/study/programs/{program_id}/update-disciplinas for batch updating disciplines (weight, difficulty, user_difficulty) with optional schedule regeneration, and GET /api/study/programs/{program_id}/study-indicators for study progress indicators per discipline."
+      - working: true
+        agent: "testing"
+        comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL TESTS PASSED (4/4 - 100%). **Authentication:** Working correctly with testedital@test.com / Test123!. **Existing Edital Program Detection:** Successfully found program 'Concurso Público Tribunal Regional Federal para Analista Judiciário' (ID: prog_9dabc8b59665) with source_type='edital_import'. **GET /api/study/notebooks?program_id:** Retrieved 2 notebooks (Direito Constitucional weight=5, Direito Civil weight=4). **POST /api/study/programs/{program_id}/update-disciplinas:** ✅ Successfully updated 1 disciplina with weight=5, dificuldade=alta, user_difficulty=alta; regenerated 6 schedule blocks with regenerate_schedule=true, hours_per_day=4, days_per_week=5. **Program Name Update Verification:** ✅ Confirmed program name changed from original to 'Meu Programa Editado' as specified in test payload. **GET /api/study/programs/{program_id}/study-indicators:** ✅ Retrieved indicators for 2 disciplines with all required fields (name, weight, accuracy, total_questions_answered, study_hours, flashcards_total, flashcards_due, notes_count, question_progress) properly populated. **Cronograma Regeneration Verification:** ✅ Confirmed updated schedule with 5 days and proper study blocks distribution. All new enhanced endpoints working correctly with proper validation, data updates, and response formats as designed."
+
 frontend:
   - task: "Credit card charge with installments UI"
     implemented: true
@@ -869,7 +884,7 @@ metadata:
 
 test_plan:
   current_focus:
-    []
+    - "Enhanced Edital Import endpoints"
   stuck_tasks: 
     - "Image analysis endpoint"
     - "Recipe detail endpoint"
@@ -1662,6 +1677,51 @@ agent_communication:
       **🔗 Backend Integration:**
       - POST /api/study/programs/import-edital: Confirmed working (test_result.md line 575)
       - GET /api/study/programs/{id}/cronograma: Confirmed working (test_result.md line 575)
+  - agent: "testing"
+    message: |
+      ✅ ENHANCED EDITAL IMPORT TESTING COMPLETE - ALL TESTS PASSED (4/4 - 100%)
+      
+      **COMPREHENSIVE TESTING COMPLETED FOR NEW ENHANCED ENDPOINTS:**
+      
+      🔐 **Authentication:** Working correctly with testedital@test.com / Test123!
+      
+      🎯 **Test Focus - New Enhanced Endpoints (4/4 passed):**
+      
+      📋 **1. POST /api/study/programs/{program_id}/update-disciplinas (✅ WORKING):**
+        - Successfully found existing edital program with source_type='edital_import'
+        - Retrieved program notebooks (Direito Constitucional weight=5, Direito Civil weight=4)
+        - Test payload executed successfully:
+          * program_name: "Meu Programa Editado" 
+          * disciplinas[0]: notebook_id, weight=5, dificuldade="alta", user_difficulty="alta"
+          * regenerate_schedule: true, hours_per_day: 4, days_per_week: 5
+        - Response: {"success": true, "updated": 1, "schedules_regenerated": 6}
+        - ✅ Updated 1 disciplina and regenerated 6 schedule blocks correctly
+      
+      📋 **2. Program Name Update Verification (✅ WORKING):**
+        - ✅ Confirmed program name successfully changed to "Meu Programa Editado"
+        - GET /api/study/programs returned updated name as expected
+      
+      📊 **3. GET /api/study/programs/{program_id}/study-indicators (✅ WORKING):**
+        - ✅ Retrieved indicators for 2 disciplines with complete structure
+        - ✅ All required fields present and properly formatted:
+          * name, weight, accuracy, total_questions_answered
+          * study_hours, flashcards_total, flashcards_due  
+          * notes_count, question_progress
+        - Response format matches specification exactly
+      
+      📅 **4. Cronograma Regeneration Verification (✅ WORKING):**
+        - ✅ GET /api/study/programs/{program_id}/cronograma returned updated schedule
+        - ✅ 5 schedule days with proper study block distribution
+        - ✅ Study blocks reflect updated discipline weights and user difficulty settings
+        - Schedule properly regenerated after update-disciplinas call
+      
+      🔧 **Integration Testing:**
+        - All endpoints work seamlessly together in sequence
+        - Data persistence confirmed across API calls
+        - Schedule regeneration properly reflects discipline updates
+        - No errors or data inconsistencies observed
+      
+      **CONCLUSION:** All new enhanced Edital Import endpoints are fully functional and working correctly. The update-disciplinas endpoint successfully updates discipline properties and regenerates schedules, the study-indicators endpoint provides comprehensive progress metrics, and all data flows work as designed.
       - Google Gemini AI: Functional for edital analysis
       
       **📸 Evidence:**

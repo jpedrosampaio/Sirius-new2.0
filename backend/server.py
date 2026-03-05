@@ -5067,6 +5067,203 @@ async def get_program_cronograma(request: Request, program_id: str, session_toke
     }
 
 
+@api_router.post("/study/programs/{program_id}/update-disciplinas")
+async def update_program_disciplinas(request: Request, program_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Batch update disciplines (weight, difficulty, user_difficulty) and optionally regenerate schedule"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    program = await db.study_programs.find_one({"program_id": program_id, "user_id": user.user_id}, {"_id": 0})
+    if not program:
+        raise HTTPException(status_code=404, detail="Programa não encontrado")
+    
+    # Update program name if provided
+    if data.get("program_name"):
+        await db.study_programs.update_one(
+            {"program_id": program_id, "user_id": user.user_id},
+            {"$set": {"name": data["program_name"]}}
+        )
+    
+    # Update each discipline
+    disciplinas = data.get("disciplinas", [])
+    updated_count = 0
+    for disc in disciplinas:
+        nb_id = disc.get("notebook_id")
+        if not nb_id:
+            continue
+        update_fields = {}
+        for field in ["weight", "dificuldade", "user_difficulty", "name", "topicos"]:
+            if field in disc:
+                update_fields[field] = disc[field]
+        if update_fields:
+            await db.notebooks.update_one(
+                {"notebook_id": nb_id, "user_id": user.user_id},
+                {"$set": update_fields}
+            )
+            updated_count += 1
+    
+    # Regenerate schedule if requested
+    if data.get("regenerate_schedule"):
+        # Delete old schedules for this program
+        await db.study_schedules.delete_many({"program_id": program_id, "user_id": user.user_id})
+        
+        hours_per_day = data.get("hours_per_day", program.get("edital_data", {}).get("hours_per_day", 4))
+        days_per_week = data.get("days_per_week", program.get("edital_data", {}).get("days_per_week", 5))
+        
+        # Get updated notebooks
+        notebooks = await db.notebooks.find(
+            {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+        ).to_list(100)
+        
+        if notebooks:
+            # Calculate time allocation based on weights and user_difficulty
+            total_weight = 0
+            for nb in notebooks:
+                w = nb.get("weight", 1)
+                ud = nb.get("user_difficulty", "media")
+                multiplier = 1.3 if ud == "alta" else (1.0 if ud == "media" else 0.8)
+                nb["effective_weight"] = w * multiplier
+                total_weight += nb["effective_weight"]
+            
+            minutes_per_day = int(hours_per_day * 60)
+            day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"][:days_per_week]
+            day_labels_pt = {"monday": "Segunda", "tuesday": "Terça", "wednesday": "Quarta", "thursday": "Quinta", "friday": "Sexta", "saturday": "Sábado", "sunday": "Domingo"}
+            
+            # Sort by effective weight descending
+            sorted_nbs = sorted(notebooks, key=lambda x: x.get("effective_weight", 1), reverse=True)
+            
+            # Distribute subjects across days
+            created_schedules = 0
+            for day_idx, day in enumerate(day_names):
+                current_hour = 8
+                current_min = 0
+                remaining_minutes = minutes_per_day
+                
+                # Assign 2-3 subjects per day, rotating through
+                subjects_today = []
+                for i, nb in enumerate(sorted_nbs):
+                    if i % days_per_week == day_idx or (i + 1) % days_per_week == day_idx:
+                        subjects_today.append(nb)
+                
+                if not subjects_today:
+                    subjects_today = [sorted_nbs[day_idx % len(sorted_nbs)]]
+                
+                # Allocate time proportionally
+                today_total_weight = sum(s.get("effective_weight", 1) for s in subjects_today)
+                for nb in subjects_today:
+                    if remaining_minutes <= 0:
+                        break
+                    proportion = nb.get("effective_weight", 1) / today_total_weight if today_total_weight > 0 else 1
+                    duracao = max(30, min(int(minutes_per_day * proportion), remaining_minutes))
+                    duracao = (duracao // 15) * 15  # Round to 15-min blocks
+                    if duracao <= 0:
+                        continue
+                    
+                    start_time = f"{current_hour:02d}:{current_min:02d}"
+                    end_min_total = current_min + duracao
+                    end_hour = current_hour + end_min_total // 60
+                    end_min = end_min_total % 60
+                    end_time = f"{end_hour:02d}:{end_min:02d}"
+                    
+                    ud = nb.get("user_difficulty", "media")
+                    tipo = "Teoria + Questões" if ud != "alta" else "Foco Intensivo + Questões"
+                    
+                    sched_id = f"sched_{uuid.uuid4().hex[:12]}"
+                    sched_doc = {
+                        "schedule_id": sched_id,
+                        "user_id": user.user_id,
+                        "notebook_id": nb["notebook_id"],
+                        "program_id": program_id,
+                        "day_of_week": day,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "repeat": True,
+                        "tipo_estudo": tipo,
+                        "prioridade": "alta" if ud == "alta" else ("media" if ud == "media" else "baixa"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.study_schedules.insert_one(sched_doc)
+                    created_schedules += 1
+                    
+                    current_hour = end_hour
+                    current_min = end_min
+                    remaining_minutes -= duracao
+        
+        return {"success": True, "updated": updated_count, "schedules_regenerated": created_schedules, "message": f"{updated_count} disciplinas atualizadas e cronograma regenerado com {created_schedules} blocos!"}
+    
+    return {"success": True, "updated": updated_count, "message": f"{updated_count} disciplinas atualizadas!"}
+
+
+@api_router.get("/study/programs/{program_id}/study-indicators")
+async def get_program_study_indicators(request: Request, program_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get study progress indicators per discipline for a program"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notebooks = await db.notebooks.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(100)
+    
+    indicators = []
+    for nb in notebooks:
+        nb_id = nb["notebook_id"]
+        
+        # Get question logs for this notebook
+        q_logs = await db.question_logs.find(
+            {"notebook_id": nb_id, "user_id": user.user_id}, {"_id": 0}
+        ).to_list(1000)
+        
+        total_q = sum(q.get("total", 0) for q in q_logs)
+        correct_q = sum(q.get("correct", 0) for q in q_logs)
+        accuracy = round((correct_q / total_q * 100) if total_q > 0 else 0, 1)
+        
+        # Get focus sessions for this notebook
+        sessions = await db.study_sessions.find(
+            {"notebook_id": nb_id, "user_id": user.user_id}, {"_id": 0}
+        ).to_list(1000)
+        total_study_minutes = sum(s.get("duration_minutes", 0) for s in sessions)
+        
+        # Get flashcard count and due count
+        flashcards = await db.flashcards.find(
+            {"notebook_id": nb_id, "user_id": user.user_id}, {"_id": 0}
+        ).to_list(1000)
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        due_cards = sum(1 for f in flashcards if f.get("next_review", "") <= today_str)
+        
+        # Get notes count
+        notes_count = await db.study_notes.count_documents({"notebook_id": nb_id, "user_id": user.user_id})
+        
+        # Calculate progress estimate
+        edital_questions = nb.get("num_questoes_edital", 0)
+        target_questions = max(edital_questions * 10, 100)  # Target: 10x the edital questions
+        q_progress = min(100, round((total_q / target_questions * 100) if target_questions > 0 else 0))
+        
+        indicators.append({
+            "notebook_id": nb_id,
+            "name": nb["name"],
+            "color": nb.get("color", "#007AFF"),
+            "weight": nb.get("weight", 1),
+            "dificuldade": nb.get("dificuldade", "media"),
+            "user_difficulty": nb.get("user_difficulty", "media"),
+            "num_questoes_edital": edital_questions,
+            "total_questions_answered": total_q,
+            "correct_questions": correct_q,
+            "accuracy": accuracy,
+            "total_study_minutes": total_study_minutes + nb.get("total_study_time_minutes", 0),
+            "study_hours": round((total_study_minutes + nb.get("total_study_time_minutes", 0)) / 60, 1),
+            "flashcards_total": len(flashcards),
+            "flashcards_due": due_cards,
+            "notes_count": notes_count,
+            "sessions_count": len(sessions),
+            "question_progress": q_progress,
+            "topicos": nb.get("topicos", []),
+        })
+    
+    # Sort by weight descending
+    indicators.sort(key=lambda x: x.get("weight", 1), reverse=True)
+    
+    return {"program_id": program_id, "indicators": indicators}
+
 
 # ========== QUESTION TRACKING ==========
 
@@ -5350,7 +5547,8 @@ async def update_notebook(request: Request, notebook_id: str, data: dict, sessio
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
     update_fields = {}
-    for field in ["name", "description", "color", "tags", "area_id", "program_id"]:
+    for field in ["name", "description", "color", "tags", "area_id", "program_id",
+                   "weight", "dificuldade", "user_difficulty", "topicos", "recursos_recomendados", "num_questoes_edital"]:
         if field in data:
             update_fields[field] = data[field]
     

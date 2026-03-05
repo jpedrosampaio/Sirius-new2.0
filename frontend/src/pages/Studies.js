@@ -439,6 +439,17 @@ export default function Studies() {
   const [showCronogramaDialog, setShowCronogramaDialog] = useState(false);
   const [cronogramaData, setCronogramaData] = useState(null);
   const [cronogramaLoading, setCronogramaLoading] = useState(false);
+  const [editalEditMode, setEditalEditMode] = useState(false);
+  const [editedDisciplinas, setEditedDisciplinas] = useState([]);
+  const [editedProgramName, setEditedProgramName] = useState("");
+  const [savingDisciplinas, setSavingDisciplinas] = useState(false);
+  const [studyIndicators, setStudyIndicators] = useState(null);
+  const [indicatorsLoading, setIndicatorsLoading] = useState(false);
+  const [showSimuladoFromEdital, setShowSimuladoFromEdital] = useState(false);
+  const [editalSimuladoForm, setEditalSimuladoForm] = useState({
+    title: "", disciplina: "", question_type: "multipla_escolha", num_questions: 10, difficulty: "medio"
+  });
+  const [editalSimuladoGenerating, setEditalSimuladoGenerating] = useState(false);
 
   // PDF Content Analysis
   const [showContentPdfDialog, setShowContentPdfDialog] = useState(false);
@@ -745,6 +756,13 @@ export default function Studies() {
       });
       toast.success(res.data.message || "Programa criado com sucesso!");
       setEditalResult(res.data);
+      // Setup editable disciplines
+      const discs = (res.data.disciplinas || []).map(d => ({
+        ...d, user_difficulty: d.dificuldade || "media"
+      }));
+      setEditedDisciplinas(discs);
+      setEditedProgramName(res.data.program?.name || "");
+      setEditalEditMode(true);
       setShowEditalDialog(false);
       setShowEditalResultDialog(true);
       setEditalFile(null);
@@ -755,16 +773,72 @@ export default function Studies() {
     } finally { setEditalImporting(false); }
   };
 
+  const handleSaveDisciplinas = async () => {
+    if (!editalResult?.program?.program_id) return;
+    setSavingDisciplinas(true);
+    try {
+      const payload = {
+        program_name: editedProgramName,
+        disciplinas: editedDisciplinas.map(d => ({
+          notebook_id: d.notebook_id,
+          weight: d.weight,
+          dificuldade: d.dificuldade,
+          user_difficulty: d.user_difficulty,
+          name: d.name
+        })),
+        regenerate_schedule: true,
+        hours_per_day: editalResult.program?.edital_data?.hours_per_day || 4,
+        days_per_week: editalResult.program?.edital_data?.days_per_week || 5
+      };
+      const res = await axios.post(`${API}/study/programs/${editalResult.program.program_id}/update-disciplinas`, payload, { withCredentials: true });
+      toast.success(res.data.message || "Disciplinas atualizadas!");
+      setEditalEditMode(false);
+      fetchAllData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao salvar alterações");
+    } finally { setSavingDisciplinas(false); }
+  };
+
   const handleViewCronograma = async (programId) => {
     setCronogramaLoading(true);
     setShowCronogramaDialog(true);
+    setStudyIndicators(null);
     try {
-      const res = await axios.get(`${API}/study/programs/${programId}/cronograma`, { withCredentials: true });
-      setCronogramaData(res.data);
+      const [cronRes, indRes] = await Promise.all([
+        axios.get(`${API}/study/programs/${programId}/cronograma`, { withCredentials: true }),
+        axios.get(`${API}/study/programs/${programId}/study-indicators`, { withCredentials: true }).catch(() => ({ data: null }))
+      ]);
+      setCronogramaData(cronRes.data);
+      setStudyIndicators(indRes.data);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao carregar cronograma");
       setShowCronogramaDialog(false);
     } finally { setCronogramaLoading(false); }
+  };
+
+  const handleGenerateSimuladoFromEdital = async () => {
+    if (!editalSimuladoForm.title) { toast.error("Digite o título do simulado"); return; }
+    setEditalSimuladoGenerating(true);
+    try {
+      const prog = cronogramaData?.program || editalResult?.program;
+      const concurso = prog?.edital_data?.concurso;
+      const payload = {
+        title: editalSimuladoForm.title,
+        banca: concurso?.banca || "",
+        disciplina: editalSimuladoForm.disciplina || "",
+        concurso: concurso?.nome || "",
+        question_type: editalSimuladoForm.question_type,
+        num_questions: editalSimuladoForm.num_questions,
+        difficulty: editalSimuladoForm.difficulty,
+        program_id: prog?.program_id
+      };
+      await axios.post(`${API}/study/simulados/generate`, payload, { withCredentials: true, timeout: 120000 });
+      toast.success("Simulado gerado com sucesso!");
+      setShowSimuladoFromEdital(false);
+      setEditalSimuladoForm({ title: "", disciplina: "", question_type: "multipla_escolha", num_questions: 10, difficulty: "medio" });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao gerar simulado");
+    } finally { setEditalSimuladoGenerating(false); }
   };
 
   const handleCreateNotebook = async () => {
@@ -2289,15 +2363,21 @@ export default function Studies() {
           </TabsContent>
         </Tabs>
 
-        {/* ========== EDITAL RESULT DIALOG ========== */}
+        {/* ========== EDITAL RESULT DIALOG (Editable) ========== */}
         <Dialog open={showEditalResultDialog} onOpenChange={setShowEditalResultDialog}>
           <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-400" />Programa Criado com Sucesso!</DialogTitle>
-              <DialogDescription>Seu programa de estudos foi gerado a partir do edital.</DialogDescription>
+              <DialogDescription>Revise e personalize as disciplinas antes de finalizar.</DialogDescription>
             </DialogHeader>
             {editalResult && (
               <div className="space-y-4 py-2">
+                {/* Editable Program Name */}
+                <div>
+                  <Label className="text-sm font-medium">Nome do Programa</Label>
+                  <Input value={editedProgramName} onChange={e => setEditedProgramName(e.target.value)} className="bg-[#121212] border-[#27272A] mt-1" placeholder="Nome do programa de estudos" />
+                </div>
+
                 {/* Concurso Info */}
                 {editalResult.concurso && (
                   <Card className="bg-[#121212] border-[#27272A]">
@@ -2313,24 +2393,64 @@ export default function Studies() {
                   </Card>
                 )}
 
-                {/* Disciplines Summary */}
+                {/* Editable Disciplines */}
                 <Card className="bg-[#121212] border-[#27272A]">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-400" />{editalResult.disciplinas?.length || 0} Disciplinas Criadas</CardTitle></CardHeader>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-400" />{editedDisciplinas.length} Disciplinas</CardTitle>
+                      <Badge variant="outline" className="text-[10px] border-purple-500 text-purple-400"><Edit3 className="w-3 h-3 mr-1" />Editável</Badge>
+                    </div>
+                    <p className="text-[10px] text-[#A1A1AA]">Ajuste pesos, dificuldade e sua dificuldade pessoal para personalizar o cronograma.</p>
+                  </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      {(editalResult.disciplinas || []).map((disc, i) => (
-                        <div key={i} className="flex items-center justify-between p-2 bg-[#0A0A0A] rounded-lg">
+                    <div className="space-y-3">
+                      {editedDisciplinas.map((disc, i) => (
+                        <div key={i} className="p-3 bg-[#0A0A0A] rounded-lg border border-[#27272A] space-y-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: disc.color || '#007AFF' }} />
-                            <span className="text-xs font-medium">{disc.name}</span>
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: disc.color || '#007AFF' }} />
+                            <Input value={disc.name} onChange={e => { const u = [...editedDisciplinas]; u[i] = {...u[i], name: e.target.value}; setEditedDisciplinas(u); }}
+                              className="bg-[#121212] border-[#27272A] h-7 text-xs font-medium flex-1" />
                           </div>
-                          <div className="flex items-center gap-2">
-                            {disc.weight && <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-400">Peso {disc.weight}</Badge>}
-                            {disc.num_questoes_edital > 0 && <Badge variant="outline" className="text-[10px] border-blue-500 text-blue-400">{disc.num_questoes_edital}q</Badge>}
-                            {disc.dificuldade && (
-                              <Badge variant="outline" className={`text-[10px] ${disc.dificuldade === 'alta' ? 'border-red-500 text-red-400' : disc.dificuldade === 'media' ? 'border-yellow-500 text-yellow-400' : 'border-green-500 text-green-400'}`}>{disc.dificuldade}</Badge>
-                            )}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <Label className="text-[10px] text-[#A1A1AA]">Peso (edital)</Label>
+                              <Select value={String(disc.weight || 1)} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], weight: parseInt(v)}; setEditedDisciplinas(u); }}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] h-7 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  {[1,2,3,4,5].map(w => <SelectItem key={w} value={String(w)}>Peso {w}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-[#A1A1AA]">Dificuldade</Label>
+                              <Select value={disc.dificuldade || "media"} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], dificuldade: v}; setEditedDisciplinas(u); }}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] h-7 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  <SelectItem value="baixa">Baixa</SelectItem>
+                                  <SelectItem value="media">Média</SelectItem>
+                                  <SelectItem value="alta">Alta</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px] text-[#A1A1AA]">Minha dificuldade</Label>
+                              <Select value={disc.user_difficulty || "media"} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], user_difficulty: v}; setEditedDisciplinas(u); }}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] h-7 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  <SelectItem value="baixa">Fácil pra mim</SelectItem>
+                                  <SelectItem value="media">Normal</SelectItem>
+                                  <SelectItem value="alta">Difícil pra mim</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
+                          {disc.num_questoes_edital > 0 && <p className="text-[10px] text-[#52525B]">{disc.num_questoes_edital} questões no edital</p>}
+                          {disc.topicos?.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {disc.topicos.slice(0, 5).map((t, ti) => <Badge key={ti} variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">{t}</Badge>)}
+                              {disc.topicos.length > 5 && <Badge variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">+{disc.topicos.length - 5}</Badge>}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2343,52 +2463,30 @@ export default function Studies() {
                     <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Target className="w-4 h-4 text-green-400" />Estratégia de Estudo</CardTitle></CardHeader>
                     <CardContent className="text-xs space-y-2">
                       {editalResult.estrategia.resumo && <p className="text-[#A1A1AA]">{editalResult.estrategia.resumo}</p>}
-                      {editalResult.estrategia.fase_1 && <p><span className="text-blue-400 font-medium">Fase 1:</span> <span className="text-[#A1A1AA]">{editalResult.estrategia.fase_1}</span></p>}
-                      {editalResult.estrategia.fase_2 && <p><span className="text-yellow-400 font-medium">Fase 2:</span> <span className="text-[#A1A1AA]">{editalResult.estrategia.fase_2}</span></p>}
-                      {editalResult.estrategia.fase_3 && <p><span className="text-green-400 font-medium">Fase 3:</span> <span className="text-[#A1A1AA]">{editalResult.estrategia.fase_3}</span></p>}
                       {editalResult.estrategia.dicas_gerais?.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-purple-400 font-medium mb-1">Dicas:</p>
-                          <ul className="list-disc ml-4 text-[#A1A1AA] space-y-1">
-                            {editalResult.estrategia.dicas_gerais.map((d, i) => <li key={i}>{d}</li>)}
-                          </ul>
-                        </div>
+                        <ul className="list-disc ml-4 text-[#A1A1AA] space-y-1">
+                          {editalResult.estrategia.dicas_gerais.map((d, i) => <li key={i}>{d}</li>)}
+                        </ul>
                       )}
                     </CardContent>
                   </Card>
                 )}
 
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
-                  <Card className="bg-[#121212] border-[#27272A]">
-                    <CardContent className="p-3 text-center">
-                      <p className="text-2xl font-bold text-purple-400">{editalResult.disciplinas?.length || 0}</p>
-                      <p className="text-xs text-[#A1A1AA]">Disciplinas</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-[#121212] border-[#27272A]">
-                    <CardContent className="p-3 text-center">
-                      <p className="text-2xl font-bold text-blue-400">{editalResult.schedules_created || 0}</p>
-                      <p className="text-xs text-[#A1A1AA]">Blocos/Semana</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-[#121212] border-[#27272A]">
-                    <CardContent className="p-3 text-center">
-                      <p className="text-2xl font-bold text-yellow-400">+{editalResult.xp_earned || 0}</p>
-                      <p className="text-xs text-[#A1A1AA]">XP Ganho</p>
-                    </CardContent>
-                  </Card>
+                {/* Action Buttons */}
+                <div className="space-y-2">
+                  <Button onClick={handleSaveDisciplinas} disabled={savingDisciplinas} className="w-full bg-purple-600 hover:bg-purple-700">
+                    {savingDisciplinas ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Salvando e regenerando cronograma...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />Salvar Personalizações e Regenerar Cronograma</>}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setShowEditalResultDialog(false); if (editalResult.program) handleViewCronograma(editalResult.program.program_id); }} className="w-full border-[#27272A]">
+                    <LayoutGrid className="w-4 h-4 mr-2" />Ver Cronograma Atual
+                  </Button>
                 </div>
-
-                <Button onClick={() => { setShowEditalResultDialog(false); if (editalResult.program) handleViewCronograma(editalResult.program.program_id); }} className="w-full bg-purple-600 hover:bg-purple-700">
-                  <LayoutGrid className="w-4 h-4 mr-2" />Ver Cronograma Completo
-                </Button>
               </div>
             )}
           </DialogContent>
         </Dialog>
 
-        {/* ========== CRONOGRAMA DIALOG ========== */}
+        {/* ========== CRONOGRAMA DIALOG (Enhanced with Indicators + Simulado) ========== */}
         <Dialog open={showCronogramaDialog} onOpenChange={setShowCronogramaDialog}>
           <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -2402,6 +2500,60 @@ export default function Studies() {
               </div>
             ) : cronogramaData && (
               <div className="space-y-4 py-2">
+                {/* Study Indicators per Discipline */}
+                {studyIndicators?.indicators?.length > 0 && (
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="w-4 h-4 text-green-400" />Indicadores de Estudo por Matéria</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {studyIndicators.indicators.map((ind, i) => (
+                          <div key={i} className="p-3 bg-[#0A0A0A] rounded-lg border border-[#27272A]">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ind.color }} />
+                                <span className="text-xs font-medium">{ind.name}</span>
+                              </div>
+                              <div className="flex gap-1">
+                                <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-400">P{ind.weight}</Badge>
+                                {ind.user_difficulty === "alta" && <Badge variant="outline" className="text-[10px] border-red-500 text-red-400">Difícil</Badge>}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-5 gap-2 text-center">
+                              <div>
+                                <p className="text-lg font-bold text-white">{ind.study_hours}h</p>
+                                <p className="text-[9px] text-[#71717A]">Estudado</p>
+                              </div>
+                              <div>
+                                <p className="text-lg font-bold text-purple-400">{ind.total_questions_answered}</p>
+                                <p className="text-[9px] text-[#71717A]">Questões</p>
+                              </div>
+                              <div>
+                                <p className={`text-lg font-bold ${ind.accuracy >= 70 ? 'text-green-400' : ind.accuracy >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{ind.accuracy}%</p>
+                                <p className="text-[9px] text-[#71717A]">Acerto</p>
+                              </div>
+                              <div>
+                                <p className="text-lg font-bold text-blue-400">{ind.flashcards_total}</p>
+                                <p className="text-[9px] text-[#71717A]">Flashcards</p>
+                              </div>
+                              <div>
+                                <p className="text-lg font-bold text-[#A1A1AA]">{ind.notes_count}</p>
+                                <p className="text-[9px] text-[#71717A]">Notas</p>
+                              </div>
+                            </div>
+                            <div className="mt-2">
+                              <div className="flex justify-between text-[10px] mb-1">
+                                <span className="text-[#71717A]">Progresso questões</span>
+                                <span className="text-[#A1A1AA]">{ind.question_progress}%</span>
+                              </div>
+                              <Progress value={ind.question_progress} className="h-1.5" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Weight Distribution */}
                 <Card className="bg-[#121212] border-[#27272A]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Scale className="w-4 h-4 text-yellow-400" />Distribuição por Peso</CardTitle></CardHeader>
@@ -2480,8 +2632,90 @@ export default function Studies() {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Action: Generate Simulado from Edital */}
+                {cronogramaData.program?.source_type === "edital_import" && (
+                  <Button onClick={() => {
+                    const concurso = cronogramaData.program?.edital_data?.concurso;
+                    setEditalSimuladoForm({
+                      title: `Simulado - ${concurso?.nome || cronogramaData.program?.name || 'Concurso'}`,
+                      disciplina: "", question_type: "multipla_escolha", num_questions: 10, difficulty: "medio"
+                    });
+                    setShowSimuladoFromEdital(true);
+                  }} className="w-full bg-blue-600 hover:bg-blue-700">
+                    <ClipboardList className="w-4 h-4 mr-2" />Gerar Simulado deste Concurso
+                  </Button>
+                )}
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== SIMULADO FROM EDITAL DIALOG ========== */}
+        <Dialog open={showSimuladoFromEdital} onOpenChange={setShowSimuladoFromEdital}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><ClipboardList className="w-5 h-5 text-blue-400" />Gerar Simulado do Concurso</DialogTitle>
+              <DialogDescription>
+                {cronogramaData?.program?.edital_data?.concurso?.banca && `Banca: ${cronogramaData.program.edital_data.concurso.banca}`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label className="text-sm">Título do Simulado</Label>
+                <Input value={editalSimuladoForm.title} onChange={e => setEditalSimuladoForm({...editalSimuladoForm, title: e.target.value})}
+                  className="bg-[#121212] border-[#27272A] mt-1" />
+              </div>
+              <div>
+                <Label className="text-sm">Disciplina (opcional)</Label>
+                <Select value={editalSimuladoForm.disciplina} onValueChange={v => setEditalSimuladoForm({...editalSimuladoForm, disciplina: v})}>
+                  <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue placeholder="Todas as disciplinas" /></SelectTrigger>
+                  <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                    <SelectItem value=" ">Todas as disciplinas</SelectItem>
+                    {(cronogramaData?.notebooks || []).map(nb => (
+                      <SelectItem key={nb.notebook_id} value={nb.name}>{nb.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-[10px]">Tipo</Label>
+                  <Select value={editalSimuladoForm.question_type} onValueChange={v => setEditalSimuladoForm({...editalSimuladoForm, question_type: v})}>
+                    <SelectTrigger className="bg-[#121212] border-[#27272A] h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                      <SelectItem value="multipla_escolha">Múlt. Escolha</SelectItem>
+                      <SelectItem value="certo_errado">Certo/Errado</SelectItem>
+                      <SelectItem value="misto">Misto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Questões</Label>
+                  <Select value={String(editalSimuladoForm.num_questions)} onValueChange={v => setEditalSimuladoForm({...editalSimuladoForm, num_questions: parseInt(v)})}>
+                    <SelectTrigger className="bg-[#121212] border-[#27272A] h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                      {[5,10,15,20,30].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px]">Dificuldade</Label>
+                  <Select value={editalSimuladoForm.difficulty} onValueChange={v => setEditalSimuladoForm({...editalSimuladoForm, difficulty: v})}>
+                    <SelectTrigger className="bg-[#121212] border-[#27272A] h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                      <SelectItem value="facil">Fácil</SelectItem>
+                      <SelectItem value="medio">Médio</SelectItem>
+                      <SelectItem value="dificil">Difícil</SelectItem>
+                      <SelectItem value="misto">Misto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button onClick={handleGenerateSimuladoFromEdital} disabled={editalSimuladoGenerating || !editalSimuladoForm.title} className="w-full bg-blue-600 hover:bg-blue-700">
+                {editalSimuladoGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando simulado...</> : <><Sparkles className="w-4 h-4 mr-2" />Gerar Simulado com IA</>}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 
