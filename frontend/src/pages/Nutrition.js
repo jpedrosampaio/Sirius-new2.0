@@ -605,186 +605,10 @@ export default function Nutrition() {
                     </DialogContent>
                   </Dialog>
 
-                  <Dialog open={showRecipeDialog} onOpenChange={setShowRecipeDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full border-green-500/50 hover:bg-green-500/20">
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Sugerir Receita com IA
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                          <ChefHat className="w-5 h-5 text-green-500" />
-                          Sugestão de Receita com IA
-                        </DialogTitle>
-                        <DialogDescription>Diga suas preferências e receba uma receita personalizada</DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        {!suggestedRecipe ? (
-                          <>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label>Tipo de Refeição</Label>
-                                <Select 
-                                  value={recipePreferences.meal_type || "any"} 
-                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, meal_type: v === "any" ? "" : v})}
-                                >
-                                  <SelectTrigger className="bg-[#121212] border-[#27272A]">
-                                    <SelectValue placeholder="Qualquer" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="any">Qualquer</SelectItem>
-                                    <SelectItem value="breakfast">Café da Manhã</SelectItem>
-                                    <SelectItem value="lunch">Almoço</SelectItem>
-                                    <SelectItem value="dinner">Jantar</SelectItem>
-                                    <SelectItem value="snack">Lanche</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label>Tipo de Dieta</Label>
-                                <Select 
-                                  value={recipePreferences.diet_type || "any"} 
-                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, diet_type: v === "any" ? "" : v})}
-                                >
-                                  <SelectTrigger className="bg-[#121212] border-[#27272A]">
-                                    <SelectValue placeholder="Balanceada" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="any">Balanceada</SelectItem>
-                                    <SelectItem value="high-protein">Alta Proteína</SelectItem>
-                                    <SelectItem value="low-carb">Low Carb</SelectItem>
-                                    <SelectItem value="keto">Cetogênica</SelectItem>
-                                    <SelectItem value="vegetarian">Vegetariana</SelectItem>
-                                    <SelectItem value="vegan">Vegana</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label>Culinária</Label>
-                                <Select 
-                                  value={recipePreferences.cuisine || "any"} 
-                                  onValueChange={(v) => setRecipePreferences({...recipePreferences, cuisine: v === "any" ? "" : v})}
-                                >
-                                  <SelectTrigger className="bg-[#121212] border-[#27272A]">
-                                    <SelectValue placeholder="Qualquer" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="any">Qualquer</SelectItem>
-                                    <SelectItem value="brasileira">Brasileira</SelectItem>
-                                    <SelectItem value="italiana">Italiana</SelectItem>
-                                    <SelectItem value="japonesa">Japonesa</SelectItem>
-                                    <SelectItem value="mexicana">Mexicana</SelectItem>
-                                    <SelectItem value="fitness">Fitness</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label>Tempo Máximo (min)</Label>
-                                <Input
-                                  type="number"
-                                  value={recipePreferences.max_prep_time_minutes}
-                                  onChange={(e) => setRecipePreferences({...recipePreferences, max_prep_time_minutes: Number(e.target.value)})}
-                                  className="bg-[#121212] border-[#27272A]"
-                                />
-                              </div>
-                            </div>
-                            <Button 
-                              onClick={handleSuggestRecipe} 
-                              className="w-full bg-green-600 hover:bg-green-700"
-                              disabled={generatingRecipe}
-                            >
-                              {generatingRecipe ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  Gerando Receita...
-                                </>
-                              ) : (
-                                <>
-                                  <Sparkles className="w-4 h-4 mr-2" />
-                                  Gerar Receita
-                                </>
-                              )}
-                            </Button>
-                          </>
-                        ) : (
-                          <div className="space-y-4">
-                            <div className="bg-[#121212] p-4 rounded-lg">
-                              <h3 className="text-xl font-bold text-[#00F0FF] mb-2">{suggestedRecipe.name}</h3>
-                              <p className="text-[#A1A1AA] mb-4">{suggestedRecipe.description}</p>
-                              
-                              <div className="grid grid-cols-4 gap-2 mb-4">
-                                <div className="text-center p-2 bg-[#0A0A0A] rounded">
-                                  <Flame className="w-4 h-4 mx-auto text-orange-500" />
-                                  <span className="text-sm">{suggestedRecipe.calories_per_serving} kcal</span>
-                                </div>
-                                <div className="text-center p-2 bg-[#0A0A0A] rounded">
-                                  <Drumstick className="w-4 h-4 mx-auto text-red-500" />
-                                  <span className="text-sm">{suggestedRecipe.protein_per_serving}g P</span>
-                                </div>
-                                <div className="text-center p-2 bg-[#0A0A0A] rounded">
-                                  <Wheat className="w-4 h-4 mx-auto text-yellow-500" />
-                                  <span className="text-sm">{suggestedRecipe.carbs_per_serving}g C</span>
-                                </div>
-                                <div className="text-center p-2 bg-[#0A0A0A] rounded">
-                                  <Droplet className="w-4 h-4 mx-auto text-purple-500" />
-                                  <span className="text-sm">{suggestedRecipe.fat_per_serving}g G</span>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-4 text-sm text-[#A1A1AA] mb-4">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-4 h-4" />
-                                  Preparo: {suggestedRecipe.prep_time_minutes}min
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <UtensilsCrossed className="w-4 h-4" />
-                                  Cozimento: {suggestedRecipe.cook_time_minutes}min
-                                </span>
-                                <span>Porções: {suggestedRecipe.servings}</span>
-                              </div>
-
-                              <div className="mb-4">
-                                <h4 className="font-medium mb-2">Ingredientes</h4>
-                                <ul className="list-disc list-inside space-y-1 text-[#A1A1AA]">
-                                  {suggestedRecipe.ingredients?.map((ing, idx) => (
-                                    <li key={idx}>{ing.quantity} {ing.unit} de {ing.name}</li>
-                                  ))}
-                                </ul>
-                              </div>
-
-                              <div className="mb-4">
-                                <h4 className="font-medium mb-2">Modo de Preparo</h4>
-                                <ol className="list-decimal list-inside space-y-2 text-[#A1A1AA]">
-                                  {suggestedRecipe.instructions?.map((step, idx) => (
-                                    <li key={idx}>{step}</li>
-                                  ))}
-                                </ol>
-                              </div>
-
-                              {suggestedRecipe.tips && (
-                                <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3">
-                                  <h4 className="font-medium text-green-400 mb-1">💡 Dica</h4>
-                                  <p className="text-sm text-[#A1A1AA]">{suggestedRecipe.tips}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            <Button 
-                              onClick={() => setSuggestedRecipe(null)} 
-                              variant="outline" 
-                              className="w-full"
-                            >
-                              Gerar Nova Receita
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  <Button variant="outline" className="w-full border-green-500/50 hover:bg-green-500/20" onClick={() => setShowRecipeDialog(true)}>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Sugerir Receita com IA
+                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -1115,6 +939,95 @@ export default function Nutrition() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Recipe Dialog - Outside Tabs so it works from any tab */}
+        <Dialog open={showRecipeDialog} onOpenChange={(open) => { setShowRecipeDialog(open); if (!open) setSuggestedRecipe(null); }}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ChefHat className="w-5 h-5 text-green-500" />
+                Sugestão de Receita com IA
+              </DialogTitle>
+              <DialogDescription>Diga suas preferências e receba uma receita personalizada</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              {!suggestedRecipe ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Tipo de Refeição</Label>
+                      <Select value={recipePreferences.meal_type || "any"} onValueChange={(v) => setRecipePreferences({...recipePreferences, meal_type: v === "any" ? "" : v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A]"><SelectValue placeholder="Qualquer" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Qualquer</SelectItem>
+                          <SelectItem value="breakfast">Café da Manhã</SelectItem>
+                          <SelectItem value="lunch">Almoço</SelectItem>
+                          <SelectItem value="dinner">Jantar</SelectItem>
+                          <SelectItem value="snack">Lanche</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Tipo de Dieta</Label>
+                      <Select value={recipePreferences.diet_type || "any"} onValueChange={(v) => setRecipePreferences({...recipePreferences, diet_type: v === "any" ? "" : v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A]"><SelectValue placeholder="Balanceada" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Balanceada</SelectItem>
+                          <SelectItem value="high-protein">Alta Proteína</SelectItem>
+                          <SelectItem value="low-carb">Low Carb</SelectItem>
+                          <SelectItem value="keto">Cetogênica</SelectItem>
+                          <SelectItem value="vegetarian">Vegetariana</SelectItem>
+                          <SelectItem value="vegan">Vegana</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Culinária</Label>
+                      <Select value={recipePreferences.cuisine || "any"} onValueChange={(v) => setRecipePreferences({...recipePreferences, cuisine: v === "any" ? "" : v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A]"><SelectValue placeholder="Qualquer" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Qualquer</SelectItem>
+                          <SelectItem value="brasileira">Brasileira</SelectItem>
+                          <SelectItem value="italiana">Italiana</SelectItem>
+                          <SelectItem value="japonesa">Japonesa</SelectItem>
+                          <SelectItem value="mexicana">Mexicana</SelectItem>
+                          <SelectItem value="fitness">Fitness</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Tempo Máximo (min)</Label>
+                      <Input type="number" value={recipePreferences.max_prep_time_minutes} onChange={(e) => setRecipePreferences({...recipePreferences, max_prep_time_minutes: Number(e.target.value)})} className="bg-[#121212] border-[#27272A]" />
+                    </div>
+                  </div>
+                  <Button onClick={handleSuggestRecipe} className="w-full bg-green-600 hover:bg-green-700" disabled={generatingRecipe}>
+                    {generatingRecipe ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando Receita...</> : <><Sparkles className="w-4 h-4 mr-2" />Gerar Receita</>}
+                  </Button>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-[#121212] p-4 rounded-lg">
+                    <h3 className="text-xl font-bold text-[#00F0FF] mb-2">{suggestedRecipe.name}</h3>
+                    <p className="text-[#A1A1AA] mb-4">{suggestedRecipe.description}</p>
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      <div className="text-center p-2 bg-[#0A0A0A] rounded"><Flame className="w-4 h-4 mx-auto text-orange-500" /><span className="text-sm">{suggestedRecipe.calories_per_serving} kcal</span></div>
+                      <div className="text-center p-2 bg-[#0A0A0A] rounded"><Dumbbell className="w-4 h-4 mx-auto text-red-500" /><span className="text-sm">{suggestedRecipe.protein_per_serving}g P</span></div>
+                      <div className="text-center p-2 bg-[#0A0A0A] rounded"><Zap className="w-4 h-4 mx-auto text-yellow-500" /><span className="text-sm">{suggestedRecipe.carbs_per_serving}g C</span></div>
+                      <div className="text-center p-2 bg-[#0A0A0A] rounded"><Droplet className="w-4 h-4 mx-auto text-purple-500" /><span className="text-sm">{suggestedRecipe.fat_per_serving}g G</span></div>
+                    </div>
+                    <div className="mb-4"><h4 className="font-medium mb-2">Ingredientes</h4><ul className="list-disc list-inside space-y-1 text-[#A1A1AA]">{suggestedRecipe.ingredients?.map((ing, idx) => <li key={idx}>{ing.quantity} {ing.unit} de {ing.name}</li>)}</ul></div>
+                    <div className="mb-4"><h4 className="font-medium mb-2">Modo de Preparo</h4><ol className="list-decimal list-inside space-y-2 text-[#A1A1AA]">{suggestedRecipe.instructions?.map((step, idx) => <li key={idx}>{step}</li>)}</ol></div>
+                    {suggestedRecipe.tips && <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3"><h4 className="font-medium text-green-400 mb-1">💡 Dica</h4><p className="text-sm text-[#A1A1AA]">{typeof suggestedRecipe.tips === 'string' ? suggestedRecipe.tips : JSON.stringify(suggestedRecipe.tips)}</p></div>}
+                  </div>
+                  <Button onClick={() => setSuggestedRecipe(null)} variant="outline" className="w-full">Gerar Nova Receita</Button>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </main>
       <MobileNav user={user} />
     </div>

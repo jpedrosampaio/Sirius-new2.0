@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, ChevronLeft, Edit2 } from "lucide-react";
+import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, ChevronLeft, Edit2, CheckSquare, Square, MessageSquare, Send, Loader2, Bot, User } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
@@ -38,6 +38,17 @@ export default function Finance() {
   const [selectedProjection, setSelectedProjection] = useState(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 640 : false);
+
+  // Monthly bills
+  const [monthlyBills, setMonthlyBills] = useState(null);
+  const [billsMonth, setBillsMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [openAddBill, setOpenAddBill] = useState(false);
+  const [newBill, setNewBill] = useState({ description: "", amount: "", category: "outros" });
+
+  // Finance chat
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
   const [projectionMonth, setProjectionMonth] = useState(() => {
     const next = new Date();
     next.setMonth(next.getMonth() + 1);
@@ -192,6 +203,57 @@ export default function Finance() {
       setLoadingInsights(false);
     }
   };
+
+
+  const fetchMonthlyBills = async (month) => {
+    try {
+      const res = await axios.get(`${API}/finance/monthly-bills?month=${month || billsMonth}`, { withCredentials: true });
+      setMonthlyBills(res.data);
+    } catch { setMonthlyBills({ bills: [], total: 0, total_paid: 0, total_pending: 0 }); }
+  };
+
+  const handleToggleBill = async (billId) => {
+    try {
+      await axios.patch(`${API}/finance/monthly-bills/${billId}/toggle`, {}, { withCredentials: true });
+      fetchMonthlyBills();
+      fetchStats();
+      fetchTransactions();
+    } catch { toast.error("Erro ao atualizar conta"); }
+  };
+
+  const handleAddBill = async () => {
+    if (!newBill.description || !newBill.amount) { toast.error("Preencha todos os campos"); return; }
+    try {
+      await axios.post(`${API}/finance/monthly-bills`, { ...newBill, amount: parseFloat(newBill.amount), month: billsMonth }, { withCredentials: true });
+      toast.success("Conta adicionada!");
+      setNewBill({ description: "", amount: "", category: "outros" });
+      setOpenAddBill(false);
+      fetchMonthlyBills();
+    } catch { toast.error("Erro ao adicionar conta"); }
+  };
+
+  const handleDeleteBill = async (billId) => {
+    try {
+      await axios.delete(`${API}/finance/monthly-bills/${billId}`, { withCredentials: true });
+      fetchMonthlyBills();
+    } catch { toast.error("Erro ao remover conta"); }
+  };
+
+  const handleSendFinanceChat = async (e) => {
+    e?.preventDefault();
+    if (!chatInput.trim()) return;
+    setChatLoading(true);
+    const userMsg = { role: "user", content: chatInput, message_id: `temp_${Date.now()}` };
+    setChatMessages(prev => [...prev, userMsg]);
+    const text = chatInput;
+    setChatInput("");
+    try {
+      const res = await axios.post(`${API}/chat/send`, { content: text, context: "financial" }, { withCredentials: true });
+      setChatMessages(prev => [...prev, { role: "assistant", content: res.data.ai_message?.content || res.data.content || "Sem resposta", message_id: res.data.ai_message?.message_id || `ai_${Date.now()}` }]);
+    } catch { setChatMessages(prev => [...prev, { role: "assistant", content: "Erro ao processar. Tente novamente.", message_id: `err_${Date.now()}` }]); }
+    finally { setChatLoading(false); }
+  };
+
 
   const handleCreateTransaction = async () => {
     if (!newTransaction.amount || parseFloat(newTransaction.amount) <= 0) {
@@ -490,6 +552,8 @@ export default function Finance() {
               <TabsTrigger value="budgets">Orçamentos</TabsTrigger>
               <TabsTrigger value="cards">Cartões</TabsTrigger>
               <TabsTrigger value="projections">Projeção</TabsTrigger>
+              <TabsTrigger value="bills" onClick={() => fetchMonthlyBills()}>Contas do Mês</TabsTrigger>
+              <TabsTrigger value="finance_chat">Chat Financeiro</TabsTrigger>
             </TabsList>
 
             <TabsContent value="transactions" className="mt-6">
@@ -1321,6 +1385,104 @@ export default function Finance() {
                 </DialogContent>
               </Dialog>
             </TabsContent>
+
+            {/* ===== CONTAS DO MÊS TAB ===== */}
+            <TabsContent value="bills" className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { const d = new Date(billsMonth + "-01"); d.setMonth(d.getMonth() - 1); const m = d.toISOString().slice(0, 7); setBillsMonth(m); fetchMonthlyBills(m); }}><ChevronLeft className="w-4 h-4" /></Button>
+                  <span className="text-sm font-medium min-w-[100px] text-center">{new Date(billsMonth + "-01").toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { const d = new Date(billsMonth + "-01"); d.setMonth(d.getMonth() + 1); const m = d.toISOString().slice(0, 7); setBillsMonth(m); fetchMonthlyBills(m); }}><ChevronRight className="w-4 h-4" /></Button>
+                </div>
+                <Dialog open={openAddBill} onOpenChange={setOpenAddBill}>
+                  <Button onClick={() => setOpenAddBill(true)} size="sm" className="bg-[#007AFF] text-xs"><Plus className="w-3 h-3 mr-1" />Adicionar Conta</Button>
+                  <DialogContent className="bg-[#0A0A0A] border-[#27272A]">
+                    <DialogHeader><DialogTitle>Nova Conta</DialogTitle></DialogHeader>
+                    <div className="space-y-3 py-2">
+                      <div><Label className="text-sm">Descrição</Label><Input value={newBill.description} onChange={e => setNewBill({...newBill, description: e.target.value})} className="bg-[#121212] border-[#27272A]" /></div>
+                      <div><Label className="text-sm">Valor (R$)</Label><Input type="number" step="0.01" value={newBill.amount} onChange={e => setNewBill({...newBill, amount: e.target.value})} className="bg-[#121212] border-[#27272A]" /></div>
+                      <Button onClick={handleAddBill} className="w-full bg-[#007AFF]">Adicionar</Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+
+              {monthlyBills && (
+                <>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <p className="text-xs text-[#A1A1AA]">Total</p>
+                      <p className="text-lg font-bold text-white">R$ {monthlyBills.total?.toFixed(2)}</p>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <p className="text-xs text-[#A1A1AA]">Pago</p>
+                      <p className="text-lg font-bold text-green-400">R$ {monthlyBills.total_paid?.toFixed(2)}</p>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4 text-center">
+                      <p className="text-xs text-[#A1A1AA]">Pendente</p>
+                      <p className="text-lg font-bold text-red-400">R$ {monthlyBills.total_pending?.toFixed(2)}</p>
+                    </Card>
+                  </div>
+
+                  <div className="space-y-2">
+                    {(monthlyBills.bills || []).length === 0 ? (
+                      <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
+                        <Calendar className="w-10 h-10 text-[#52525B] mx-auto mb-3" />
+                        <p className="text-[#A1A1AA]">Nenhuma conta para este mês</p>
+                        <p className="text-xs text-[#52525B]">Adicione manualmente ou as projeções serão importadas automaticamente</p>
+                      </Card>
+                    ) : (
+                      (monthlyBills.bills || []).map(bill => (
+                        <Card key={bill.bill_id} className={`bg-[#0A0A0A] border-[#27272A] p-3 flex items-center gap-3 ${bill.paid ? 'opacity-60' : ''}`}>
+                          <button onClick={() => handleToggleBill(bill.bill_id)} className="flex-shrink-0">
+                            {bill.paid ? <CheckSquare className="w-5 h-5 text-green-400" /> : <Square className="w-5 h-5 text-[#52525B]" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium truncate ${bill.paid ? 'line-through text-[#52525B]' : ''}`}>{bill.description}</p>
+                            <div className="flex items-center gap-2">
+                              {bill.installment_info && <span className="text-[10px] text-purple-400">Parcela {bill.installment_info}</span>}
+                              {bill.source === 'projection' && <span className="text-[10px] text-blue-400">Via projeção</span>}
+                            </div>
+                          </div>
+                          <span className={`text-sm font-bold ${bill.paid ? 'text-green-400' : 'text-red-400'}`}>R$ {bill.amount?.toFixed(2)}</span>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-[#52525B] hover:text-red-400" onClick={() => handleDeleteBill(bill.bill_id)}><Trash2 className="w-3 h-3" /></Button>
+                        </Card>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </TabsContent>
+
+            {/* ===== CHAT FINANCEIRO TAB ===== */}
+            <TabsContent value="finance_chat" className="mt-6">
+              <Card className="bg-[#0A0A0A] border-[#27272A] h-[500px] flex flex-col">
+                <div className="p-4 border-b border-[#27272A]">
+                  <h3 className="text-sm font-medium flex items-center gap-2"><MessageSquare className="w-4 h-4 text-[#007AFF]" />Assistente Financeiro</h3>
+                  <p className="text-xs text-[#52525B]">Pergunte sobre finanças, investimentos, economia...</p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {chatMessages.length === 0 && (
+                    <div className="text-center py-10">
+                      <DollarSign className="w-10 h-10 text-[#52525B] mx-auto mb-2" />
+                      <p className="text-sm text-[#A1A1AA]">Pergunte qualquer coisa sobre finanças!</p>
+                      <p className="text-xs text-[#52525B]">Ex: "Como economizar mais?" ou "Devo investir em renda fixa?"</p>
+                    </div>
+                  )}
+                  {chatMessages.map(msg => (
+                    <div key={msg.message_id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[85%] p-3 rounded-lg text-sm whitespace-pre-wrap ${msg.role === 'user' ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#E4E4E7]'}`}>{msg.content}</div>
+                    </div>
+                  ))}
+                  {chatLoading && <div className="flex justify-start"><div className="bg-[#121212] p-3 rounded-lg"><Loader2 className="w-4 h-4 animate-spin text-[#007AFF]" /></div></div>}
+                </div>
+                <form onSubmit={handleSendFinanceChat} className="p-3 border-t border-[#27272A] flex gap-2">
+                  <Input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Pergunte sobre finanças..." className="bg-[#121212] border-[#27272A] text-sm" disabled={chatLoading} />
+                  <Button type="submit" disabled={chatLoading || !chatInput.trim()} size="icon" className="bg-[#007AFF] shrink-0"><Send className="w-4 h-4" /></Button>
+                </form>
+              </Card>
+            </TabsContent>
+
           </Tabs>
         </div>
       </div>

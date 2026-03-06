@@ -33,7 +33,7 @@ export default function MobileNav({ user }) {
     { icon: CheckSquare, label: "Tarefas", path: "/tasks" },
     { icon: TrendingUp, label: "Hábitos", path: "/habits" },
     { icon: DollarSign, label: "Finanças", path: "/finance" },
-    { icon: MessageSquare, label: "Chat", path: "/chat" },
+    { icon: MessageSquare, label: "Assistente", path: "/chat" },
   ];
 
   const moreItems = [

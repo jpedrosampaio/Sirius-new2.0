@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw } from "lucide-react";
+import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -54,6 +54,14 @@ export default function Workouts() {
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [pdfAnalysis, setPdfAnalysis] = useState(null);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  
+  // Import workout + saved insights
+  const [importFile, setImportFile] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [savedInsights, setSavedInsights] = useState([]);
+  const [showInsightsDialog, setShowInsightsDialog] = useState(false);
+
   const today = new Date().toISOString().split('T')[0];
   
   const [newWorkout, setNewWorkout] = useState({
@@ -449,6 +457,51 @@ export default function Workouts() {
       setUploadingPdf(false);
     }
   };
+
+
+  // Import workout from file
+  const handleImportWorkout = async () => {
+    if (!importFile) { toast.error("Selecione um arquivo"); return; }
+    setImportLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await axios.post(`${API}/workouts/import-plan`, formData, {
+        withCredentials: true, headers: { "Content-Type": "multipart/form-data" }, timeout: 120000
+      });
+      toast.success(res.data.message || "Treino importado!");
+      setImportFile(null);
+      setShowImportDialog(false);
+      // Refresh plans
+      const plansRes = await axios.get(`${API}/workout-plans`, { withCredentials: true });
+      setPlans(Array.isArray(plansRes.data) ? plansRes.data : []);
+    } catch (err) { toast.error(err.response?.data?.detail || "Erro ao importar treino"); }
+    finally { setImportLoading(false); }
+  };
+
+  // Save AI suggestion
+  const handleSaveInsight = async (content) => {
+    try {
+      await axios.post(`${API}/workout-suggestions/save`, { title: "Sugestão de Treino", content }, { withCredentials: true });
+      toast.success("Sugestão salva!");
+      fetchSavedInsights();
+    } catch { toast.error("Erro ao salvar sugestão"); }
+  };
+
+  const fetchSavedInsights = async () => {
+    try {
+      const res = await axios.get(`${API}/workout-suggestions/saved`, { withCredentials: true });
+      setSavedInsights(Array.isArray(res.data) ? res.data : []);
+    } catch {}
+  };
+
+  const handleDeleteInsight = async (id) => {
+    try {
+      await axios.delete(`${API}/workout-suggestions/saved/${id}`, { withCredentials: true });
+      setSavedInsights(prev => prev.filter(i => i.insight_id !== id));
+    } catch { toast.error("Erro ao remover"); }
+  };
+
 
   const loadRecommendations = async () => {
     setLoadingRecommendations(true);
@@ -960,6 +1013,9 @@ export default function Workouts() {
               <TabsTrigger value="history" className="data-[state=active]:bg-[#27272A]">
                 <Calendar className="w-4 h-4 mr-2" /> Histórico
               </TabsTrigger>
+              <TabsTrigger value="saved_insights" className="data-[state=active]:bg-[#27272A]" onClick={fetchSavedInsights}>
+                <BookOpen className="w-4 h-4 mr-2" /> Insights
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="log">
@@ -979,6 +1035,11 @@ export default function Workouts() {
             </TabsContent>
 
             <TabsContent value="plans">
+              <div className="flex gap-2 mb-4">
+                <Button onClick={() => setShowImportDialog(true)} variant="outline" size="sm" className="border-purple-500/30 text-purple-400 hover:bg-purple-500/10">
+                  <Upload className="w-3 h-3 mr-1" />Importar Ficha
+                </Button>
+              </div>
               <div className="grid md:grid-cols-2 gap-4">
                 {plans.length === 0 ? (
                   <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center md:col-span-2">
@@ -1218,14 +1279,10 @@ export default function Workouts() {
                         <span className="text-xs text-[#52525B]">
                           Baseado em {aiSuggestions.based_on?.total_workouts || 0} treinos
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setAiSuggestions(null)}
-                          className="text-xs text-[#52525B] hover:text-white"
-                        >
-                          Limpar
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleSaveInsight(aiSuggestions.suggestions)} className="text-xs text-green-400 hover:text-green-300"><Save className="w-3 h-3 mr-1" />Salvar</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setAiSuggestions(null)} className="text-xs text-[#52525B] hover:text-white">Limpar</Button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -1520,7 +1577,60 @@ export default function Workouts() {
                 )}
               </div>
             </TabsContent>
+
+            {/* SAVED INSIGHTS TAB */}
+            <TabsContent value="saved_insights">
+              <div className="space-y-3">
+                {savedInsights.length === 0 ? (
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
+                    <BookOpen className="w-10 h-10 text-[#52525B] mx-auto mb-3" />
+                    <p className="text-[#A1A1AA]">Nenhuma sugestão salva ainda</p>
+                    <p className="text-xs text-[#52525B]">Gere sugestões de treino com IA e salve para consultar depois</p>
+                  </Card>
+                ) : savedInsights.map(insight => (
+                  <Card key={insight.insight_id} className="bg-[#0A0A0A] border-[#27272A] p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-medium">{insight.title}</p>
+                        <p className="text-[10px] text-[#52525B]">{new Date(insight.created_at).toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-[#52525B] hover:text-red-400" onClick={() => handleDeleteInsight(insight.insight_id)}><Trash2 className="w-3 h-3" /></Button>
+                    </div>
+                    <p className="text-xs text-[#A1A1AA] whitespace-pre-wrap">{insight.content}</p>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+
           </Tabs>
+
+          {/* IMPORT WORKOUT DIALOG */}
+          <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+            <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-md">
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-purple-400" />Importar Ficha de Treino</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className={`border-2 border-dashed rounded-lg p-6 text-center ${importFile ? 'border-purple-500 bg-purple-500/10' : 'border-[#27272A]'}`}>
+                  {importFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FileText className="w-5 h-5 text-purple-400" />
+                      <span className="text-sm text-purple-300">{importFile.name}</span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setImportFile(null)}><XCircle className="w-4 h-4 text-red-400" /></Button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer">
+                      <Upload className="w-8 h-8 mx-auto text-[#A1A1AA] mb-2" />
+                      <p className="text-sm text-[#A1A1AA]">Clique para selecionar</p>
+                      <p className="text-xs text-[#52525B]">PDF ou Imagem da ficha de treino</p>
+                      <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setImportFile(e.target.files?.[0] || null)} />
+                    </label>
+                  )}
+                </div>
+                <Button onClick={handleImportWorkout} disabled={!importFile || importLoading} className="w-full bg-purple-600 hover:bg-purple-700">
+                  {importLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando ficha...</> : <><Sparkles className="w-4 h-4 mr-2" />Importar Treino</>}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
       <MobileNav user={user} />

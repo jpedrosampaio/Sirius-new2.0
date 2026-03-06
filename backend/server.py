@@ -2082,6 +2082,18 @@ def calculate_rank(xp: int) -> str:
             return rank
     return "Recruta"
 
+async def award_xp(user_id: str, amount: int):
+    """Award XP and update rank atomically"""
+    user_doc = await db.users.find_one({"user_id": user_id}, {"xp": 1})
+    current_xp = user_doc.get("xp", 0) if user_doc else 0
+    new_xp = max(0, current_xp + amount)
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"xp": new_xp, "rank": new_rank}}
+    )
+    return new_xp, new_rank
+
 def calculate_streak(completions: List[str]) -> int:
     if not completions:
         return 0
@@ -4967,10 +4979,7 @@ REGRAS IMPORTANTES:
         
         # Award XP
         xp_earned = 50
-        await db.users.update_one(
-            {"user_id": user.user_id},
-            {"$inc": {"xp": xp_earned}}
-        )
+        await award_xp(user.user_id, xp_earned)
         
         return {
             "success": True,
@@ -6688,7 +6697,7 @@ REGRAS:
         
         # Award XP
         if xp_earned > 0:
-            await db.users.update_one({"user_id": user.user_id}, {"$inc": {"xp": xp_earned}})
+            await award_xp(user.user_id, xp_earned)
         results["xp_earned"] = xp_earned
         
         generated_items = []
@@ -7148,10 +7157,7 @@ Responda APENAS com JSON válido no formato:
         
         # Award XP for creating simulado
         xp_earned = 5
-        await db.users.update_one(
-            {"user_id": user.user_id},
-            {"$inc": {"xp": xp_earned}}
-        )
+        await award_xp(user.user_id, xp_earned)
         
         return {
             "success": True,
@@ -7256,13 +7262,9 @@ async def submit_simulado(request: Request, simulado_id: str, submission: Simula
     
     # Award XP (2 XP per correct answer)
     xp_earned = correct_count * 2
-    new_user = await db.users.find_one_and_update(
-        {"user_id": user.user_id},
-        {"$inc": {"xp": xp_earned}},
-        return_document=True
-    )
+    new_xp, new_rank = await award_xp(user.user_id, xp_earned)
     attempt_doc["xp_earned"] = xp_earned
-    attempt_doc["new_xp"] = new_user.get("xp", 0) if new_user else 0
+    attempt_doc["new_xp"] = new_xp
     
     # Update study streak
     await update_study_streak(user.user_id)
@@ -7498,22 +7500,24 @@ async def import_edital_with_cargo(
     try:
         disc_list = json.dumps(disciplinas, ensure_ascii=False)
         
-        system_msg = f"""Você é um especialista em planejamento de estudos para concursos.
-Com base nas disciplinas abaixo, crie um cronograma semanal de estudos otimizado.
+        system_msg = f"""Você é um MESTRE em planejamento de estudos para concursos públicos brasileiros, com experiência em coaching de aprovados.
+Crie um cronograma semanal IMPECÁVEL e OTIMIZADO, considerando neurociência da aprendizagem.
 
-Disciplinas: {disc_list}
+Disciplinas e seus pesos: {disc_list}
 
-O aluno tem {hours_per_day} horas por dia, {days_per_week} dias por semana.
-{"Data da prova: " + target_date if target_date else "Sem data definida."}
+Configuração do aluno:
+- {hours_per_day} horas por dia, {days_per_week} dias por semana
+{"- Data da prova: " + target_date if target_date else "- Sem data definida."}
 
 Responda APENAS com JSON:
 {{
   "cronograma_semanal": [
     {{
       "dia": "Segunda",
+      "frase_motivacional": "Frase motivacional curta para o dia",
       "blocos": [
         {{
-          "disciplina": "Nome",
+          "disciplina": "Nome exato da disciplina",
           "duracao_minutos": 120,
           "tipo_estudo": "Teoria + Questões",
           "prioridade": "alta"
@@ -7521,23 +7525,32 @@ Responda APENAS com JSON:
       ]
     }}
   ],
+  "materias_por_dia_sugerido": 3,
+  "inclui_redacao": true,
+  "ciclo_revisao": "A cada 3 dias, reserve 30-45min para revisão das matérias estudadas nos dias anteriores",
   "estrategia": {{
-    "resumo": "Resumo da estratégia",
-    "fase_1": "Base teórica",
-    "fase_2": "Aprofundamento",
-    "fase_3": "Revisão + simulados",
-    "dicas_gerais": ["Dica 1", "Dica 2"],
-    "materias_prioritarias": ["Matéria principal"]
+    "resumo": "Resumo da estratégia geral",
+    "fase_1": "Fase 1: Base teórica (primeiros 30% do tempo)",
+    "fase_2": "Fase 2: Aprofundamento + questões (40% do tempo)",
+    "fase_3": "Fase 3: Revisão intensiva + simulados (30% final)",
+    "dicas_gerais": ["Dica 1", "Dica 2", "Dica 3"],
+    "materias_prioritarias": ["Matéria de maior peso"],
+    "plano_revisao": "Explicação do ciclo de revisão espaçada"
   }}
 }}
 
-REGRAS:
-- Priorize matérias com maior peso
-- Limite de {int(hours_per_day * 60)} minutos por dia
-- Apenas {days_per_week} dias
-- Alterne matérias pesadas com leves
-- Dias: Segunda, Terça, Quarta, Quinta, Sexta, Sábado, Domingo
-"""
+REGRAS CRÍTICAS:
+1. PESOS: Matérias com maior peso devem ter MAIS tempo (proporcional ao peso). Ex: peso 3 = ~3x mais tempo que peso 1
+2. REDAÇÃO: Se o concurso exige redação (comum em concursos de nível superior), inclua 1-2 blocos semanais de "Redação" com tipo_estudo "Prática de Redação"
+3. REVISÃO: Inclua blocos de "Revisão Geral" a cada 2-3 dias (30-45min) para fixação por repetição espaçada
+4. ALTERNÂNCIA: Nunca coloque duas matérias pesadas/densas em sequência - intercale com matérias mais leves
+5. MATÉRIAS POR DIA: Sugira 2-4 matérias por dia (ideal 3), nunca mais que 4 para manter foco
+6. BLOCOS: Cada bloco entre 45-120min. Intervalos de 10-15min entre blocos (implícito)
+7. LIMITE: Máximo {int(hours_per_day * 60)} minutos por dia de estudo efetivo
+8. DIAS: Usar apenas {days_per_week} dias. Dias: Segunda, Terça, Quarta, Quinta, Sexta, Sábado, Domingo
+9. MOTIVAÇÃO: Cada dia deve ter uma frase motivacional ÚNICA e IMPACTANTE (curta, 1 linha)
+10. DESCANSO: Se {days_per_week} < 7, os dias livres são para descanso/lazer
+11. CONSISTÊNCIA: O nome da disciplina nos blocos deve ser EXATAMENTE igual ao nome na lista de disciplinas"""
         
         response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
@@ -7679,10 +7692,7 @@ REGRAS:
         
         # Award XP
         xp_earned = 50
-        await db.users.update_one(
-            {"user_id": user.user_id},
-            {"$inc": {"xp": xp_earned}}
-        )
+        await award_xp(user.user_id, xp_earned)
         
         # Clean up analysis
         await db.edital_analyses.delete_one({"analysis_id": analysis_id})
@@ -7904,7 +7914,7 @@ REGRAS:
         mindmap_doc.pop('_id', None)
         
         # Award XP
-        await db.users.update_one({"user_id": user.user_id}, {"$inc": {"xp": 10}})
+        await award_xp(user.user_id, 10)
         
         return {
             "success": True,
@@ -8181,6 +8191,575 @@ async def check_notifications(request: Request, timezone_offset: int = 0, sessio
             )
     
     return pending
+
+
+# ========== REDAÇÃO (ESSAY) SECTION ==========
+
+@api_router.post("/study/redacao/correct")
+async def correct_essay(
+    request: Request,
+    file: UploadFile = File(...),
+    instructions: str = Form(""),
+    session_token: Optional[str] = Cookie(None)
+):
+    """AI correction of an essay from PDF, image, txt or docx"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+    
+    try:
+        import tempfile
+        ext = os.path.splitext(file.filename)[1].lower()
+        
+        text_content = None
+        if ext in ['.txt']:
+            text_content = content.decode('utf-8', errors='replace')
+        
+        system_msg = """Você é um professor especialista em redação para concursos públicos brasileiros (CESPE, FGV, FCC, VUNESP).
+Analise a redação enviada e faça uma correção detalhada seguindo os critérios de avaliação de concursos:
+
+Responda APENAS com JSON válido:
+{
+  "nota_geral": 8.5,
+  "nota_maxima": 10,
+  "competencias": [
+    {
+      "nome": "Domínio da Norma Culta",
+      "nota": 8,
+      "nota_maxima": 10,
+      "comentario": "Boa gramática no geral, mas..."
+    },
+    {
+      "nome": "Compreensão do Tema",
+      "nota": 9,
+      "nota_maxima": 10,
+      "comentario": "Demonstrou bom entendimento..."
+    },
+    {
+      "nome": "Argumentação",
+      "nota": 7,
+      "nota_maxima": 10,
+      "comentario": "Argumentos válidos porém..."
+    },
+    {
+      "nome": "Coesão e Coerência",
+      "nota": 8,
+      "nota_maxima": 10,
+      "comentario": "Boa conexão entre parágrafos..."
+    },
+    {
+      "nome": "Proposta de Intervenção",
+      "nota": 9,
+      "nota_maxima": 10,
+      "comentario": "Proposta viável e detalhada..."
+    }
+  ],
+  "pontos_fortes": ["Ponto forte 1", "Ponto forte 2"],
+  "pontos_melhorar": ["Ponto a melhorar 1", "Ponto a melhorar 2"],
+  "erros_gramaticais": [
+    {"trecho": "texto original", "correcao": "texto corrigido", "explicacao": "Regra gramatical"}
+  ],
+  "dicas_estrategicas": ["Dica 1", "Dica 2", "Dica 3"],
+  "texto_reescrito_sugestao": "Versão melhorada do primeiro parágrafo...",
+  "nivel": "Bom"
+}"""
+
+        contents = []
+        if text_content:
+            contents.append(f"Corrija esta redação:\n\n{text_content}\n\n{instructions}")
+        else:
+            suffix = ext if ext in ['.pdf'] else '.jpg'
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            mime = file.content_type or ('application/pdf' if ext == '.pdf' else 'image/jpeg')
+            uploaded = gemini_client.files.upload(file=tmp_path)
+            contents.append(types.Part.from_uri(file_uri=uploaded.uri, mime_type=mime))
+            contents.append(f"Corrija esta redação detalhadamente. {instructions}")
+            os.unlink(tmp_path)
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(system_instruction=system_msg)
+        )
+
+        json_str = response.text.strip()
+        if json_str.startswith("```json"): json_str = json_str[7:]
+        if json_str.startswith("```"): json_str = json_str[3:]
+        if json_str.endswith("```"): json_str = json_str[:-3]
+        correction = json.loads(json_str.strip())
+
+        # Save correction
+        correction_id = f"red_{uuid.uuid4().hex[:12]}"
+        correction_doc = {
+            "correction_id": correction_id,
+            "user_id": user.user_id,
+            "filename": file.filename,
+            "correction": correction,
+            "instructions": instructions,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.redacoes.insert_one(correction_doc)
+        await award_xp(user.user_id, 15)
+
+        return {"success": True, "correction_id": correction_id, "correction": correction, "xp_earned": 15}
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Erro ao processar correção. Tente novamente.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+
+
+@api_router.get("/study/redacao/history")
+async def get_essay_history(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    redacoes = await db.redacoes.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return redacoes
+
+
+@api_router.post("/study/redacao/random-theme")
+async def random_essay_theme(request: Request, data: dict = {}, session_token: Optional[str] = Cookie(None)):
+    """Generate a random essay theme likely to appear in exams"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    concurso_type = data.get("concurso_type", "geral")
+
+    prompt = f"""Sorteie UM tema de redação que tenha alta probabilidade de cair em provas de concurso público ({concurso_type}).
+Responda APENAS com JSON:
+{{
+  "tema": "O tema completo da redação",
+  "tipo_texto": "Dissertativo-Argumentativo",
+  "banca_relacionada": "CESPE/CEBRASPE",
+  "contexto": "Breve contexto sobre o tema e por que é relevante para concursos",
+  "textos_motivadores": ["Texto motivador 1 (trecho real ou adaptado)", "Texto motivador 2"],
+  "dicas": ["Dica para abordar este tema 1", "Dica 2"],
+  "temas_relacionados": ["Tema relacionado 1", "Tema 2"],
+  "nivel_dificuldade": "Médio"
+}}
+
+Use temas ATUAIS e RELEVANTES de {datetime.now().year}. Varie entre:
+- Saúde pública, Educação, Tecnologia, Meio ambiente, Segurança, Direitos humanos, Economia, Cidadania digital"""
+
+    try:
+        response = await call_llm(prompt, f"essay_theme_{user.user_id}", "Você é especialista em redação para concursos públicos brasileiros.")
+        json_str = response.strip()
+        if json_str.startswith("```json"): json_str = json_str[7:]
+        if json_str.startswith("```"): json_str = json_str[3:]
+        if json_str.endswith("```"): json_str = json_str[:-3]
+        theme = json.loads(json_str.strip())
+        return {"success": True, "theme": theme}
+    except:
+        return {"success": True, "theme": {
+            "tema": "O papel da tecnologia na promoção da inclusão social no Brasil",
+            "tipo_texto": "Dissertativo-Argumentativo",
+            "banca_relacionada": "Diversas",
+            "contexto": "A transformação digital e seus impactos na sociedade brasileira",
+            "textos_motivadores": ["A inclusão digital é fundamental para o exercício pleno da cidadania no século XXI."],
+            "dicas": ["Aborde os desafios de acesso à tecnologia em regiões remotas", "Mencione políticas públicas existentes"],
+            "temas_relacionados": ["Exclusão digital", "Direito à informação"],
+            "nivel_dificuldade": "Médio"
+        }}
+
+
+# ========== GENERAL INTEGRATED CHAT ==========
+
+@api_router.post("/chat/general")
+async def general_integrated_chat(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    """General chat that integrates with all app features - can create recipes, workouts, cronograms, etc."""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    content = data.get("content", "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Mensagem vazia")
+
+    # Save user message
+    msg_id = f"msg_{uuid.uuid4().hex[:12]}"
+    user_msg = {
+        "message_id": msg_id,
+        "user_id": user.user_id,
+        "role": "user",
+        "content": content,
+        "chat_type": "general",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.chat_messages.insert_one(user_msg.copy())
+
+    content_lower = content.lower()
+
+    # Detect intent
+    recipe_kw = ["receita", "recipe", "cozinhar", "preparar comida", "fazer um prato", "sugerir comida", "o que comer"]
+    workout_kw = ["treino", "exercício", "exercicio", "ficha de treino", "workout", "malhar", "academia", "musculação"]
+    study_kw = ["cronograma", "plano de estudo", "estudar", "matéria", "disciplina", "concurso"]
+    finance_kw = ["gasto", "despesa", "receita financeira", "saldo", "orçamento", "economizar", "investir"]
+
+    intent = "general"
+    if any(k in content_lower for k in recipe_kw): intent = "recipe"
+    elif any(k in content_lower for k in workout_kw): intent = "workout"
+    elif any(k in content_lower for k in study_kw): intent = "study"
+    elif any(k in content_lower for k in finance_kw): intent = "finance"
+
+    saved_item = None
+    ai_response_text = ""
+
+    try:
+        if intent == "recipe":
+            prompt = f"""O usuário pediu: "{content}"
+Gere uma receita completa. Responda em texto normal formatado com markdown.
+Inclua: nome, tempo de preparo, ingredientes, modo de preparo, informações nutricionais.
+Ao final, inclua um bloco JSON separado com:
+```json
+{{"name": "Nome da Receita", "description": "Descrição curta", "prep_time_minutes": 15, "cook_time_minutes": 30, "servings": 4, "calories_per_serving": 350, "protein_per_serving": 25, "carbs_per_serving": 30, "fat_per_serving": 12, "ingredients": ["ingrediente 1", "ingrediente 2"], "instructions": ["Passo 1", "Passo 2"], "meal_type": "lunch", "diet_type": "balanced"}}
+```"""
+            response = await call_llm(prompt, f"general_chat_{user.user_id}", "Você é um chef e nutricionista. Gere receitas detalhadas e saudáveis.")
+            ai_response_text = response
+
+            # Try to extract and save recipe
+            try:
+                if "```json" in response:
+                    json_part = response.split("```json")[1].split("```")[0].strip()
+                    recipe_data = json.loads(json_part)
+                    recipe_id = f"recipe_{uuid.uuid4().hex[:12]}"
+                    recipe_doc = {
+                        "recipe_id": recipe_id,
+                        "user_id": user.user_id,
+                        **recipe_data,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.recipes.insert_one(recipe_doc)
+                    saved_item = {"type": "recipe", "id": recipe_id, "name": recipe_data.get("name", "")}
+            except: pass
+
+        elif intent == "workout":
+            prompt = f"""O usuário pediu: "{content}"
+Gere um plano de treino completo. Responda em texto normal formatado com markdown.
+Ao final, inclua um bloco JSON:
+```json
+{{"name": "Nome do Treino", "description": "Descrição", "exercises": [{{"name": "Exercício", "sets": 3, "reps": "12", "weight": "", "notes": "Observações"}}]}}
+```"""
+            response = await call_llm(prompt, f"general_chat_{user.user_id}", "Você é um personal trainer especialista.")
+            ai_response_text = response
+
+            try:
+                if "```json" in response:
+                    json_part = response.split("```json")[1].split("```")[0].strip()
+                    plan_data = json.loads(json_part)
+                    plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+                    plan_doc = {
+                        "plan_id": plan_id,
+                        "user_id": user.user_id,
+                        **plan_data,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.workout_plans.insert_one(plan_doc)
+                    saved_item = {"type": "workout", "id": plan_id, "name": plan_data.get("name", "")}
+            except: pass
+
+        else:
+            # General / finance / study
+            system = "Você é o assistente pessoal SIRIUS. Ajude o usuário com finanças, estudos, treinos, nutrição e qualquer outro assunto. Responda em português, de forma objetiva e útil."
+            response = await call_llm(content, f"general_chat_{user.user_id}", system)
+            ai_response_text = response
+
+    except Exception as e:
+        ai_response_text = f"Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente."
+
+    # Save AI response
+    ai_msg_id = f"msg_{uuid.uuid4().hex[:12]}"
+    ai_msg = {
+        "message_id": ai_msg_id,
+        "user_id": user.user_id,
+        "role": "assistant",
+        "content": ai_response_text,
+        "chat_type": "general",
+        "intent": intent,
+        "saved_item": saved_item,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.chat_messages.insert_one(ai_msg.copy())
+
+    return {
+        "user_message": {k: v for k, v in user_msg.items() if k != '_id'},
+        "ai_message": {k: v for k, v in ai_msg.items() if k != '_id'},
+        "intent": intent,
+        "saved_item": saved_item
+    }
+
+
+@api_router.get("/chat/general/messages")
+async def get_general_messages(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    messages = await db.chat_messages.find(
+        {"user_id": user.user_id, "chat_type": "general"}, {"_id": 0}
+    ).sort("created_at", 1).to_list(200)
+    return messages
+
+
+# ========== MONTHLY BILLS (CONTAS DO MÊS) ==========
+
+@api_router.get("/finance/monthly-bills")
+async def get_monthly_bills(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get monthly bills - auto-import from projections when current month"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    if not month:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    # Check if bills already exist for this month
+    existing_bills = await db.monthly_bills.find(
+        {"user_id": user.user_id, "month": month}, {"_id": 0}
+    ).to_list(500)
+
+    # Auto-import from projections if no bills exist
+    if not existing_bills:
+        projections = await db.projections.find(
+            {"user_id": user.user_id, "month": month}, {"_id": 0}
+        ).to_list(500)
+
+        for proj in projections:
+            bill_id = f"bill_{uuid.uuid4().hex[:12]}"
+            bill_doc = {
+                "bill_id": bill_id,
+                "user_id": user.user_id,
+                "month": month,
+                "description": proj.get("description", ""),
+                "amount": proj.get("amount", 0),
+                "category": proj.get("category", "outros"),
+                "paid": False,
+                "paid_date": None,
+                "source": "projection",
+                "projection_id": proj.get("projection_id"),
+                "card_id": proj.get("card_id"),
+                "installment_info": f"{proj.get('installment_number', '')}/{proj.get('total_installments', '')}" if proj.get('installment_number') else None,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.monthly_bills.insert_one(bill_doc)
+            existing_bills.append(bill_doc)
+
+    # Calculate totals
+    total = sum(b["amount"] for b in existing_bills)
+    total_paid = sum(b["amount"] for b in existing_bills if b.get("paid"))
+    total_pending = total - total_paid
+
+    return {
+        "month": month,
+        "bills": existing_bills,
+        "total": total,
+        "total_paid": total_paid,
+        "total_pending": total_pending,
+        "count": len(existing_bills),
+        "paid_count": sum(1 for b in existing_bills if b.get("paid"))
+    }
+
+
+@api_router.post("/finance/monthly-bills")
+async def create_monthly_bill(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    bill_id = f"bill_{uuid.uuid4().hex[:12]}"
+    bill_doc = {
+        "bill_id": bill_id,
+        "user_id": user.user_id,
+        "month": data.get("month", datetime.now(timezone.utc).strftime("%Y-%m")),
+        "description": data.get("description", ""),
+        "amount": data.get("amount", 0),
+        "category": data.get("category", "outros"),
+        "paid": False,
+        "paid_date": None,
+        "source": "manual",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.monthly_bills.insert_one(bill_doc)
+    bill_doc.pop("_id", None)
+    return bill_doc
+
+
+@api_router.patch("/finance/monthly-bills/{bill_id}/toggle")
+async def toggle_bill_paid(request: Request, bill_id: str, session_token: Optional[str] = Cookie(None)):
+    """Toggle bill paid status - affects balance"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    bill = await db.monthly_bills.find_one({"bill_id": bill_id, "user_id": user.user_id})
+    if not bill:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+
+    new_paid = not bill.get("paid", False)
+    paid_date = datetime.now(timezone.utc).isoformat() if new_paid else None
+
+    await db.monthly_bills.update_one(
+        {"bill_id": bill_id},
+        {"$set": {"paid": new_paid, "paid_date": paid_date}}
+    )
+
+    # If marking as paid, create an expense transaction
+    if new_paid:
+        tx_id = f"tx_{uuid.uuid4().hex[:12]}"
+        tx_doc = {
+            "transaction_id": tx_id,
+            "user_id": user.user_id,
+            "type": "expense",
+            "amount": bill["amount"],
+            "category": bill.get("category", "outros"),
+            "description": f"[Conta Paga] {bill.get('description', '')}",
+            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "bill_id": bill_id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.transactions.insert_one(tx_doc)
+    else:
+        # If unmarking, remove the auto-created transaction
+        await db.transactions.delete_many({"bill_id": bill_id, "user_id": user.user_id})
+
+    return {"bill_id": bill_id, "paid": new_paid, "message": "Conta marcada como paga!" if new_paid else "Pagamento desmarcado."}
+
+
+@api_router.delete("/finance/monthly-bills/{bill_id}")
+async def delete_monthly_bill(request: Request, bill_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    result = await db.monthly_bills.delete_one({"bill_id": bill_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    return {"message": "Conta removida"}
+
+
+# ========== WORKOUT IMPORT FROM FILE ==========
+
+@api_router.post("/workouts/import-plan")
+async def import_workout_plan(
+    request: Request,
+    file: UploadFile = File(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Import a workout plan from PDF or image using AI extraction"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+
+    try:
+        import tempfile
+        ext = os.path.splitext(file.filename)[1].lower()
+        suffix = ext if ext in ['.pdf'] else '.jpg'
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        mime = file.content_type or ('application/pdf' if ext == '.pdf' else 'image/jpeg')
+        uploaded = gemini_client.files.upload(file=tmp_path)
+        os.unlink(tmp_path)
+
+        system_msg = """Analise esta ficha de treino e extraia TODOS os exercícios.
+Responda APENAS com JSON:
+{
+  "name": "Nome do Treino (ex: Treino A - Peito/Tríceps)",
+  "description": "Descrição breve",
+  "exercises": [
+    {"name": "Nome do exercício", "sets": 3, "reps": "12", "weight": "10kg", "notes": "Observações"}
+  ]
+}
+REGRAS: Extraia TODOS os exercícios fielmente. Se não conseguir ler algo, indique com [ilegível]."""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded.uri, mime_type=mime),
+                "Extraia a ficha de treino deste documento:"
+            ],
+            config=types.GenerateContentConfig(system_instruction=system_msg)
+        )
+
+        json_str = response.text.strip()
+        if json_str.startswith("```json"): json_str = json_str[7:]
+        if json_str.startswith("```"): json_str = json_str[3:]
+        if json_str.endswith("```"): json_str = json_str[:-3]
+        plan_data = json.loads(json_str.strip())
+
+        plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+        plan_doc = {
+            "plan_id": plan_id,
+            "user_id": user.user_id,
+            "name": plan_data.get("name", f"Treino importado - {file.filename}"),
+            "description": plan_data.get("description", "Importado via arquivo"),
+            "exercises": plan_data.get("exercises", []),
+            "source": "file_import",
+            "source_filename": file.filename,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.workout_plans.insert_one(plan_doc)
+        plan_doc.pop("_id", None)
+
+        await award_xp(user.user_id, 10)
+
+        return {
+            "success": True,
+            "plan": plan_doc,
+            "message": f"Treino importado com {len(plan_data.get('exercises', []))} exercícios!",
+            "xp_earned": 10
+        }
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Erro ao processar ficha de treino. Tente novamente.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro: {str(e)}")
+
+
+# ========== SAVED WORKOUT INSIGHTS ==========
+
+@api_router.post("/workout-suggestions/save")
+async def save_workout_suggestion(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+
+    insight_id = f"wi_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "insight_id": insight_id,
+        "user_id": user.user_id,
+        "title": data.get("title", "Sugestão de Treino"),
+        "content": data.get("content", ""),
+        "based_on": data.get("based_on", {}),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.workout_insights.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/workout-suggestions/saved")
+async def get_saved_insights(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    insights = await db.workout_insights.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return insights
+
+
+@api_router.delete("/workout-suggestions/saved/{insight_id}")
+async def delete_saved_insight(request: Request, insight_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    result = await db.workout_insights.delete_one({"insight_id": insight_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Insight não encontrado")
+    return {"message": "Insight removido"}
 
 
 # Include router AFTER all endpoints are defined

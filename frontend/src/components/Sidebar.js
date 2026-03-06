@@ -73,7 +73,7 @@ export default function Sidebar({ user }) {
     { icon: BookOpen, label: "Estudos", path: "/studies" },
     { icon: DollarSign, label: "Finanças", path: "/finance" },
     { icon: Target, label: "Metas", path: "/goals" },
-    { icon: MessageSquare, label: "Chat", path: "/chat" },
+    { icon: MessageSquare, label: "Assistente", path: "/chat" },
     { icon: Bell, label: "Notificações", path: "/notifications" },
     { icon: FileText, label: "Relatórios", path: "/reports" },
     { icon: User, label: "Perfil", path: "/profile" }
