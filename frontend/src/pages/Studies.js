@@ -26,6 +26,8 @@ import {
   Download, Image, BellRing, Paperclip, Network
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -1009,7 +1011,6 @@ export default function Studies() {
   // ========== EXPORT CRONOGRAMA AS PDF ==========
   const handleExportCronograma = async (format = 'pdf') => {
     try {
-      const html2canvas = (await import('html2canvas')).default;
       const element = cronogramaRef.current;
       if (!element) { toast.error("Erro ao capturar cronograma"); return; }
       
@@ -1027,7 +1028,6 @@ export default function Studies() {
         link.click();
         toast.success("Imagem exportada!");
       } else {
-        const { jsPDF } = await import('jspdf');
         const imgData = canvas.toDataURL('image/png');
         const imgWidth = 210; // A4 width in mm
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
@@ -1036,7 +1036,6 @@ export default function Studies() {
         let position = 0;
         const pageHeight = 297; // A4 height
         
-        // Add pages as needed
         while (position < imgHeight) {
           if (position > 0) pdf.addPage();
           pdf.addImage(imgData, 'PNG', 0, -position, imgWidth, imgHeight);
@@ -3111,7 +3110,6 @@ export default function Studies() {
                 <div className="flex gap-2 mt-4">
                   <Button variant="outline" size="sm" className="border-[#27272A]" onClick={async () => {
                     try {
-                      const html2canvas = (await import('html2canvas')).default;
                       const el = document.querySelector('[data-mindmap-content]');
                       if (!el) return;
                       const canvas = await html2canvas(el, { backgroundColor: '#0A0A0A', scale: 2 });
