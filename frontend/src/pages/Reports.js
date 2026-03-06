@@ -51,6 +51,25 @@ function ReportAccordionItem({ report }) {
               variant="outline"
               size="sm"
               className="border-[#27272A] hover:bg-[#121212] text-xs"
+              onClick={async () => {
+                try {
+                  const res = await axios.get(`${API}/reports/${report.report_id}/download`, {
+                    withCredentials: true,
+                    responseType: 'blob'
+                  });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.setAttribute('download', `sirius_relatorio_${report.report_id}.txt`);
+                  document.body.appendChild(link);
+                  link.click();
+                  link.remove();
+                  window.URL.revokeObjectURL(url);
+                  toast.success("Relatório exportado!");
+                } catch (err) {
+                  toast.error("Erro ao exportar relatório");
+                }
+              }}
             >
               <Download className="w-3.5 h-3.5 mr-2" />
               Exportar

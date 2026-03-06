@@ -7315,6 +7315,874 @@ async def delete_simulado(request: Request, simulado_id: str, session_token: Opt
     return {"message": "Simulado e tentativas excluídos com sucesso"}
 
 
+# ========== ANALYZE EDITAL (MULTI-CARGO) ==========
+
+@api_router.post("/study/programs/analyze-edital")
+async def analyze_edital_cargos(
+    request: Request,
+    file: UploadFile = File(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Analyze an edital PDF and return available cargos/positions before generating the program"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+    
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        uploaded_file = gemini_client.files.upload(file=tmp_path)
+        
+        system_msg = """Você é um especialista em concursos públicos brasileiros.
+Analise o edital do concurso contido neste PDF e identifique:
+1. Se há MÚLTIPLOS CARGOS/POSIÇÕES disponíveis
+2. Informações gerais do concurso
+3. Para cada cargo: as disciplinas, pesos e número de questões
+
+Responda APENAS com JSON válido no formato abaixo. NÃO inclua texto antes ou depois do JSON.
+
+{
+  "concurso": {
+    "nome": "Nome completo do concurso",
+    "orgao": "Órgão/instituição",
+    "banca": "Banca organizadora"
+  },
+  "multiple_cargos": true,
+  "cargos": [
+    {
+      "nome": "Nome do Cargo",
+      "vagas": "Número de vagas",
+      "remuneracao": "Remuneração",
+      "escolaridade": "Nível exigido",
+      "disciplinas": [
+        {
+          "nome": "Nome da Disciplina",
+          "peso": 3,
+          "num_questoes": 10,
+          "grupo": "Conhecimentos Gerais"
+        }
+      ]
+    }
+  ]
+}
+
+REGRAS:
+- Se o edital tem APENAS UM CARGO, defina "multiple_cargos" como false e coloque apenas 1 cargo no array
+- Se há múltiplos cargos com disciplinas DIFERENTES, defina "multiple_cargos" como true
+- O "peso" deve refletir exatamente o peso descrito no edital (se o edital diz peso 2, coloque 2)
+- Se o edital define pesos por grupo (ex: Conhecimentos Gerais peso 1, Conhecimentos Específicos peso 2), aplique o peso do grupo a cada disciplina daquele grupo
+- Extraia TODOS os cargos disponíveis
+- Tudo em português brasileiro
+"""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_file.uri, mime_type="application/pdf"),
+                "Analise este edital de concurso e identifique os cargos disponíveis e suas disciplinas:"
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        os.unlink(tmp_path)
+        
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        parsed = json.loads(json_str.strip())
+        
+        # Store the analysis temporarily for the user
+        analysis_id = f"edital_analysis_{uuid.uuid4().hex[:12]}"
+        
+        # Upload file again for later use
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file2:
+            tmp_file2.write(content)
+            tmp_path2 = tmp_file2.name
+        
+        # Store analysis with PDF content for later
+        analysis_doc = {
+            "analysis_id": analysis_id,
+            "user_id": user.user_id,
+            "concurso": parsed.get("concurso", {}),
+            "multiple_cargos": parsed.get("multiple_cargos", False),
+            "cargos": parsed.get("cargos", []),
+            "pdf_filename": file.filename,
+            "pdf_content_b64": base64.b64encode(content).decode('utf-8'),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        }
+        await db.edital_analyses.insert_one(analysis_doc)
+        
+        os.unlink(tmp_path2)
+        
+        return {
+            "success": True,
+            "analysis_id": analysis_id,
+            "concurso": parsed.get("concurso", {}),
+            "multiple_cargos": parsed.get("multiple_cargos", False),
+            "cargos": parsed.get("cargos", []),
+            "message": f"Edital analisado! {'Encontrados ' + str(len(parsed.get('cargos', []))) + ' cargos.' if parsed.get('multiple_cargos') else 'Cargo único identificado.'}"
+        }
+        
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA. Tente novamente.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao analisar edital: {str(e)}")
+
+
+@api_router.post("/study/programs/import-edital-with-cargo")
+async def import_edital_with_cargo(
+    request: Request,
+    data: dict,
+    session_token: Optional[str] = Cookie(None)
+):
+    """Create study program from a previously analyzed edital, selecting a specific cargo"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    analysis_id = data.get("analysis_id")
+    cargo_index = data.get("cargo_index", 0)
+    area_id = data.get("area_id")
+    target_date = data.get("target_date")
+    hours_per_day = data.get("hours_per_day", 4.0)
+    days_per_week = data.get("days_per_week", 5)
+    
+    if not analysis_id or not area_id:
+        raise HTTPException(status_code=400, detail="analysis_id e area_id são obrigatórios")
+    
+    # Get stored analysis
+    analysis = await db.edital_analyses.find_one({"analysis_id": analysis_id, "user_id": user.user_id}, {"_id": 0})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Análise não encontrada. Faça upload do edital novamente.")
+    
+    cargos = analysis.get("cargos", [])
+    if not cargos or cargo_index >= len(cargos):
+        raise HTTPException(status_code=400, detail="Cargo inválido")
+    
+    selected_cargo = cargos[cargo_index]
+    concurso_info = analysis.get("concurso", {})
+    concurso_info["cargo"] = selected_cargo.get("nome", "")
+    concurso_info["vagas"] = selected_cargo.get("vagas", "")
+    concurso_info["remuneracao"] = selected_cargo.get("remuneracao", "")
+    concurso_info["escolaridade"] = selected_cargo.get("escolaridade", "")
+    
+    disciplinas = selected_cargo.get("disciplinas", [])
+    if not disciplinas:
+        raise HTTPException(status_code=400, detail="Nenhuma disciplina encontrada para este cargo")
+    
+    # Now use AI to generate cronograma based on the selected cargo's disciplines
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    try:
+        disc_list = json.dumps(disciplinas, ensure_ascii=False)
+        
+        system_msg = f"""Você é um especialista em planejamento de estudos para concursos.
+Com base nas disciplinas abaixo, crie um cronograma semanal de estudos otimizado.
+
+Disciplinas: {disc_list}
+
+O aluno tem {hours_per_day} horas por dia, {days_per_week} dias por semana.
+{"Data da prova: " + target_date if target_date else "Sem data definida."}
+
+Responda APENAS com JSON:
+{{
+  "cronograma_semanal": [
+    {{
+      "dia": "Segunda",
+      "blocos": [
+        {{
+          "disciplina": "Nome",
+          "duracao_minutos": 120,
+          "tipo_estudo": "Teoria + Questões",
+          "prioridade": "alta"
+        }}
+      ]
+    }}
+  ],
+  "estrategia": {{
+    "resumo": "Resumo da estratégia",
+    "fase_1": "Base teórica",
+    "fase_2": "Aprofundamento",
+    "fase_3": "Revisão + simulados",
+    "dicas_gerais": ["Dica 1", "Dica 2"],
+    "materias_prioritarias": ["Matéria principal"]
+  }}
+}}
+
+REGRAS:
+- Priorize matérias com maior peso
+- Limite de {int(hours_per_day * 60)} minutos por dia
+- Apenas {days_per_week} dias
+- Alterne matérias pesadas com leves
+- Dias: Segunda, Terça, Quarta, Quinta, Sexta, Sábado, Domingo
+"""
+        
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=f"Gere cronograma para estas disciplinas de concurso: {disc_list}",
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        parsed = json.loads(json_str.strip())
+        cronograma = parsed.get("cronograma_semanal", [])
+        estrategia = parsed.get("estrategia", {})
+        
+        # Create program
+        program_id = f"prog_{uuid.uuid4().hex[:12]}"
+        program_name = f"{concurso_info.get('nome', 'Concurso')} - {selected_cargo.get('nome', 'Cargo')}"
+        
+        program_doc = {
+            "program_id": program_id,
+            "user_id": user.user_id,
+            "area_id": area_id,
+            "name": program_name[:100],
+            "description": f"Banca: {concurso_info.get('banca', 'N/A')} | Órgão: {concurso_info.get('orgao', 'N/A')} | Cargo: {selected_cargo.get('nome', '')}",
+            "color": "#8B5CF6",
+            "icon": "file-text",
+            "target_date": target_date or concurso_info.get("data_prova"),
+            "status": "active",
+            "total_questions": 0,
+            "correct_questions": 0,
+            "source_type": "edital_import",
+            "edital_data": {
+                "concurso": concurso_info,
+                "cargo_selecionado": selected_cargo,
+                "estrategia": estrategia,
+                "total_disciplinas": len(disciplinas),
+                "hours_per_day": hours_per_day,
+                "days_per_week": days_per_week,
+                "pdf_filename": analysis.get("pdf_filename", ""),
+                "analysis_id": analysis_id
+            },
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.study_programs.insert_one(program_doc)
+        program_doc.pop('_id', None)
+        
+        # Create notebooks
+        created_notebooks = []
+        color_palette = ["#007AFF", "#34C759", "#FF9500", "#FF3B30", "#AF52DE", "#5AC8FA", "#FF2D55", "#FFCC00", "#30D158", "#64D2FF", "#BF5AF2", "#FF6482"]
+        
+        for i, disc in enumerate(disciplinas):
+            nb_id = f"nb_{uuid.uuid4().hex[:12]}"
+            nb_doc = {
+                "notebook_id": nb_id,
+                "user_id": user.user_id,
+                "area_id": area_id,
+                "program_id": program_id,
+                "name": disc.get("nome", f"Disciplina {i+1}"),
+                "description": disc.get("grupo", ""),
+                "color": color_palette[i % len(color_palette)],
+                "tags": [],
+                "total_study_time_minutes": 0,
+                "total_questions": 0,
+                "correct_questions": 0,
+                "weight": disc.get("peso", 1),
+                "num_questoes_edital": disc.get("num_questoes", 0),
+                "dificuldade": "media",
+                "grupo": disc.get("grupo", ""),
+                "topicos": [],
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.notebooks.insert_one(nb_doc)
+            nb_doc.pop('_id', None)
+            created_notebooks.append(nb_doc)
+        
+        # Create schedules
+        created_schedules = []
+        day_map = {
+            "Segunda": "monday", "Terça": "tuesday", "Quarta": "wednesday",
+            "Quinta": "thursday", "Sexta": "friday", "Sábado": "saturday", "Domingo": "sunday"
+        }
+        
+        for day_entry in cronograma:
+            dia = day_entry.get("dia", "")
+            day_of_week = day_map.get(dia, dia.lower())
+            blocos = day_entry.get("blocos", [])
+            current_hour = 8
+            current_min = 0
+            
+            for bloco in blocos:
+                disc_name = bloco.get("disciplina", "")
+                duracao = bloco.get("duracao_minutos", 60)
+                
+                matching_nb = None
+                for nb in created_notebooks:
+                    if nb["name"].lower() == disc_name.lower():
+                        matching_nb = nb
+                        break
+                if not matching_nb:
+                    for nb in created_notebooks:
+                        if disc_name.lower() in nb["name"].lower() or nb["name"].lower() in disc_name.lower():
+                            matching_nb = nb
+                            break
+                
+                if matching_nb:
+                    start_time = f"{current_hour:02d}:{current_min:02d}"
+                    end_min_total = current_min + duracao
+                    end_hour = current_hour + end_min_total // 60
+                    end_min = end_min_total % 60
+                    end_time = f"{end_hour:02d}:{end_min:02d}"
+                    
+                    sched_id = f"sched_{uuid.uuid4().hex[:12]}"
+                    sched_doc = {
+                        "schedule_id": sched_id,
+                        "user_id": user.user_id,
+                        "notebook_id": matching_nb["notebook_id"],
+                        "program_id": program_id,
+                        "day_of_week": day_of_week,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "repeat": True,
+                        "tipo_estudo": bloco.get("tipo_estudo", "Teoria + Questões"),
+                        "prioridade": bloco.get("prioridade", "media"),
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.study_schedules.insert_one(sched_doc)
+                    sched_doc.pop('_id', None)
+                    created_schedules.append(sched_doc)
+                    
+                    current_hour = end_hour
+                    current_min = end_min
+        
+        # Award XP
+        xp_earned = 50
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$inc": {"xp": xp_earned}}
+        )
+        
+        # Clean up analysis
+        await db.edital_analyses.delete_one({"analysis_id": analysis_id})
+        
+        return {
+            "success": True,
+            "program": program_doc,
+            "concurso": concurso_info,
+            "cargo": selected_cargo,
+            "disciplinas": created_notebooks,
+            "cronograma": cronograma,
+            "estrategia": estrategia,
+            "schedules_created": len(created_schedules),
+            "xp_earned": xp_earned,
+            "message": f"Programa criado para cargo '{selected_cargo.get('nome', '')}' com {len(disciplinas)} disciplinas!"
+        }
+        
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA. Tente novamente.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar programa: {str(e)}")
+
+
+# ========== STUDY AI CHAT WITH FILE UPLOAD ==========
+
+@api_router.post("/study/ai-chat-with-file")
+async def study_ai_chat_with_file(
+    request: Request,
+    file: UploadFile = File(...),
+    message: str = Form(""),
+    context_type: str = Form("summarize"),
+    notebook_id: Optional[str] = Form(None),
+    session_token: Optional[str] = Cookie(None)
+):
+    """AI study chat with file upload (PDF or image) for summarization"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Tipo de arquivo não suportado. Use PDF ou imagens (JPG, PNG, GIF, WebP).")
+    
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+    
+    try:
+        import tempfile
+        suffix = '.pdf' if file.content_type == 'application/pdf' else '.jpg'
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_file:
+            tmp_file.write(content)
+            tmp_path = tmp_file.name
+        
+        uploaded_gemini_file = gemini_client.files.upload(file=tmp_path)
+        
+        context_prompts = {
+            "summarize": "Faça um resumo completo e organizado do conteúdo deste documento. Use tópicos, subtópicos e destaque os pontos-chave. Responda em português.",
+            "explain": "Explique o conteúdo deste documento de forma didática e detalhada. Use exemplos quando possível. Responda em português.",
+            "quiz_help": "A partir do conteúdo deste documento, crie 5 questões de estudo com respostas. Responda em português.",
+            "general": "Analise o conteúdo deste documento e responda à pergunta do aluno. Responda em português.",
+            "mindmap": "Analise o conteúdo e crie uma estrutura de mapa mental. Responda em português."
+        }
+        
+        system_msg = context_prompts.get(context_type, context_prompts["general"])
+        user_prompt = message if message else "Analise este documento e faça um resumo detalhado."
+        
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_gemini_file.uri, mime_type=file.content_type),
+                user_prompt
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        os.unlink(tmp_path)
+        
+        return {
+            "response": response.text,
+            "context_type": context_type,
+            "filename": file.filename,
+            "file_type": file.content_type
+        }
+        
+    except Exception as e:
+        logging.error(f"Study AI chat with file failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao processar arquivo: {str(e)}")
+
+
+# ========== MIND MAP GENERATION ==========
+
+@api_router.post("/study/mindmap/generate")
+async def generate_mindmap(
+    request: Request,
+    file: Optional[UploadFile] = File(None),
+    text: Optional[str] = Form(None),
+    topic: Optional[str] = Form(None),
+    notebook_id: Optional[str] = Form(None),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Generate a mind map structure from PDF, image, text, or topic"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=500, detail="Serviço de IA indisponível")
+    
+    system_msg = """Você é um especialista em criar mapas mentais estruturados para estudo.
+Analise o conteúdo fornecido e crie um mapa mental hierárquico completo.
+
+Responda APENAS com JSON válido neste formato:
+{
+  "title": "Título central do mapa mental",
+  "nodes": [
+    {
+      "id": "1",
+      "label": "Tópico Principal 1",
+      "color": "#007AFF",
+      "children": [
+        {
+          "id": "1.1",
+          "label": "Subtópico 1.1",
+          "children": [
+            {
+              "id": "1.1.1",
+              "label": "Detalhe 1.1.1",
+              "children": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+REGRAS:
+- Crie pelo menos 4-6 nós principais
+- Cada nó pode ter 2-4 filhos
+- Máximo 3 níveis de profundidade
+- Use cores variadas (#007AFF, #34C759, #FF9500, #FF3B30, #AF52DE, #5AC8FA, #FF2D55)
+- Textos curtos e objetivos
+- Organize logicamente por temas/categorias
+- Tudo em português"""
+    
+    try:
+        contents = []
+        
+        if file:
+            file_content = await file.read()
+            if len(file_content) > 20 * 1024 * 1024:
+                raise HTTPException(status_code=400, detail="Arquivo muito grande. Limite de 20MB.")
+            
+            import tempfile
+            suffix = '.pdf' if file.content_type == 'application/pdf' else '.jpg'
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_file:
+                tmp_file.write(file_content)
+                tmp_path = tmp_file.name
+            
+            uploaded_gemini_file = gemini_client.files.upload(file=tmp_path)
+            contents.append(types.Part.from_uri(file_uri=uploaded_gemini_file.uri, mime_type=file.content_type))
+            contents.append("Crie um mapa mental completo a partir do conteúdo deste documento:")
+            os.unlink(tmp_path)
+        elif text:
+            contents.append(f"Crie um mapa mental completo sobre o seguinte conteúdo:\n\n{text}")
+        elif topic:
+            contents.append(f"Crie um mapa mental completo sobre o tema: {topic}")
+        elif notebook_id:
+            # Get notes from notebook
+            notes = await db.study_notes.find(
+                {"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0}
+            ).to_list(20)
+            if notes:
+                notes_text = "\n\n".join([f"## {n.get('title', '')}\n{n.get('content', '')}" for n in notes])
+                contents.append(f"Crie um mapa mental completo baseado nestas notas de estudo:\n\n{notes_text}")
+            else:
+                nb = await db.notebooks.find_one({"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0})
+                topic_name = nb.get("name", "Matéria") if nb else "Matéria"
+                contents.append(f"Crie um mapa mental completo sobre: {topic_name}")
+        else:
+            raise HTTPException(status_code=400, detail="Forneça um arquivo, texto, tópico ou notebook_id")
+        
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_msg
+            )
+        )
+        
+        json_str = response.text.strip()
+        if json_str.startswith("```json"):
+            json_str = json_str[7:]
+        if json_str.startswith("```"):
+            json_str = json_str[3:]
+        if json_str.endswith("```"):
+            json_str = json_str[:-3]
+        
+        mindmap_data = json.loads(json_str.strip())
+        
+        # Save mind map
+        mindmap_id = f"mm_{uuid.uuid4().hex[:12]}"
+        mindmap_doc = {
+            "mindmap_id": mindmap_id,
+            "user_id": user.user_id,
+            "notebook_id": notebook_id,
+            "title": mindmap_data.get("title", "Mapa Mental"),
+            "data": mindmap_data,
+            "source": "file" if file else ("text" if text else ("topic" if topic else "notebook")),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.mindmaps.insert_one(mindmap_doc)
+        mindmap_doc.pop('_id', None)
+        
+        # Award XP
+        await db.users.update_one({"user_id": user.user_id}, {"$inc": {"xp": 10}})
+        
+        return {
+            "success": True,
+            "mindmap_id": mindmap_id,
+            "mindmap": mindmap_data,
+            "xp_earned": 10,
+            "message": "Mapa mental gerado com sucesso!"
+        }
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Erro ao processar mapa mental. Tente novamente.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Mind map generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar mapa mental: {str(e)}")
+
+
+@api_router.get("/study/mindmaps")
+async def get_mindmaps(request: Request, notebook_id: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
+    """Get user's mind maps"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    query = {"user_id": user.user_id}
+    if notebook_id:
+        query["notebook_id"] = notebook_id
+    
+    mindmaps = await db.mindmaps.find(query, {"_id": 0}).to_list(50)
+    return mindmaps
+
+
+@api_router.delete("/study/mindmaps/{mindmap_id}")
+async def delete_mindmap(request: Request, mindmap_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.mindmaps.delete_one({"mindmap_id": mindmap_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Mapa mental não encontrado")
+    return {"message": "Mapa mental excluído"}
+
+
+# ========== PROGRESS HISTORY / COMPARATOR ==========
+
+@api_router.get("/study/programs/{program_id}/progress-history")
+async def get_progress_history(
+    request: Request,
+    program_id: str,
+    days: int = 30,
+    session_token: Optional[str] = Cookie(None)
+):
+    """Get progress history for all disciplines in a program, for comparison over time"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notebooks = await db.notebooks.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(100)
+    
+    if not notebooks:
+        return {"program_id": program_id, "history": [], "notebooks": []}
+    
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    
+    history_data = {}
+    
+    for nb in notebooks:
+        nb_id = nb["notebook_id"]
+        nb_name = nb["name"]
+        nb_color = nb.get("color", "#007AFF")
+        
+        # Get question logs
+        q_logs = await db.question_logs.find({
+            "notebook_id": nb_id,
+            "user_id": user.user_id,
+            "created_at": {"$gte": cutoff}
+        }, {"_id": 0}).to_list(1000)
+        
+        # Get focus sessions
+        sessions = await db.study_sessions.find({
+            "notebook_id": nb_id,
+            "user_id": user.user_id,
+            "created_at": {"$gte": cutoff}
+        }, {"_id": 0}).to_list(1000)
+        
+        # Aggregate by date
+        for log in q_logs:
+            date = log.get("date", log.get("created_at", "")[:10])
+            if date not in history_data:
+                history_data[date] = {}
+            if nb_name not in history_data[date]:
+                history_data[date][nb_name] = {"questions": 0, "correct": 0, "minutes": 0, "color": nb_color}
+            history_data[date][nb_name]["questions"] += log.get("total", 0)
+            history_data[date][nb_name]["correct"] += log.get("correct", 0)
+        
+        for sess in sessions:
+            date = sess.get("date", sess.get("created_at", "")[:10])
+            if date not in history_data:
+                history_data[date] = {}
+            if nb_name not in history_data[date]:
+                history_data[date][nb_name] = {"questions": 0, "correct": 0, "minutes": 0, "color": nb_color}
+            history_data[date][nb_name]["minutes"] += sess.get("duration_minutes", 0)
+    
+    # Format for chart
+    sorted_dates = sorted(history_data.keys())
+    chart_data = []
+    cumulative = {}
+    
+    for date in sorted_dates:
+        entry = {"date": date}
+        for nb in notebooks:
+            nb_name = nb["name"]
+            day_data = history_data[date].get(nb_name, {"questions": 0, "correct": 0, "minutes": 0})
+            
+            if nb_name not in cumulative:
+                cumulative[nb_name] = {"questions": 0, "correct": 0, "minutes": 0}
+            cumulative[nb_name]["questions"] += day_data["questions"]
+            cumulative[nb_name]["correct"] += day_data["correct"]
+            cumulative[nb_name]["minutes"] += day_data["minutes"]
+            
+            entry[f"{nb_name}_questoes"] = cumulative[nb_name]["questions"]
+            entry[f"{nb_name}_acerto"] = round((cumulative[nb_name]["correct"] / cumulative[nb_name]["questions"] * 100) if cumulative[nb_name]["questions"] > 0 else 0, 1)
+            entry[f"{nb_name}_horas"] = round(cumulative[nb_name]["minutes"] / 60, 1)
+        chart_data.append(entry)
+    
+    nb_info = [{"name": nb["name"], "color": nb.get("color", "#007AFF"), "weight": nb.get("weight", 1)} for nb in notebooks]
+    
+    return {
+        "program_id": program_id,
+        "history": chart_data,
+        "notebooks": nb_info,
+        "days": days
+    }
+
+
+# ========== SCHEDULE-BASED NOTIFICATIONS ==========
+
+@api_router.post("/study/programs/{program_id}/create-reminders")
+async def create_schedule_reminders(
+    request: Request,
+    program_id: str,
+    data: dict,
+    session_token: Optional[str] = Cookie(None)
+):
+    """Create notifications/reminders from schedule blocks"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    program = await db.study_programs.find_one({"program_id": program_id, "user_id": user.user_id}, {"_id": 0})
+    if not program:
+        raise HTTPException(status_code=404, detail="Programa não encontrado")
+    
+    schedules = await db.study_schedules.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(200)
+    
+    notebooks = await db.notebooks.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(100)
+    nb_lookup = {nb["notebook_id"]: nb for nb in notebooks}
+    
+    reminder_minutes_before = data.get("minutes_before", 5)
+    include_end_reminder = data.get("include_end_reminder", False)
+    
+    day_map_reverse = {
+        "monday": "Seg", "tuesday": "Ter", "wednesday": "Qua",
+        "thursday": "Qui", "friday": "Sex", "saturday": "Sáb", "sunday": "Dom"
+    }
+    
+    created = 0
+    for sched in schedules:
+        nb = nb_lookup.get(sched.get("notebook_id"))
+        disc_name = nb["name"] if nb else "Matéria"
+        day_label = day_map_reverse.get(sched.get("day_of_week", ""), "")
+        
+        # Calculate reminder time (X minutes before start)
+        start_time = sched.get("start_time", "08:00")
+        try:
+            parts = start_time.split(":")
+            total_mins = int(parts[0]) * 60 + int(parts[1]) - reminder_minutes_before
+            if total_mins < 0:
+                total_mins = 0
+            reminder_time = f"{total_mins // 60:02d}:{total_mins % 60:02d}"
+        except (ValueError, IndexError):
+            reminder_time = start_time
+        
+        # Map day_of_week to repeat_days
+        day_of_week = sched.get("day_of_week", "")
+        
+        notification_id = f"notif_{uuid.uuid4().hex[:12]}"
+        notif_doc = {
+            "notification_id": notification_id,
+            "user_id": user.user_id,
+            "title": f"Hora de estudar: {disc_name}",
+            "message": f"{day_label} {start_time} - {sched.get('end_time', '')} | {sched.get('tipo_estudo', 'Estudo')}",
+            "type": "reminder",
+            "category": "study",
+            "scheduled_time": reminder_time,
+            "repeat": "weekly",
+            "repeat_days": [day_of_week],
+            "enabled": True,
+            "channels": ["in_app", "browser"],
+            "last_sent": None,
+            "program_id": program_id,
+            "schedule_id": sched.get("schedule_id"),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.notifications.insert_one(notif_doc)
+        created += 1
+    
+    return {
+        "success": True,
+        "created": created,
+        "message": f"{created} lembretes criados para o cronograma de estudos!"
+    }
+
+
+# ========== FIX: PENDING NOTIFICATIONS WITH TIMEZONE ==========
+
+@api_router.get("/notifications/check")
+async def check_notifications(request: Request, timezone_offset: int = 0, session_token: Optional[str] = Cookie(None)):
+    """Check for pending notifications considering user timezone"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Use timezone offset from client to calculate local time
+    utc_now = datetime.now(timezone.utc)
+    user_local = utc_now - timedelta(minutes=timezone_offset)
+    current_time = user_local.strftime("%H:%M")
+    current_day = user_local.strftime("%A").lower()
+    
+    # Find enabled notifications matching current time (with 2 minute window)
+    try:
+        h, m = map(int, current_time.split(":"))
+        time_start_mins = h * 60 + m - 1
+        time_end_mins = h * 60 + m + 1
+        
+        times_to_check = []
+        for t_mins in range(max(0, time_start_mins), min(1440, time_end_mins + 1)):
+            times_to_check.append(f"{t_mins // 60:02d}:{t_mins % 60:02d}")
+    except (ValueError, IndexError):
+        times_to_check = [current_time]
+    
+    notifications = await db.notifications.find({
+        "user_id": user.user_id,
+        "enabled": True,
+        "scheduled_time": {"$in": times_to_check}
+    }, {"_id": 0}).to_list(100)
+    
+    pending = []
+    for notif in notifications:
+        should_send = False
+        if notif['repeat'] == "none":
+            if not notif.get('last_sent'):
+                should_send = True
+        elif notif['repeat'] == "daily":
+            # Check if not already sent today
+            last_sent = notif.get('last_sent')
+            if not last_sent or last_sent[:10] != user_local.strftime("%Y-%m-%d"):
+                should_send = True
+        elif notif['repeat'] in ["weekly", "custom"]:
+            if current_day in [d.lower() for d in notif.get('repeat_days', [])]:
+                last_sent = notif.get('last_sent')
+                if not last_sent or last_sent[:10] != user_local.strftime("%Y-%m-%d"):
+                    should_send = True
+        
+        if should_send:
+            pending.append(notif)
+            # Mark as sent
+            await db.notifications.update_one(
+                {"notification_id": notif["notification_id"]},
+                {"$set": {"last_sent": datetime.now(timezone.utc).isoformat()}}
+            )
+    
+    return pending
+
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 

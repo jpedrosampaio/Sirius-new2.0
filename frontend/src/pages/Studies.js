@@ -22,8 +22,10 @@ import {
   Send, ArrowLeft, BarChart3, HelpCircle, Zap, Coffee,
   MessageSquare, ChevronDown, ChevronUp, Hash, Award, TrendingUp,
   Upload, ListChecks, ClipboardList, Eye, EyeOff, ChevronLeft, CircleDot,
-  SkipForward, Flag, StopCircle, FileUp, Scale, LayoutGrid
+  SkipForward, Flag, StopCircle, FileUp, Scale, LayoutGrid,
+  Download, Image, BellRing, Paperclip, Network
 } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -204,6 +206,8 @@ function StudyAIChat({ notebooks, selectedNotebook }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [contextType, setContextType] = useState("general");
+  const [uploadFile, setUploadFile] = useState(null);
+  const fileInputRef = useRef(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -211,18 +215,38 @@ function StudyAIChat({ notebooks, selectedNotebook }) {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!input.trim()) return;
-    const userMsg = { role: "user", content: input };
+    if (!input.trim() && !uploadFile) return;
+    const userContent = uploadFile ? `📎 ${uploadFile.name}\n${input || "Analise este arquivo"}` : input;
+    const userMsg = { role: "user", content: userContent };
     setMessages(prev => [...prev, userMsg]);
+    const currentInput = input;
     setInput("");
     setLoading(true);
     try {
-      const res = await axios.post(`${API}/study/ai-chat`, {
-        message: input,
-        notebook_id: selectedNotebook?.notebook_id || null,
-        context_type: contextType
-      }, { withCredentials: true });
-      setMessages(prev => [...prev, { role: "assistant", content: res.data.response }]);
+      if (uploadFile) {
+        // File upload mode
+        const formData = new FormData();
+        formData.append("file", uploadFile);
+        formData.append("message", currentInput || "Analise este documento e faça um resumo detalhado.");
+        formData.append("context_type", contextType);
+        if (selectedNotebook?.notebook_id) formData.append("notebook_id", selectedNotebook.notebook_id);
+        
+        const res = await axios.post(`${API}/study/ai-chat-with-file`, formData, {
+          withCredentials: true,
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 120000
+        });
+        setMessages(prev => [...prev, { role: "assistant", content: res.data.response }]);
+        setUploadFile(null);
+      } else {
+        // Normal text mode
+        const res = await axios.post(`${API}/study/ai-chat`, {
+          message: currentInput,
+          notebook_id: selectedNotebook?.notebook_id || null,
+          context_type: contextType
+        }, { withCredentials: true });
+        setMessages(prev => [...prev, { role: "assistant", content: res.data.response }]);
+      }
     } catch (err) {
       setMessages(prev => [...prev, { role: "assistant", content: "Desculpe, ocorreu um erro. Tente novamente." }]);
     } finally {
@@ -262,7 +286,8 @@ function StudyAIChat({ notebooks, selectedNotebook }) {
         {messages.length === 0 && (
           <div className="text-center text-[#A1A1AA] py-8 text-sm">
             <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            Pergunte qualquer coisa sobre seus estudos!
+            <p>Pergunte qualquer coisa sobre seus estudos!</p>
+            <p className="text-xs mt-2 text-[#52525B]">📎 Envie PDFs ou imagens para resumo com IA</p>
           </div>
         )}
         {messages.map((msg, idx) => (
@@ -280,9 +305,20 @@ function StudyAIChat({ notebooks, selectedNotebook }) {
         <div ref={chatEndRef} />
       </CardContent>
       <div className="p-3 border-t border-[#27272A]">
+        {uploadFile && (
+          <div className="flex items-center gap-2 mb-2 p-2 bg-[#121212] rounded-lg">
+            <Paperclip className="w-4 h-4 text-purple-400" />
+            <span className="text-xs text-purple-300 flex-1 truncate">{uploadFile.name}</span>
+            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setUploadFile(null)}><XCircle className="w-3 h-3 text-red-400" /></Button>
+          </div>
+        )}
         <div className="flex gap-2">
-          <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()} placeholder="Pergunte algo..." className="bg-[#121212] border-[#27272A] text-sm" />
-          <Button onClick={sendMessage} disabled={loading || !input.trim()} size="icon" className="bg-[#007AFF] shrink-0">
+          <input type="file" ref={fileInputRef} className="hidden" accept=".pdf,image/*" onChange={e => { if (e.target.files[0]) setUploadFile(e.target.files[0]); e.target.value = ''; }} />
+          <Button variant="ghost" size="icon" className="shrink-0 text-[#A1A1AA] hover:text-purple-400" onClick={() => fileInputRef.current?.click()} title="Enviar PDF ou imagem">
+            <Paperclip className="w-4 h-4" />
+          </Button>
+          <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()} placeholder={uploadFile ? "Mensagem sobre o arquivo..." : "Pergunte algo..."} className="bg-[#121212] border-[#27272A] text-sm" />
+          <Button onClick={sendMessage} disabled={loading || (!input.trim() && !uploadFile)} size="icon" className="bg-[#007AFF] shrink-0">
             <Send className="w-4 h-4" />
           </Button>
         </div>
@@ -450,6 +486,31 @@ export default function Studies() {
     title: "", disciplina: "", question_type: "multipla_escolha", num_questions: 10, difficulty: "medio"
   });
   const [editalSimuladoGenerating, setEditalSimuladoGenerating] = useState(false);
+
+  // Multi-cargo edital
+  const [editalAnalysis, setEditalAnalysis] = useState(null);
+  const [editalAnalyzing, setEditalAnalyzing] = useState(false);
+  const [showCargoSelection, setShowCargoSelection] = useState(false);
+  const [selectedCargoIndex, setSelectedCargoIndex] = useState(0);
+  const [creatingFromCargo, setCreatingFromCargo] = useState(false);
+
+  // Mind maps
+  const [showMindmapDialog, setShowMindmapDialog] = useState(false);
+  const [mindmapGenerating, setMindmapGenerating] = useState(false);
+  const [mindmapData, setMindmapData] = useState(null);
+  const [mindmapTopic, setMindmapTopic] = useState("");
+  const [mindmapFile, setMindmapFile] = useState(null);
+  const [mindmaps, setMindmaps] = useState([]);
+  const [showMindmapView, setShowMindmapView] = useState(false);
+  const [viewingMindmap, setViewingMindmap] = useState(null);
+
+  // Progress history
+  const [progressHistory, setProgressHistory] = useState(null);
+  const [showProgressDialog, setShowProgressDialog] = useState(false);
+  const [progressLoading, setProgressLoading] = useState(false);
+
+  // Cronograma export ref
+  const cronogramaRef = useRef(null);
 
   // PDF Content Analysis
   const [showContentPdfDialog, setShowContentPdfDialog] = useState(false);
@@ -839,6 +900,168 @@ export default function Studies() {
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao gerar simulado");
     } finally { setEditalSimuladoGenerating(false); }
+  };
+
+  // ========== MULTI-CARGO EDITAL IMPORT ==========
+  const handleAnalyzeEdital = async () => {
+    if (!editalFile) { toast.error("Selecione um arquivo PDF do edital"); return; }
+    if (!selectedArea) { toast.error("Selecione uma área primeiro"); return; }
+    setEditalAnalyzing(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", editalFile);
+
+      const res = await axios.post(`${API}/study/programs/analyze-edital`, formData, {
+        withCredentials: true, headers: { "Content-Type": "multipart/form-data" }, timeout: 120000
+      });
+      setEditalAnalysis(res.data);
+      
+      if (res.data.multiple_cargos && res.data.cargos?.length > 1) {
+        // Multiple cargos - show selection
+        setShowEditalDialog(false);
+        setShowCargoSelection(true);
+        toast.success(`${res.data.cargos.length} cargos encontrados! Selecione o seu.`);
+      } else {
+        // Single cargo - proceed directly
+        await handleCreateFromCargo(res.data.analysis_id, 0);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao analisar edital");
+    } finally { setEditalAnalyzing(false); }
+  };
+
+  const handleCreateFromCargo = async (analysisId, cargoIdx) => {
+    setCreatingFromCargo(true);
+    try {
+      const res = await axios.post(`${API}/study/programs/import-edital-with-cargo`, {
+        analysis_id: analysisId || editalAnalysis?.analysis_id,
+        cargo_index: cargoIdx,
+        area_id: selectedArea.area_id,
+        target_date: editalForm.target_date || null,
+        hours_per_day: editalForm.hours_per_day,
+        days_per_week: editalForm.days_per_week
+      }, { withCredentials: true, timeout: 120000 });
+      
+      toast.success(res.data.message || "Programa criado com sucesso!");
+      setEditalResult(res.data);
+      const discs = (res.data.disciplinas || []).map(d => ({ ...d, user_difficulty: d.dificuldade || "media" }));
+      setEditedDisciplinas(discs);
+      setEditedProgramName(res.data.program?.name || "");
+      setEditalEditMode(true);
+      setShowCargoSelection(false);
+      setShowEditalDialog(false);
+      setShowEditalResultDialog(true);
+      setEditalFile(null);
+      setEditalForm({ target_date: "", hours_per_day: 4, days_per_week: 5 });
+      setEditalAnalysis(null);
+      fetchAllData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao criar programa");
+    } finally { setCreatingFromCargo(false); }
+  };
+
+  // ========== MIND MAP HANDLERS ==========
+  const handleGenerateMindmap = async () => {
+    setMindmapGenerating(true);
+    try {
+      let res;
+      if (mindmapFile) {
+        const formData = new FormData();
+        formData.append("file", mindmapFile);
+        if (mindmapTopic) formData.append("topic", mindmapTopic);
+        if (selectedNotebook) formData.append("notebook_id", selectedNotebook.notebook_id);
+        res = await axios.post(`${API}/study/mindmap/generate`, formData, {
+          withCredentials: true, headers: { "Content-Type": "multipart/form-data" }, timeout: 120000
+        });
+      } else {
+        const formData = new FormData();
+        if (mindmapTopic) formData.append("topic", mindmapTopic);
+        if (selectedNotebook) formData.append("notebook_id", selectedNotebook.notebook_id);
+        res = await axios.post(`${API}/study/mindmap/generate`, formData, {
+          withCredentials: true, headers: { "Content-Type": "multipart/form-data" }, timeout: 120000
+        });
+      }
+      setMindmapData(res.data.mindmap);
+      setViewingMindmap(res.data.mindmap);
+      setShowMindmapDialog(false);
+      setShowMindmapView(true);
+      toast.success("Mapa mental gerado!");
+      setMindmapTopic("");
+      setMindmapFile(null);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao gerar mapa mental");
+    } finally { setMindmapGenerating(false); }
+  };
+
+  // ========== PROGRESS HISTORY ==========
+  const handleViewProgress = async (programId) => {
+    setProgressLoading(true);
+    setShowProgressDialog(true);
+    try {
+      const res = await axios.get(`${API}/study/programs/${programId}/progress-history?days=30`, { withCredentials: true });
+      setProgressHistory(res.data);
+    } catch (err) {
+      toast.error("Erro ao carregar progresso");
+      setShowProgressDialog(false);
+    } finally { setProgressLoading(false); }
+  };
+
+  // ========== EXPORT CRONOGRAMA AS PDF ==========
+  const handleExportCronograma = async (format = 'pdf') => {
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const element = cronogramaRef.current;
+      if (!element) { toast.error("Erro ao capturar cronograma"); return; }
+      
+      toast.info("Gerando exportação...");
+      const canvas = await html2canvas(element, {
+        backgroundColor: '#0A0A0A',
+        scale: 2,
+        useCORS: true
+      });
+      
+      if (format === 'image') {
+        const link = document.createElement('a');
+        link.download = `cronograma_${cronogramaData?.program?.name || 'estudo'}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        toast.success("Imagem exportada!");
+      } else {
+        const { jsPDF } = await import('jspdf');
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = 210; // A4 width in mm
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        
+        let position = 0;
+        const pageHeight = 297; // A4 height
+        
+        // Add pages as needed
+        while (position < imgHeight) {
+          if (position > 0) pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, -position, imgWidth, imgHeight);
+          position += pageHeight;
+        }
+        
+        pdf.save(`cronograma_${cronogramaData?.program?.name || 'estudo'}.pdf`);
+        toast.success("PDF exportado!");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao exportar");
+    }
+  };
+
+  // ========== SCHEDULE REMINDERS ==========
+  const handleCreateReminders = async (programId) => {
+    try {
+      const res = await axios.post(`${API}/study/programs/${programId}/create-reminders`, {
+        minutes_before: 5
+      }, { withCredentials: true });
+      toast.success(res.data.message || "Lembretes criados!");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao criar lembretes");
+    }
   };
 
   const handleCreateNotebook = async () => {
@@ -1258,8 +1481,8 @@ export default function Studies() {
                               <li>Distribuição de tempo por matéria</li>
                             </ul>
                           </div>
-                          <Button onClick={handleImportEdital} disabled={!editalFile || editalImporting} className="w-full bg-purple-600 hover:bg-purple-700">
-                            {editalImporting ? (
+                          <Button onClick={handleAnalyzeEdital} disabled={!editalFile || editalImporting || editalAnalyzing} className="w-full bg-purple-600 hover:bg-purple-700">
+                            {(editalImporting || editalAnalyzing) ? (
                               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando edital... (pode levar até 1 min)</>
                             ) : (
                               <><Sparkles className="w-4 h-4 mr-2" />Gerar Programa de Estudos</>
@@ -1472,6 +1695,9 @@ export default function Studies() {
                     <Button size="sm" onClick={startReview} className="bg-yellow-600 h-8 text-xs" disabled={dueFlashcardsCount === 0}><Brain className="w-3 h-3 mr-1" />{dueFlashcardsCount} Revisar</Button>
                     <Button size="sm" onClick={handleGenerateQuiz} className="bg-purple-600 h-8 text-xs" disabled={generatingQuiz}>
                       {generatingQuiz ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Sparkles className="w-3 h-3 mr-1" />Quiz IA</>}
+                    </Button>
+                    <Button size="sm" variant="outline" className="h-8 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10" onClick={() => setShowMindmapDialog(true)}>
+                      <Network className="w-3 h-3 mr-1" />Mapa Mental
                     </Button>
                     <Dialog open={showContentPdfDialog} onOpenChange={(open) => { setShowContentPdfDialog(open); if (!open) { setContentPdfResult(null); setContentPdfFile(null); } }}>
                       <DialogTrigger asChild><Button size="sm" variant="outline" className="h-8 text-xs border-orange-500/30 text-orange-400 hover:bg-orange-500/10"><Upload className="w-3 h-3 mr-1" />PDF → Estudo</Button></DialogTrigger>
@@ -2500,6 +2726,25 @@ export default function Studies() {
               </div>
             ) : cronogramaData && (
               <div className="space-y-4 py-2">
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" className="border-[#27272A] text-xs" onClick={() => handleExportCronograma('pdf')}>
+                    <Download className="w-3 h-3 mr-1" />Exportar PDF
+                  </Button>
+                  <Button variant="outline" size="sm" className="border-[#27272A] text-xs" onClick={() => handleExportCronograma('image')}>
+                    <Image className="w-3 h-3 mr-1" />Exportar Imagem
+                  </Button>
+                  <Button variant="outline" size="sm" className="border-[#27272A] text-xs" onClick={() => handleCreateReminders(cronogramaData.program?.program_id)}>
+                    <BellRing className="w-3 h-3 mr-1" />Ativar Lembretes
+                  </Button>
+                  {cronogramaData.program?.program_id && (
+                    <Button variant="outline" size="sm" className="border-[#27272A] text-xs" onClick={() => handleViewProgress(cronogramaData.program.program_id)}>
+                      <TrendingUp className="w-3 h-3 mr-1" />Comparar Progresso
+                    </Button>
+                  )}
+                </div>
+
+                <div ref={cronogramaRef}>
                 {/* Study Indicators per Discipline */}
                 {studyIndicators?.indicators?.length > 0 && (
                   <Card className="bg-[#121212] border-[#27272A]">
@@ -2634,6 +2879,7 @@ export default function Studies() {
                 )}
 
                 {/* Action: Generate Simulado from Edital */}
+                </div>{/* end cronogramaRef */}
                 {cronogramaData.program?.source_type === "edital_import" && (
                   <Button onClick={() => {
                     const concurso = cronogramaData.program?.edital_data?.concurso;
@@ -2716,6 +2962,242 @@ export default function Studies() {
                 {editalSimuladoGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando simulado...</> : <><Sparkles className="w-4 h-4 mr-2" />Gerar Simulado com IA</>}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== CARGO SELECTION DIALOG ========== */}
+        <Dialog open={showCargoSelection} onOpenChange={setShowCargoSelection}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><FileUp className="w-5 h-5 text-purple-400" />Selecione o Cargo</DialogTitle>
+              <DialogDescription>
+                {editalAnalysis?.concurso?.nome && <span className="text-purple-300">{editalAnalysis.concurso.nome}</span>}
+                {editalAnalysis?.concurso?.banca && <span className="text-[#A1A1AA]"> | Banca: {editalAnalysis.concurso.banca}</span>}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-xs text-[#A1A1AA]">Este edital possui {editalAnalysis?.cargos?.length || 0} cargos. Selecione o cargo desejado:</p>
+              {(editalAnalysis?.cargos || []).map((cargo, idx) => (
+                <Card key={idx} className={`bg-[#121212] border-[#27272A] p-4 cursor-pointer hover:border-purple-500 transition-colors ${selectedCargoIndex === idx ? 'border-purple-500 bg-purple-500/10' : ''}`}
+                  onClick={() => setSelectedCargoIndex(idx)}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-medium text-sm text-white">{cargo.nome}</h3>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {cargo.vagas && <Badge variant="outline" className="text-[10px] border-green-500 text-green-400">Vagas: {cargo.vagas}</Badge>}
+                        {cargo.remuneracao && <Badge variant="outline" className="text-[10px] border-yellow-500 text-yellow-400">{cargo.remuneracao}</Badge>}
+                        {cargo.escolaridade && <Badge variant="outline" className="text-[10px] border-blue-500 text-blue-400">{cargo.escolaridade}</Badge>}
+                      </div>
+                      <p className="text-xs text-[#A1A1AA] mt-2">{(cargo.disciplinas || []).length} disciplinas</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {(cargo.disciplinas || []).slice(0, 5).map((d, di) => (
+                          <Badge key={di} variant="outline" className="text-[9px] border-[#3F3F46] text-[#A1A1AA]">
+                            {d.nome} {d.peso ? `(P${d.peso})` : ''}
+                          </Badge>
+                        ))}
+                        {(cargo.disciplinas || []).length > 5 && <Badge variant="outline" className="text-[9px] border-[#3F3F46] text-[#52525B]">+{(cargo.disciplinas || []).length - 5}</Badge>}
+                      </div>
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedCargoIndex === idx ? 'border-purple-500 bg-purple-500' : 'border-[#3F3F46]'}`}>
+                      {selectedCargoIndex === idx && <CheckCircle2 className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">Horas por dia</Label>
+                  <Select value={String(editalForm.hours_per_day)} onValueChange={v => setEditalForm({...editalForm, hours_per_day: parseFloat(v)})}>
+                    <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                      {[1,2,3,4,5,6,7,8,10,12].map(h => <SelectItem key={h} value={String(h)}>{h}h</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Dias por semana</Label>
+                  <Select value={String(editalForm.days_per_week)} onValueChange={v => setEditalForm({...editalForm, days_per_week: parseInt(v)})}>
+                    <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                      {[3,4,5,6,7].map(d => <SelectItem key={d} value={String(d)}>{d} dias</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <Button onClick={() => handleCreateFromCargo(editalAnalysis?.analysis_id, selectedCargoIndex)} disabled={creatingFromCargo} className="w-full bg-purple-600 hover:bg-purple-700">
+                {creatingFromCargo ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Criando programa...</> : <><Sparkles className="w-4 h-4 mr-2" />Gerar Programa para este Cargo</>}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== MIND MAP GENERATOR DIALOG ========== */}
+        <Dialog open={showMindmapDialog} onOpenChange={setShowMindmapDialog}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Network className="w-5 h-5 text-green-400" />Gerar Mapa Mental</DialogTitle>
+              <DialogDescription>A IA irá criar um mapa mental estruturado</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div>
+                <Label className="text-sm">Tópico ou Assunto</Label>
+                <Input value={mindmapTopic} onChange={e => setMindmapTopic(e.target.value)} placeholder="Ex: Direito Constitucional - Direitos Fundamentais" className="bg-[#121212] border-[#27272A] mt-1" />
+              </div>
+              <div>
+                <Label className="text-sm">Ou envie um arquivo (PDF/Imagem)</Label>
+                <div className={`mt-1 border-2 border-dashed rounded-lg p-4 text-center ${mindmapFile ? 'border-green-500 bg-green-500/10' : 'border-[#27272A]'}`}>
+                  {mindmapFile ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FileText className="w-4 h-4 text-green-400" />
+                      <span className="text-xs text-green-300">{mindmapFile.name}</span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setMindmapFile(null)}><XCircle className="w-3 h-3 text-red-400" /></Button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer">
+                      <Upload className="w-6 h-6 mx-auto text-[#A1A1AA] mb-1" />
+                      <p className="text-xs text-[#A1A1AA]">Clique para selecionar</p>
+                      <input type="file" accept=".pdf,image/*" className="hidden" onChange={e => setMindmapFile(e.target.files?.[0] || null)} />
+                    </label>
+                  )}
+                </div>
+              </div>
+              <Button onClick={handleGenerateMindmap} disabled={mindmapGenerating || (!mindmapTopic && !mindmapFile && !selectedNotebook)} className="w-full bg-green-600 hover:bg-green-700">
+                {mindmapGenerating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando mapa mental...</> : <><Network className="w-4 h-4 mr-2" />Gerar Mapa Mental</>}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== MIND MAP VIEW DIALOG ========== */}
+        <Dialog open={showMindmapView} onOpenChange={setShowMindmapView}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Network className="w-5 h-5 text-green-400" />Mapa Mental: {viewingMindmap?.title || ''}</DialogTitle>
+            </DialogHeader>
+            {viewingMindmap && (
+              <div className="py-4">
+                {/* Central Node */}
+                <div className="text-center mb-6">
+                  <div className="inline-block bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-3 rounded-xl">
+                    <h2 className="text-lg font-bold text-white">{viewingMindmap.title}</h2>
+                  </div>
+                </div>
+                {/* Branches */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(viewingMindmap.nodes || []).map((node, i) => (
+                    <Card key={i} className="bg-[#121212] border-[#27272A] overflow-hidden">
+                      <div className="h-1" style={{ backgroundColor: node.color || '#007AFF' }} />
+                      <CardContent className="p-4">
+                        <h3 className="font-bold text-sm mb-2" style={{ color: node.color || '#007AFF' }}>{node.label}</h3>
+                        {(node.children || []).map((child, ci) => (
+                          <div key={ci} className="ml-3 mb-2">
+                            <div className="flex items-start gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: node.color || '#007AFF' }} />
+                              <div>
+                                <p className="text-xs font-medium text-white">{child.label}</p>
+                                {(child.children || []).map((sub, si) => (
+                                  <p key={si} className="text-[10px] text-[#A1A1AA] ml-3 mt-0.5">• {sub.label}</p>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <Button variant="outline" size="sm" className="border-[#27272A]" onClick={async () => {
+                    try {
+                      const html2canvas = (await import('html2canvas')).default;
+                      const el = document.querySelector('[data-mindmap-content]');
+                      if (!el) return;
+                      const canvas = await html2canvas(el, { backgroundColor: '#0A0A0A', scale: 2 });
+                      const link = document.createElement('a');
+                      link.download = `mapa_mental_${viewingMindmap?.title || 'estudo'}.png`;
+                      link.href = canvas.toDataURL('image/png');
+                      link.click();
+                      toast.success("Imagem exportada!");
+                    } catch { toast.error("Erro ao exportar"); }
+                  }}><Download className="w-3 h-3 mr-1" />Exportar Imagem</Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== PROGRESS COMPARISON DIALOG ========== */}
+        <Dialog open={showProgressDialog} onOpenChange={setShowProgressDialog}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-blue-400" />Comparador de Progresso</DialogTitle>
+              <DialogDescription>Evolução das disciplinas nos últimos 30 dias</DialogDescription>
+            </DialogHeader>
+            {progressLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+              </div>
+            ) : progressHistory && (
+              <div className="space-y-6 py-2">
+                {progressHistory.history?.length > 0 ? (
+                  <>
+                    <Card className="bg-[#121212] border-[#27272A] p-4">
+                      <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><Hash className="w-4 h-4 text-purple-400" />Questões Acumuladas</h3>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={progressHistory.history}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="date" tick={{ fill: '#A1A1AA', fontSize: 10 }} />
+                          <YAxis tick={{ fill: '#A1A1AA', fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #27272A', borderRadius: 8 }} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          {(progressHistory.notebooks || []).map((nb, i) => (
+                            <Line key={i} type="monotone" dataKey={`${nb.name}_questoes`} name={nb.name} stroke={nb.color} strokeWidth={2} dot={false} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                    <Card className="bg-[#121212] border-[#27272A] p-4">
+                      <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><Target className="w-4 h-4 text-green-400" />Taxa de Acerto (%)</h3>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={progressHistory.history}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="date" tick={{ fill: '#A1A1AA', fontSize: 10 }} />
+                          <YAxis tick={{ fill: '#A1A1AA', fontSize: 10 }} domain={[0, 100]} />
+                          <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #27272A', borderRadius: 8 }} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          {(progressHistory.notebooks || []).map((nb, i) => (
+                            <Line key={i} type="monotone" dataKey={`${nb.name}_acerto`} name={`${nb.name} %`} stroke={nb.color} strokeWidth={2} dot={false} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                    <Card className="bg-[#121212] border-[#27272A] p-4">
+                      <h3 className="text-sm font-medium mb-3 flex items-center gap-2"><Clock className="w-4 h-4 text-yellow-400" />Horas de Estudo Acumuladas</h3>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={progressHistory.history}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="date" tick={{ fill: '#A1A1AA', fontSize: 10 }} />
+                          <YAxis tick={{ fill: '#A1A1AA', fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #27272A', borderRadius: 8 }} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          {(progressHistory.notebooks || []).map((nb, i) => (
+                            <Line key={i} type="monotone" dataKey={`${nb.name}_horas`} name={`${nb.name} h`} stroke={nb.color} strokeWidth={2} dot={false} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </>
+                ) : (
+                  <div className="text-center py-10">
+                    <BarChart3 className="w-12 h-12 text-[#52525B] mx-auto mb-3" />
+                    <p className="text-[#A1A1AA]">Sem dados de progresso ainda</p>
+                    <p className="text-xs text-[#52525B]">Registre questões e sessões de foco para ver a evolução</p>
+                  </div>
+                )}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
 import { Card } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Bell, Plus, Trash2, Clock, Droplets, Dumbbell, CheckSquare, Settings, BellRing, Calendar } from "lucide-react";
+import { Bell, Plus, Trash2, Clock, Droplets, Dumbbell, CheckSquare, Settings, BellRing, Calendar, CheckCircle2, Volume2 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -42,6 +42,8 @@ export default function Notifications() {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("active");
   const [browserPermission, setBrowserPermission] = useState("default");
+  const [recentAlerts, setRecentAlerts] = useState([]);
+  const pollingRef = useRef(null);
   
   const [newNotification, setNewNotification] = useState({
     title: "",
@@ -51,8 +53,65 @@ export default function Notifications() {
     scheduled_time: "08:00",
     repeat: "daily",
     repeat_days: [],
-    channels: ["in_app"]
+    channels: ["in_app", "browser"]
   });
+
+  // Function to trigger browser notification
+  const triggerBrowserNotification = useCallback((notif) => {
+    // Play sound
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      oscillator.start();
+      setTimeout(() => { oscillator.stop(); audioCtx.close(); }, 300);
+    } catch (e) { /* ignore audio errors */ }
+
+    // Browser notification
+    if ("Notification" in window && Notification.permission === "granted") {
+      try {
+        const n = new Notification(notif.title, {
+          body: notif.message || "Hora do lembrete!",
+          icon: "/favicon.ico",
+          tag: notif.notification_id,
+          requireInteraction: true
+        });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (e) { console.error("Notification error:", e); }
+    }
+
+    // In-app toast
+    toast.info(`🔔 ${notif.title}`, {
+      description: notif.message || "",
+      duration: 10000,
+    });
+
+    // Track recent alert
+    setRecentAlerts(prev => [
+      { ...notif, triggered_at: new Date().toLocaleTimeString('pt-BR') },
+      ...prev.slice(0, 9)
+    ]);
+  }, []);
+
+  // Polling for pending notifications
+  const checkPendingNotifications = useCallback(async () => {
+    if (!user) return;
+    try {
+      const tzOffset = new Date().getTimezoneOffset();
+      const res = await axios.get(`${API}/notifications/check?timezone_offset=${tzOffset}`, { withCredentials: true });
+      const pending = Array.isArray(res.data) ? res.data : [];
+      for (const notif of pending) {
+        triggerBrowserNotification(notif);
+      }
+    } catch (err) {
+      // silently fail
+    }
+  }, [user, triggerBrowserNotification]);
 
   useEffect(() => {
     const load = async () => {
@@ -74,6 +133,19 @@ export default function Notifications() {
       setBrowserPermission(Notification.permission);
     }
   }, []);
+
+  // Start polling when user is loaded
+  useEffect(() => {
+    if (user) {
+      // Check immediately
+      checkPendingNotifications();
+      // Then check every 30 seconds
+      pollingRef.current = setInterval(checkPendingNotifications, 30000);
+    }
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [user, checkPendingNotifications]);
 
   const requestBrowserPermission = async () => {
     if ("Notification" in window) {
@@ -254,6 +326,43 @@ export default function Notifications() {
                   </div>
                 </div>
                 <Button onClick={requestBrowserPermission} className="bg-[#F59E0B] hover:bg-[#D97706] text-black">Ativar</Button>
+              </div>
+            </Card>
+          )}
+
+          {browserPermission === "granted" && (
+            <Card className="bg-[#0A2E1A] border-[#27272A] p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-6 h-6 text-green-400" />
+                  <div>
+                    <p className="font-medium text-green-300">Notificações ativadas</p>
+                    <p className="text-sm text-[#A1A1AA]">Verificando lembretes a cada 30 segundos</p>
+                  </div>
+                </div>
+                <Button onClick={() => {
+                  triggerBrowserNotification({ title: "Teste de Notificação", message: "As notificações estão funcionando!", notification_id: "test" });
+                }} variant="outline" size="sm" className="border-green-500 text-green-400 hover:bg-green-500/10">
+                  <Volume2 className="w-4 h-4 mr-2" />Testar
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {recentAlerts.length > 0 && (
+            <Card className="bg-[#0A0A0A] border-[#27272A] p-4 mb-6">
+              <h3 className="font-heading text-sm mb-3 flex items-center gap-2"><BellRing className="w-4 h-4 text-[#00F0FF]" />Alertas Recentes</h3>
+              <div className="space-y-2">
+                {recentAlerts.map((alert, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 bg-[#121212] rounded-lg">
+                    <Bell className="w-4 h-4 text-[#F59E0B]" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{alert.title}</p>
+                      <p className="text-xs text-[#A1A1AA]">{alert.message}</p>
+                    </div>
+                    <span className="text-xs text-[#52525B]">{alert.triggered_at}</span>
+                  </div>
+                ))}
               </div>
             </Card>
           )}
