@@ -741,7 +741,7 @@ frontend:
           
           **Test Environment:**
           - User: demo@test.com / Test123! (existing user with study data)
-          - URL: https://exam-prep-ai-45.preview.emergentagent.com
+          - URL: https://exam-prep-ai-46.preview.emergentagent.com
           - Browser: Desktop viewport (1920x1080)
           
           **✅ WORKING FEATURES (8/8 - 100%):**
@@ -824,7 +824,7 @@ frontend:
           
           **Test Environment:**
           - User: testedital@test.com / Test123! (has pre-existing edital-imported programs)
-          - URL: https://exam-prep-ai-45.preview.emergentagent.com
+          - URL: https://exam-prep-ai-46.preview.emergentagent.com
           - Browser: Desktop viewport (1920x1080)
           - Test Date: 2026-03-05
           
