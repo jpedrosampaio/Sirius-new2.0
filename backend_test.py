@@ -12,7 +12,7 @@ import os
 from io import BytesIO
 
 # Backend URL from frontend .env
-BACKEND_URL = "https://exam-prep-ai-46.preview.emergentagent.com"
+BACKEND_URL = "https://timezone-fix-24.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def register_and_login():

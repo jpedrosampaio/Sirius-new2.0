@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
 # Backend URL
-BACKEND_URL = "https://exam-prep-ai-46.preview.emergentagent.com"
+BACKEND_URL = "https://timezone-fix-24.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def get_auth_token():

@@ -1,8 +1,8 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, CheckSquare, TrendingUp, DollarSign, MessageSquare, MoreHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Target, Dumbbell, Apple, BookOpen, Bell, FileText, User, LogOut } from "lucide-react";
+import { Target, Dumbbell, Apple, BookOpen, Bell, FileText, User, LogOut, Clock } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { clearToken } from "@/lib/api";
@@ -14,6 +14,26 @@ export default function MobileNav({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const brasiliaTime = now.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const brasiliaDate = now.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
 
   const handleLogout = async () => {
     try {
@@ -77,6 +97,12 @@ export default function MobileNav({ user }) {
           </SheetTrigger>
           <SheetContent side="bottom" className="bg-[#0A0A0A] border-t border-[#27272A] rounded-t-2xl">
             <div className="py-4">
+              {/* Brasilia Clock */}
+              <div className="mb-4 flex items-center justify-center space-x-2 px-3 py-2 rounded-md bg-[#121212] border border-[#27272A] mx-2">
+                <Clock className="w-4 h-4 text-[#00F0FF] flex-shrink-0" />
+                <span className="font-data text-sm text-[#00F0FF] tracking-wider tabular-nums">{brasiliaTime}</span>
+                <span className="text-[10px] text-[#52525B] capitalize">{brasiliaDate} — Brasília</span>
+              </div>
               <div className="grid grid-cols-4 gap-4 mb-6">
                 {moreItems.map((item) => {
                   const Icon = item.icon;

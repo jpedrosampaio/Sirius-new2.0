@@ -2,10 +2,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell, Apple, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { clearToken } from "@/lib/api";
+import { Clock } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -46,10 +47,37 @@ const SiriusLogo = () => (
   </svg>
 );
 
+// Brasilia Clock Hook
+function useBrasiliaTime() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const timeStr = now.toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const dateStr = now.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+
+  return { timeStr, dateStr };
+}
+
 export default function Sidebar({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
+  const { timeStr, dateStr } = useBrasiliaTime();
 
   const handleLogout = async () => {
     try {
@@ -148,6 +176,14 @@ export default function Sidebar({ user }) {
         </nav>
 
         <div className="p-4 border-t border-[#27272A]">
+          {/* Brasilia Clock */}
+          <div className="mb-3 flex items-center space-x-2 px-2 py-2 rounded-md bg-[#121212] border border-[#27272A]">
+            <Clock className="w-4 h-4 text-[#00F0FF] flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-data text-sm text-[#00F0FF] tracking-wider tabular-nums leading-none">{timeStr}</p>
+              <p className="text-[10px] text-[#52525B] mt-0.5 capitalize">{dateStr} — Brasília</p>
+            </div>
+          </div>
           <Button
             data-testid="sidebar-logout-btn"
             variant="outline"
