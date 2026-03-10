@@ -514,6 +514,15 @@ export default function Studies() {
   // Cronograma export ref
   const cronogramaRef = useRef(null);
 
+  // Edital Verticalizado
+  const [showVerticalizadoDialog, setShowVerticalizadoDialog] = useState(false);
+  const [verticalizadoData, setVerticalizadoData] = useState(null);
+  const [verticalizadoLoading, setVerticalizadoLoading] = useState(false);
+  const [expandedDisciplinas, setExpandedDisciplinas] = useState(new Set());
+
+  // Motivational Quote (daily, resets at 5AM)
+  const [motivationalQuote, setMotivationalQuote] = useState(null);
+
   // Redação
   const [redacaoFile, setRedacaoFile] = useState(null);
   const [redacaoCorrection, setRedacaoCorrection] = useState(null);
@@ -580,6 +589,11 @@ export default function Studies() {
       setStats(statsR.data || null);
       setQuestionStats(qStatsR.data || null);
       setFocusStats(fStatsR.data || null);
+      // Fetch motivational quote (cached daily, resets at 5AM)
+      try {
+        const quoteR = await axios.get(`${API}/motivational-quote`, { withCredentials: true });
+        setMotivationalQuote(quoteR.data || null);
+      } catch (e) { console.error("Quote fetch failed:", e); }
     } catch (err) {
       console.error(err);
       toast.error("Erro ao carregar dados");
@@ -886,6 +900,28 @@ export default function Studies() {
       toast.error(err.response?.data?.detail || "Erro ao carregar cronograma");
       setShowCronogramaDialog(false);
     } finally { setCronogramaLoading(false); }
+  };
+
+  // ========== EDITAL VERTICALIZADO ==========
+  const handleViewVerticalizado = async (programId) => {
+    setVerticalizadoLoading(true);
+    setShowVerticalizadoDialog(true);
+    setExpandedDisciplinas(new Set());
+    try {
+      const res = await axios.get(`${API}/study/programs/${programId}/edital-verticalizado`, { withCredentials: true });
+      setVerticalizadoData(res.data);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erro ao carregar edital verticalizado");
+      setShowVerticalizadoDialog(false);
+    } finally { setVerticalizadoLoading(false); }
+  };
+
+  const toggleDisciplinaExpanded = (idx) => {
+    setExpandedDisciplinas(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
   };
 
   const handleGenerateSimuladoFromEdital = async () => {
@@ -1271,6 +1307,16 @@ export default function Studies() {
           </div>
         </div>
 
+        {/* Motivational Quote - Daily, resets at 5AM */}
+        {motivationalQuote && motivationalQuote.quote && (
+          <Card className="bg-gradient-to-r from-[#0A0A0A] to-[#1a1a2e] border-[#27272A] p-4 mb-4">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-5 h-5 text-[#00F0FF] flex-shrink-0" />
+              <p className="text-sm md:text-base italic text-white flex-1">{motivationalQuote.quote}</p>
+            </div>
+          </Card>
+        )}
+
         {/* Breadcrumb */}
         {(selectedArea || selectedProgram || selectedNotebook) && (
           <div className="flex items-center gap-1 mb-4 text-sm flex-wrap">
@@ -1592,7 +1638,10 @@ export default function Studies() {
                           )}
                           <div className="flex items-center justify-between mt-2">
                             {isEditalProgram && (
-                              <span className="text-[10px] text-purple-400 cursor-pointer hover:underline" onClick={e => { e.stopPropagation(); handleViewCronograma(prog.program_id); }}>Ver cronograma</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-purple-400 cursor-pointer hover:underline" onClick={e => { e.stopPropagation(); handleViewCronograma(prog.program_id); }}>Ver cronograma</span>
+                                <span className="text-[10px] text-blue-400 cursor-pointer hover:underline" onClick={e => { e.stopPropagation(); handleViewVerticalizado(prog.program_id); }}>Edital verticalizado</span>
+                              </div>
                             )}
                             <span className="text-xs text-[#A1A1AA] group-hover:text-white transition-colors flex items-center gap-1 ml-auto">Ver matérias <ChevronRight className="w-3 h-3" /></span>
                           </div>
@@ -2872,10 +2921,25 @@ export default function Studies() {
                             </div>
                           </div>
                           {disc.num_questoes_edital > 0 && <p className="text-[10px] text-[#52525B]">{disc.num_questoes_edital} questões no edital</p>}
-                          {disc.topicos?.length > 0 && (
+                          {disc.conteudo_programatico?.length > 0 ? (
+                            <details className="mt-1">
+                              <summary className="text-[10px] text-purple-400 cursor-pointer hover:underline">{disc.conteudo_programatico.length} assuntos no conteúdo programático</summary>
+                              <div className="mt-1 space-y-1 ml-1">
+                                {disc.conteudo_programatico.map((item, ci) => (
+                                  <div key={ci} className="pl-2 border-l border-purple-500/30">
+                                    <p className="text-[10px] font-medium text-[#A1A1AA]">{ci + 1}. {item.assunto}</p>
+                                    {item.subtopicos?.length > 0 && (
+                                      <div className="flex flex-wrap gap-0.5 ml-2 mt-0.5">
+                                        {item.subtopicos.map((sub, si) => <Badge key={si} variant="outline" className="text-[8px] border-[#27272A] text-[#52525B]">{sub}</Badge>)}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          ) : disc.topicos?.length > 0 && (
                             <div className="flex flex-wrap gap-1">
-                              {disc.topicos.slice(0, 5).map((t, ti) => <Badge key={ti} variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">{t}</Badge>)}
-                              {disc.topicos.length > 5 && <Badge variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">+{disc.topicos.length - 5}</Badge>}
+                              {disc.topicos.map((t, ti) => <Badge key={ti} variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">{t}</Badge>)}
                             </div>
                           )}
                         </div>
@@ -2941,6 +3005,11 @@ export default function Studies() {
                   {cronogramaData.program?.program_id && (
                     <Button variant="outline" size="sm" className="border-[#27272A] text-xs" onClick={() => handleViewProgress(cronogramaData.program.program_id)}>
                       <TrendingUp className="w-3 h-3 mr-1" />Comparar Progresso
+                    </Button>
+                  )}
+                  {cronogramaData.program?.source_type === "edital_import" && cronogramaData.program?.program_id && (
+                    <Button variant="outline" size="sm" className="border-purple-500/30 text-purple-400 text-xs" onClick={() => { setShowCronogramaDialog(false); handleViewVerticalizado(cronogramaData.program.program_id); }}>
+                      <Layers className="w-3 h-3 mr-1" />Edital Verticalizado
                     </Button>
                   )}
                 </div>
@@ -3022,6 +3091,64 @@ export default function Studies() {
                   </CardContent>
                 </Card>
 
+                {/* Conteúdo Programático por Disciplina */}
+                {(cronogramaData.disciplinas || []).some(d => d.conteudo_programatico?.length > 0 || d.topicos?.length > 0) && (
+                  <Card className="bg-[#121212] border-[#27272A]">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-purple-400" />Conteúdo Programático por Disciplina</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {(cronogramaData.disciplinas || []).map((disc, i) => {
+                          const hasConteudo = disc.conteudo_programatico?.length > 0;
+                          const hasTopicos = disc.topicos?.length > 0;
+                          if (!hasConteudo && !hasTopicos) return null;
+                          const isExpanded = expandedDisciplinas.has(`cron_${i}`);
+                          return (
+                            <div key={i} className="border border-[#27272A] rounded-lg overflow-hidden">
+                              <button
+                                className="w-full flex items-center justify-between px-3 py-2 bg-[#1A1A1A] hover:bg-[#222] transition-colors"
+                                onClick={() => toggleDisciplinaExpanded(`cron_${i}`)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: disc.color }} />
+                                  <span className="text-xs font-medium text-white">{disc.disciplina}</span>
+                                  <Badge variant="outline" className="text-[9px] border-[#3F3F46] text-[#A1A1AA]">
+                                    {hasConteudo ? `${disc.conteudo_programatico.length} assuntos` : `${disc.topicos.length} tópicos`}
+                                  </Badge>
+                                </div>
+                                {isExpanded ? <ChevronUp className="w-3 h-3 text-[#A1A1AA]" /> : <ChevronDown className="w-3 h-3 text-[#A1A1AA]" />}
+                              </button>
+                              {isExpanded && (
+                                <div className="p-3 space-y-2">
+                                  {hasConteudo ? (
+                                    disc.conteudo_programatico.map((item, j) => (
+                                      <div key={j} className="pl-2 border-l-2 border-[#27272A]">
+                                        <p className="text-xs font-medium text-white mb-1">{j + 1}. {item.assunto}</p>
+                                        {item.subtopicos?.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 ml-3">
+                                            {item.subtopicos.map((sub, k) => (
+                                              <Badge key={k} variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">{sub}</Badge>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1">
+                                      {disc.topicos.map((t, j) => (
+                                        <Badge key={j} variant="outline" className="text-[9px] border-[#27272A] text-[#71717A]">{t}</Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Weekly Schedule */}
                 <Card className="bg-[#121212] border-[#27272A]">
                   <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-400" />Cronograma Semanal</CardTitle></CardHeader>
@@ -3037,11 +3164,18 @@ export default function Studies() {
                           </div>
                           <div className="p-2 space-y-1">
                             {(day.blocos || []).map((bloco, bi) => (
-                              <div key={bi} className="flex items-center gap-2 p-2 bg-[#0A0A0A] rounded-md">
-                                <div className="w-1.5 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: bloco.disciplina_color || '#007AFF' }} />
+                              <div key={bi} className="flex items-start gap-2 p-2 bg-[#0A0A0A] rounded-md">
+                                <div className="w-1.5 min-h-[2rem] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: bloco.disciplina_color || '#007AFF' }} />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium text-white truncate">{bloco.disciplina_nome || bloco.notebook_id}</p>
                                   <p className="text-[10px] text-[#A1A1AA]">{bloco.tipo_estudo || 'Teoria + Questões'}</p>
+                                  {bloco.assuntos_foco && bloco.assuntos_foco.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {bloco.assuntos_foco.map((assunto, ai) => (
+                                        <Badge key={ai} variant="outline" className="text-[9px] border-[#3F3F46] text-[#71717A]">{assunto}</Badge>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                   <p className="text-xs text-[#A1A1AA]">{bloco.start_time} - {bloco.end_time}</p>
@@ -3396,6 +3530,129 @@ export default function Studies() {
                     <p className="text-xs text-[#52525B]">Registre questões e sessões de foco para ver a evolução</p>
                   </div>
                 )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* ========== EDITAL VERTICALIZADO DIALOG ========== */}
+        <Dialog open={showVerticalizadoDialog} onOpenChange={setShowVerticalizadoDialog}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2"><Layers className="w-5 h-5 text-purple-400" />Edital Verticalizado</DialogTitle>
+              <DialogDescription>{verticalizadoData?.program_name || 'Programa de Estudos'}</DialogDescription>
+            </DialogHeader>
+            {verticalizadoLoading ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-400 mb-3" />
+                <p className="text-sm text-[#A1A1AA]">Carregando edital verticalizado...</p>
+              </div>
+            ) : verticalizadoData && (
+              <div className="space-y-4 py-2">
+                {/* Concurso Info Header */}
+                <Card className="bg-[#121212] border-[#27272A]">
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      {verticalizadoData.banca && (
+                        <div><span className="text-[#71717A]">Banca:</span> <span className="text-white font-medium">{verticalizadoData.banca}</span></div>
+                      )}
+                      {verticalizadoData.orgao && (
+                        <div><span className="text-[#71717A]">Órgão:</span> <span className="text-white font-medium">{verticalizadoData.orgao}</span></div>
+                      )}
+                      {verticalizadoData.cargo && (
+                        <div><span className="text-[#71717A]">Cargo:</span> <span className="text-white font-medium">{verticalizadoData.cargo}</span></div>
+                      )}
+                      {verticalizadoData.target_date && (
+                        <div><span className="text-[#71717A]">Prova:</span> <span className="text-purple-400 font-medium">{verticalizadoData.target_date}</span></div>
+                      )}
+                    </div>
+                    <div className="flex gap-4 mt-3">
+                      <Badge className="bg-purple-500/20 text-purple-400">{verticalizadoData.total_disciplinas} Disciplinas</Badge>
+                      <Badge className="bg-blue-500/20 text-blue-400">{verticalizadoData.total_assuntos} Assuntos</Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Disciplines with full content */}
+                {(verticalizadoData.disciplinas || []).map((disc, i) => {
+                  const isExpanded = expandedDisciplinas.has(`vert_${i}`);
+                  const hasConteudo = disc.conteudo_programatico?.length > 0;
+                  const hasTopicos = disc.topicos?.length > 0;
+                  return (
+                    <Card key={i} className="bg-[#121212] border-[#27272A] overflow-hidden">
+                      <button
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
+                        onClick={() => toggleDisciplinaExpanded(`vert_${i}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: disc.color }} />
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-white">{disc.nome}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <Badge variant="outline" className="text-[9px] border-yellow-500 text-yellow-400">Peso {disc.peso}</Badge>
+                              {disc.num_questoes > 0 && <span className="text-[10px] text-[#71717A]">{disc.num_questoes} questões</span>}
+                              <Badge variant="outline" className={`text-[9px] ${disc.dificuldade === 'alta' ? 'border-red-500 text-red-400' : disc.dificuldade === 'media' ? 'border-yellow-500 text-yellow-400' : 'border-green-500 text-green-400'}`}>{disc.dificuldade}</Badge>
+                              {disc.grupo && <span className="text-[10px] text-[#52525B]">{disc.grupo}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right text-[10px] hidden md:block">
+                            <p className="text-[#A1A1AA]">{disc.study_hours}h estudado</p>
+                            <p className="text-[#A1A1AA]">{disc.total_questions_answered} questões | {disc.accuracy}% acerto</p>
+                          </div>
+                          <Badge variant="outline" className="text-[9px] border-[#3F3F46] text-[#A1A1AA]">
+                            {hasConteudo ? `${disc.total_assuntos} assuntos` : hasTopicos ? `${disc.topicos.length} tópicos` : 'Sem conteúdo'}
+                          </Badge>
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-[#A1A1AA]" /> : <ChevronDown className="w-4 h-4 text-[#A1A1AA]" />}
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <CardContent className="border-t border-[#27272A] pt-3">
+                          {/* Study Progress Mini */}
+                          <div className="grid grid-cols-4 gap-2 text-center mb-4 bg-[#0A0A0A] rounded-lg p-2">
+                            <div><p className="text-lg font-bold text-white">{disc.study_hours}h</p><p className="text-[9px] text-[#71717A]">Estudado</p></div>
+                            <div><p className="text-lg font-bold text-purple-400">{disc.total_questions_answered}</p><p className="text-[9px] text-[#71717A]">Questões</p></div>
+                            <div><p className={`text-lg font-bold ${disc.accuracy >= 70 ? 'text-green-400' : disc.accuracy >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{disc.accuracy}%</p><p className="text-[9px] text-[#71717A]">Acerto</p></div>
+                            <div><p className="text-lg font-bold text-blue-400">{disc.num_questoes}</p><p className="text-[9px] text-[#71717A]">Questões Edital</p></div>
+                          </div>
+
+                          {/* Conteúdo Programático Detalhado */}
+                          {hasConteudo ? (
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-purple-400 mb-2">Conteúdo Programático:</p>
+                              {disc.conteudo_programatico.map((item, j) => (
+                                <div key={j} className="pl-3 border-l-2 border-purple-500/30 py-1">
+                                  <p className="text-xs font-medium text-white">{j + 1}. {item.assunto}</p>
+                                  {item.subtopicos?.length > 0 && (
+                                    <div className="ml-4 mt-1 space-y-0.5">
+                                      {item.subtopicos.map((sub, k) => (
+                                        <p key={k} className="text-[10px] text-[#A1A1AA] flex items-start gap-1">
+                                          <span className="text-[#52525B] mt-0.5">•</span> {sub}
+                                        </p>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : hasTopicos ? (
+                            <div>
+                              <p className="text-xs font-medium text-purple-400 mb-2">Tópicos:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {disc.topicos.map((t, j) => (
+                                  <Badge key={j} variant="outline" className="text-[10px] border-[#27272A] text-[#A1A1AA]">{t}</Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-[#52525B] italic">Conteúdo programático não disponível para esta disciplina.</p>
+                          )}
+                        </CardContent>
+                      )}
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </DialogContent>

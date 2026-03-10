@@ -3544,11 +3544,33 @@ Responda em português de forma direta e motivadora."""
 # ========== MOTIVATIONAL QUOTES ==========
 @api_router.get("/motivational-quote")
 async def get_motivational_quote(request: Request, session_token: Optional[str] = Cookie(None)):
-    """Get a personalized motivational quote based on user's progress"""
+    """Get a personalized motivational quote - one per day, resets at 5:00 AM"""
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
-    # Get user stats
+    # Calculate the "motivational day" - resets at 5:00 AM
+    now = datetime.now()
+    if now.hour < 5:
+        # Before 5 AM, still "yesterday's" motivational day
+        motivational_date = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    else:
+        motivational_date = now.strftime("%Y-%m-%d")
+    
+    # Check if we already have a quote for this motivational day
+    cached_quote = await db.daily_quotes.find_one({
+        "user_id": user.user_id,
+        "motivational_date": motivational_date
+    }, {"_id": 0})
+    
+    if cached_quote:
+        return {
+            "quote": cached_quote.get("quote", ""),
+            "motivational_date": motivational_date,
+            "cached": True,
+            "context": cached_quote.get("context", {})
+        }
+    
+    # Generate a new quote for today
     today = datetime.now().strftime("%Y-%m-%d")
     week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     hour = datetime.now().hour
@@ -3607,12 +3629,33 @@ Responda APENAS com a frase, sem explicações."""
     try:
         response = await call_llm(
             prompt=prompt,
-            session_id=f"motivation_{user.user_id}_{datetime.now().minute}",
+            session_id=f"motivation_{user.user_id}_{motivational_date}",
             system_message="Você é um mestre motivacional que combina sabedoria filosófica, mentalidade de elite atlética e coaching de alta performance. Suas frases são impactantes, únicas e memoráveis."
         )
         
+        quote_text = response.strip()
+        
+        # Cache the quote for this motivational day
+        await db.daily_quotes.update_one(
+            {"user_id": user.user_id, "motivational_date": motivational_date},
+            {"$set": {
+                "user_id": user.user_id,
+                "motivational_date": motivational_date,
+                "quote": quote_text,
+                "context": {
+                    "workouts_this_week": workouts_this_week,
+                    "habits_today": habits_today,
+                    "time_of_day": time_of_day
+                },
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }},
+            upsert=True
+        )
+        
         return {
-            "quote": response.strip(),
+            "quote": quote_text,
+            "motivational_date": motivational_date,
+            "cached": False,
             "context": {
                 "workouts_this_week": workouts_this_week,
                 "habits_today": habits_today
@@ -3637,6 +3680,7 @@ Responda APENAS com a frase, sem explicações."""
         import random
         return {
             "quote": random.choice(fallback_quotes),
+            "motivational_date": motivational_date,
             "fallback": True
         }
 
@@ -4759,6 +4803,8 @@ async def import_edital(
         system_msg = f"""Você é um especialista em concursos públicos brasileiros e planejamento de estudos.
 Analise o edital do concurso contido neste PDF e extraia TODAS as informações relevantes para criar um programa de estudos completo.
 
+ATENÇÃO ESPECIAL: Extraia o CONTEÚDO PROGRAMÁTICO COMPLETO de cada disciplina. A maioria dos editais traz uma seção de "Conteúdo Programático" ou "Programa" listando todos os assuntos cobrados em cada matéria. Extraia TODOS esses assuntos fielmente.
+
 O aluno tem {hours_per_day} horas disponíveis por dia, {days_per_week} dias por semana para estudar.
 {"A data da prova é: " + target_date + ". Considere o tempo disponível até a prova para o cronograma." if target_date else "Não há data definida para a prova."}
 
@@ -4780,7 +4826,13 @@ Responda APENAS com JSON válido no formato abaixo. NÃO inclua texto antes ou d
       "nome": "Nome da Disciplina/Matéria",
       "peso": 3,
       "num_questoes": 10,
-      "topicos": ["Tópico 1", "Tópico 2", "Tópico 3"],
+      "topicos": ["Tópico resumido 1", "Tópico resumido 2"],
+      "conteudo_programatico": [
+        {{
+          "assunto": "Nome do assunto/tópico principal",
+          "subtopicos": ["Subtópico 1", "Subtópico 2", "Subtópico 3"]
+        }}
+      ],
       "dificuldade": "alta",
       "dicas_estudo": "Dica específica para esta matéria",
       "recursos_recomendados": "Livros, materiais recomendados"
@@ -4794,7 +4846,8 @@ Responda APENAS com JSON válido no formato abaixo. NÃO inclua texto antes ou d
           "disciplina": "Nome da Disciplina",
           "duracao_minutos": 120,
           "tipo_estudo": "Teoria + Questões",
-          "prioridade": "alta"
+          "prioridade": "alta",
+          "assuntos_foco": ["Assunto principal a estudar neste bloco"]
         }}
       ]
     }}
@@ -4819,7 +4872,9 @@ REGRAS IMPORTANTES:
 - Inclua APENAS {days_per_week} dias no cronograma (ex: Segunda a Sexta se 5 dias)
 - Alterne matérias pesadas com leves no mesmo dia
 - Reserve tempo para revisão e questões
-- Os tópicos devem ser os do conteúdo programático do edital
+- CONTEÚDO PROGRAMÁTICO: Este é o campo MAIS IMPORTANTE. Extraia FIELMENTE todos os assuntos do conteúdo programático de cada disciplina conforme listado no edital. Cada assunto principal deve virar um item em "conteudo_programatico" com seus respectivos subtópicos. Se o edital não tiver conteúdo programático detalhado, deixe o array vazio [].
+- "topicos" é um RESUMO dos principais tópicos (máximo 10 itens simples). "conteudo_programatico" é a LISTA COMPLETA E DETALHADA dos assuntos cobrados.
+- "assuntos_foco" nos blocos do cronograma deve indicar quais assuntos específicos do conteúdo programático o aluno deve focar naquele bloco de estudo.
 - Tudo em português brasileiro
 - "dificuldade" deve ser: "baixa", "media" ou "alta"
 - Os dias devem ser: "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"
@@ -4912,6 +4967,7 @@ REGRAS IMPORTANTES:
                 "num_questoes_edital": disc.get("num_questoes", 0),
                 "dificuldade": disc.get("dificuldade", "media"),
                 "topicos": disc.get("topicos", []),
+                "conteudo_programatico": disc.get("conteudo_programatico", []),
                 "recursos_recomendados": disc.get("recursos_recomendados", ""),
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
@@ -4968,6 +5024,7 @@ REGRAS IMPORTANTES:
                         "repeat": True,
                         "tipo_estudo": bloco.get("tipo_estudo", "Teoria + Questões"),
                         "prioridade": bloco.get("prioridade", "media"),
+                        "assuntos_foco": bloco.get("assuntos_foco", []),
                         "created_at": datetime.now(timezone.utc).isoformat()
                     }
                     await db.study_schedules.insert_one(sched_doc)
@@ -5027,6 +5084,9 @@ async def get_program_cronograma(request: Request, program_id: str, session_toke
             sched["disciplina_nome"] = nb["name"]
             sched["disciplina_color"] = nb.get("color", "#007AFF")
             sched["weight"] = nb.get("weight", 1)
+            # Include assuntos_foco if available
+            if not sched.get("assuntos_foco"):
+                sched["assuntos_foco"] = []
     
     days_order = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
     day_labels = {"monday": "Segunda", "tuesday": "Terça", "wednesday": "Quarta", "thursday": "Quinta", "friday": "Sexta", "saturday": "Sábado", "sunday": "Domingo"}
@@ -5063,7 +5123,9 @@ async def get_program_cronograma(request: Request, program_id: str, session_toke
             "percentual": round((w / total_weight * 100) if total_weight > 0 else 0, 1),
             "num_questoes": nb.get("num_questoes_edital", 0),
             "dificuldade": nb.get("dificuldade", "media"),
-            "color": nb.get("color", "#007AFF")
+            "color": nb.get("color", "#007AFF"),
+            "topicos": nb.get("topicos", []),
+            "conteudo_programatico": nb.get("conteudo_programatico", [])
         })
     
     return {
@@ -5074,6 +5136,73 @@ async def get_program_cronograma(request: Request, program_id: str, session_toke
         "estrategia": program.get("edital_data", {}).get("estrategia", {}),
         "total_schedules": len(schedules)
     }
+
+
+@api_router.get("/study/programs/{program_id}/edital-verticalizado")
+async def get_edital_verticalizado(request: Request, program_id: str, session_token: Optional[str] = Cookie(None)):
+    """Generate a verticalized edital view - organized list of all disciplines and their detailed content/topics"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    program = await db.study_programs.find_one({"program_id": program_id, "user_id": user.user_id}, {"_id": 0})
+    if not program:
+        raise HTTPException(status_code=404, detail="Programa não encontrado")
+    
+    notebooks = await db.notebooks.find(
+        {"program_id": program_id, "user_id": user.user_id}, {"_id": 0}
+    ).to_list(100)
+    
+    if not notebooks:
+        raise HTTPException(status_code=404, detail="Nenhuma disciplina encontrada para este programa")
+    
+    concurso_info = program.get("edital_data", {}).get("concurso", {})
+    cargo_info = program.get("edital_data", {}).get("cargo_selecionado", {})
+    
+    # Build verticalized view
+    disciplinas_verticalizadas = []
+    total_assuntos = 0
+    
+    for nb in sorted(notebooks, key=lambda x: x.get("weight", 1), reverse=True):
+        conteudo = nb.get("conteudo_programatico", [])
+        topicos = nb.get("topicos", [])
+        
+        # Count total assuntos
+        assuntos_count = len(conteudo)
+        subtopicos_count = sum(len(item.get("subtopicos", [])) for item in conteudo)
+        total_assuntos += assuntos_count + subtopicos_count
+        
+        disc_entry = {
+            "notebook_id": nb.get("notebook_id"),
+            "nome": nb.get("name", ""),
+            "peso": nb.get("weight", 1),
+            "num_questoes": nb.get("num_questoes_edital", 0),
+            "dificuldade": nb.get("dificuldade", "media"),
+            "grupo": nb.get("grupo", ""),
+            "color": nb.get("color", "#007AFF"),
+            "topicos": topicos,
+            "conteudo_programatico": conteudo,
+            "total_assuntos": assuntos_count,
+            "total_subtopicos": subtopicos_count,
+            "study_hours": round(nb.get("total_study_time_minutes", 0) / 60, 1),
+            "total_questions_answered": nb.get("total_questions", 0),
+            "accuracy": round((nb.get("correct_questions", 0) / nb.get("total_questions", 1) * 100) if nb.get("total_questions", 0) > 0 else 0, 1)
+        }
+        disciplinas_verticalizadas.append(disc_entry)
+    
+    return {
+        "success": True,
+        "program_id": program_id,
+        "program_name": program.get("name", ""),
+        "concurso": concurso_info,
+        "cargo": cargo_info.get("nome", concurso_info.get("cargo", "")),
+        "banca": concurso_info.get("banca", ""),
+        "orgao": concurso_info.get("orgao", ""),
+        "target_date": program.get("target_date"),
+        "total_disciplinas": len(disciplinas_verticalizadas),
+        "total_assuntos": total_assuntos,
+        "disciplinas": disciplinas_verticalizadas
+    }
+
 
 
 @api_router.post("/study/programs/{program_id}/update-disciplinas")
@@ -5557,7 +5686,7 @@ async def update_notebook(request: Request, notebook_id: str, data: dict, sessio
     
     update_fields = {}
     for field in ["name", "description", "color", "tags", "area_id", "program_id",
-                   "weight", "dificuldade", "user_difficulty", "topicos", "recursos_recomendados", "num_questoes_edital"]:
+                   "weight", "dificuldade", "user_difficulty", "topicos", "conteudo_programatico", "recursos_recomendados", "num_questoes_edital"]:
         if field in data:
             update_fields[field] = data[field]
     
@@ -7351,7 +7480,9 @@ async def analyze_edital_cargos(
 Analise o edital do concurso contido neste PDF e identifique:
 1. Se há MÚLTIPLOS CARGOS/POSIÇÕES disponíveis
 2. Informações gerais do concurso
-3. Para cada cargo: as disciplinas, pesos e número de questões
+3. Para cada cargo: as disciplinas, pesos, número de questões E o conteúdo programático completo
+
+ATENÇÃO: Extraia FIELMENTE o CONTEÚDO PROGRAMÁTICO de cada disciplina. A maioria dos editais traz uma seção listando todos os assuntos cobrados. Extraia TODOS esses assuntos.
 
 Responda APENAS com JSON válido no formato abaixo. NÃO inclua texto antes ou depois do JSON.
 
@@ -7373,7 +7504,14 @@ Responda APENAS com JSON válido no formato abaixo. NÃO inclua texto antes ou d
           "nome": "Nome da Disciplina",
           "peso": 3,
           "num_questoes": 10,
-          "grupo": "Conhecimentos Gerais"
+          "grupo": "Conhecimentos Gerais",
+          "topicos": ["Tópico resumido 1", "Tópico resumido 2"],
+          "conteudo_programatico": [
+            {
+              "assunto": "Nome do assunto principal",
+              "subtopicos": ["Subtópico 1", "Subtópico 2"]
+            }
+          ]
         }
       ]
     }
@@ -7386,6 +7524,8 @@ REGRAS:
 - O "peso" deve refletir exatamente o peso descrito no edital (se o edital diz peso 2, coloque 2)
 - Se o edital define pesos por grupo (ex: Conhecimentos Gerais peso 1, Conhecimentos Específicos peso 2), aplique o peso do grupo a cada disciplina daquele grupo
 - Extraia TODOS os cargos disponíveis
+- CONTEÚDO PROGRAMÁTICO: Extraia FIELMENTE todos os assuntos listados no conteúdo programático de cada disciplina. Cada assunto principal deve virar um item em "conteudo_programatico" com subtópicos quando houver. Se o edital não detalhar o conteúdo programático, deixe o array vazio.
+- "topicos" é um resumo (máximo 10 itens). "conteudo_programatico" é a lista COMPLETA e DETALHADA.
 - Tudo em português brasileiro
 """
 
@@ -7618,7 +7758,7 @@ REGRAS CRÍTICAS:
                 "name": disc.get("nome", f"Disciplina {i+1}"),
                 "description": disc.get("grupo", ""),
                 "color": color_palette[i % len(color_palette)],
-                "tags": [],
+                "tags": disc.get("topicos", [])[:10],
                 "total_study_time_minutes": 0,
                 "total_questions": 0,
                 "correct_questions": 0,
@@ -7626,7 +7766,8 @@ REGRAS CRÍTICAS:
                 "num_questoes_edital": disc.get("num_questoes", 0),
                 "dificuldade": "media",
                 "grupo": disc.get("grupo", ""),
-                "topicos": [],
+                "topicos": disc.get("topicos", []),
+                "conteudo_programatico": disc.get("conteudo_programatico", []),
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
             await db.notebooks.insert_one(nb_doc)

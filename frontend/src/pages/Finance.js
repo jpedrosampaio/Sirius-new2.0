@@ -551,8 +551,8 @@ export default function Finance() {
               <TabsTrigger value="transactions">Transações</TabsTrigger>
               <TabsTrigger value="budgets">Orçamentos</TabsTrigger>
               <TabsTrigger value="cards">Cartões</TabsTrigger>
-              <TabsTrigger value="projections">Projeção</TabsTrigger>
               <TabsTrigger value="bills" onClick={() => fetchMonthlyBills()}>Contas do Mês</TabsTrigger>
+              <TabsTrigger value="projections">Projeção</TabsTrigger>
               <TabsTrigger value="finance_chat">Chat Financeiro</TabsTrigger>
             </TabsList>
 
