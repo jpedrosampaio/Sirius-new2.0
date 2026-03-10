@@ -1438,7 +1438,64 @@ export default function Studies() {
               </Card>
             </div>
 
-            {/* Study Charts */}
+            {/* ===== STUDY DASHBOARD ===== */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              {[
+                { 
+                  label: "Tempo Estudado", 
+                  value: overallStudyStats?.totals?.tempo_total_horas || 0, 
+                  unit: "h", 
+                  icon: <Timer className="w-5 h-5" />,
+                  color: "from-blue-600 to-blue-400",
+                  bgColor: "bg-blue-500/10",
+                  textColor: "text-blue-400"
+                },
+                { 
+                  label: "Questões Feitas", 
+                  value: overallStudyStats?.totals?.questoes_total || 0, 
+                  unit: "", 
+                  icon: <Target className="w-5 h-5" />,
+                  color: "from-purple-600 to-purple-400",
+                  bgColor: "bg-purple-500/10",
+                  textColor: "text-purple-400"
+                },
+                { 
+                  label: "Acurácia", 
+                  value: overallStudyStats?.totals?.acuracia_geral || 0, 
+                  unit: "%", 
+                  icon: <TrendingUp className="w-5 h-5" />,
+                  color: "from-green-600 to-green-400",
+                  bgColor: "bg-green-500/10",
+                  textColor: (overallStudyStats?.totals?.acuracia_geral || 0) >= 70 ? "text-green-400" : (overallStudyStats?.totals?.acuracia_geral || 0) >= 50 ? "text-yellow-400" : "text-red-400"
+                },
+                { 
+                  label: "Disciplinas Ativas", 
+                  value: overallStudyStats?.totals?.disciplinas_ativas || 0, 
+                  unit: "", 
+                  icon: <BookOpen className="w-5 h-5" />,
+                  color: "from-cyan-600 to-cyan-400",
+                  bgColor: "bg-cyan-500/10",
+                  textColor: "text-cyan-400"
+                }
+              ].map((stat, idx) => (
+                <Card key={idx} className="bg-[#0A0A0A] border-[#27272A] p-4 relative overflow-hidden group hover:border-[#3F3F46] transition-colors">
+                  <div className={`absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r ${stat.color}`} />
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider text-[#71717A] mb-1">{stat.label}</p>
+                      <p className={`text-2xl md:text-3xl font-bold ${stat.textColor} font-data`}>
+                        {stat.value}{stat.unit}
+                      </p>
+                    </div>
+                    <div className={`${stat.bgColor} p-2 rounded-lg ${stat.textColor}`}>
+                      {stat.icon}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Charts Grid */}
             {overallStudyStats && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
                 {/* Focus Sessions Trend */}
@@ -1483,76 +1540,60 @@ export default function Studies() {
                   </Card>
                 )}
 
-                {/* Discipline Time Distribution */}
+                {/* Discipline Distribution - Donut Chart */}
                 {overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 0 && (
                   <Card className="bg-[#0A0A0A] border-[#27272A]">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-400" />Tempo por Disciplina</CardTitle>
+                      <CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-400" />Distribuição por Disciplina</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <BarChart data={overallStudyStats.disciplinas.slice(0, 8)} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
-                          <XAxis type="number" tick={{ fill: '#71717A', fontSize: 10 }} unit="h" />
-                          <YAxis type="category" dataKey="nome" tick={{ fill: '#71717A', fontSize: 9 }} width={90} />
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={overallStudyStats.disciplinas.slice(0, 6).map((d, i) => ({
+                              name: d.nome?.length > 15 ? d.nome.substring(0, 15) + '...' : d.nome,
+                              value: d.tempo_horas || 1
+                            }))}
+                            cx="50%" cy="50%"
+                            innerRadius={50} outerRadius={75}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            {overallStudyStats.disciplinas.slice(0, 6).map((_, i) => (
+                              <Cell key={i} fill={['#007AFF', '#A855F7', '#39FF14', '#00F0FF', '#FF6B6B', '#FFD700'][i]} />
+                            ))}
+                          </Pie>
                           <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} formatter={(v) => `${v}h`} />
-                          <Bar dataKey="tempo_horas" fill="#007AFF" name="Horas" radius={[0, 3, 3, 0]} />
-                        </BarChart>
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                        </PieChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
                 )}
 
-                {/* Study Totals Summary - Radar Chart */}
-                {overallStudyStats.totals && overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 0 && (
+                {/* Radar Chart - Performance */}
+                {overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 2 && (
                   <Card className="bg-[#0A0A0A] border-[#27272A]">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-400" />Desempenho por Disciplina</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={220}>
+                      <ResponsiveContainer width="100%" height={200}>
                         <RadarChart data={overallStudyStats.disciplinas.slice(0, 6).map(d => ({
-                          nome: d.nome?.length > 12 ? d.nome.substring(0, 12) + '...' : d.nome,
+                          nome: d.nome?.length > 10 ? d.nome.substring(0, 10) + '...' : d.nome,
                           horas: d.tempo_horas || 0,
                           questoes: Math.min(d.questoes || 0, 100),
                           acuracia: d.acuracia || 0
                         }))}>
                           <PolarGrid stroke="#27272A" />
-                          <PolarAngleAxis dataKey="nome" tick={{ fill: '#71717A', fontSize: 10 }} />
-                          <PolarRadiusAxis tick={{ fill: '#52525B', fontSize: 9 }} />
+                          <PolarAngleAxis dataKey="nome" tick={{ fill: '#71717A', fontSize: 9 }} />
+                          <PolarRadiusAxis tick={{ fill: '#52525B', fontSize: 8 }} />
                           <Radar name="Horas" dataKey="horas" stroke="#007AFF" fill="#007AFF" fillOpacity={0.2} />
-                          <Radar name="Questões" dataKey="questoes" stroke="#A855F7" fill="#A855F7" fillOpacity={0.15} />
+                          <Radar name="Acurácia" dataKey="acuracia" stroke="#39FF14" fill="#39FF14" fillOpacity={0.15} />
                           <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
                         </RadarChart>
                       </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                )}
-                {overallStudyStats.totals && !(overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 0) && (
-                  <Card className="bg-[#0A0A0A] border-[#27272A]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-400" />Resumo Geral</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="text-center p-3 bg-[#121212] rounded-lg">
-                          <p className="text-2xl font-bold text-[#007AFF]">{overallStudyStats.totals.tempo_total_horas}h</p>
-                          <p className="text-[10px] text-[#71717A] uppercase">Tempo Total</p>
-                        </div>
-                        <div className="text-center p-3 bg-[#121212] rounded-lg">
-                          <p className="text-2xl font-bold text-purple-400">{overallStudyStats.totals.questoes_total}</p>
-                          <p className="text-[10px] text-[#71717A] uppercase">Questões Feitas</p>
-                        </div>
-                        <div className="text-center p-3 bg-[#121212] rounded-lg">
-                          <p className={`text-2xl font-bold ${overallStudyStats.totals.acuracia_geral >= 70 ? 'text-green-400' : overallStudyStats.totals.acuracia_geral >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{overallStudyStats.totals.acuracia_geral}%</p>
-                          <p className="text-[10px] text-[#71717A] uppercase">Acurácia Geral</p>
-                        </div>
-                        <div className="text-center p-3 bg-[#121212] rounded-lg">
-                          <p className="text-2xl font-bold text-[#00F0FF]">{overallStudyStats.totals.disciplinas_ativas}</p>
-                          <p className="text-[10px] text-[#71717A] uppercase">Disciplinas Ativas</p>
-                        </div>
-                      </div>
                     </CardContent>
                   </Card>
                 )}
