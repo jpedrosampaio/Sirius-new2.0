@@ -25,7 +25,7 @@ import {
   SkipForward, Flag, StopCircle, FileUp, Scale, LayoutGrid,
   Download, Image, BellRing, Paperclip, Network
 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, PieChart, Pie, Cell } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -547,6 +547,9 @@ export default function Studies() {
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
 
+  // Topic progress tracking
+  const [topicProgress, setTopicProgress] = useState({});
+
   // Forms
   const [areaForm, setAreaForm] = useState({ name: "", description: "", color: "#007AFF", icon: "book" });
   const [programForm, setProgramForm] = useState({ name: "", description: "", color: "#007AFF", icon: "book", target_date: "" });
@@ -611,19 +614,36 @@ export default function Studies() {
   const fetchNotebookData = async () => {
     if (!selectedNotebook) return;
     try {
-      const [notesR, flashR, quizR, schedR] = await Promise.all([
+      const [notesR, flashR, quizR, schedR, topicR] = await Promise.all([
         axios.get(`${API}/study/notes?notebook_id=${selectedNotebook.notebook_id}`, { withCredentials: true }),
         axios.get(`${API}/study/flashcards?notebook_id=${selectedNotebook.notebook_id}`, { withCredentials: true }),
         axios.get(`${API}/study/quizzes?notebook_id=${selectedNotebook.notebook_id}`, { withCredentials: true }),
-        axios.get(`${API}/study/schedule`, { withCredentials: true })
+        axios.get(`${API}/study/schedule`, { withCredentials: true }),
+        axios.get(`${API}/study/notebooks/${selectedNotebook.notebook_id}/topic-progress`, { withCredentials: true }).catch(() => ({ data: { topics: {} } }))
       ]);
       setNotes(Array.isArray(notesR.data) ? notesR.data : []);
       setFlashcards(Array.isArray(flashR.data) ? flashR.data : []);
       setQuizzes(Array.isArray(quizR.data) ? quizR.data : []);
       setSchedule((Array.isArray(schedR.data) ? schedR.data : []).filter(s => s.notebook_id === selectedNotebook.notebook_id));
+      setTopicProgress(topicR.data?.topics || {});
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // ========== TOPIC PROGRESS ==========
+  const toggleTopicProgress = async (topicKey, status) => {
+    if (!selectedNotebook) return;
+    const currentVal = topicProgress?.[topicKey]?.[status];
+    try {
+      await axios.post(`${API}/study/notebooks/${selectedNotebook.notebook_id}/topic-progress`, {
+        topic_key: topicKey, status, checked: !currentVal
+      }, { withCredentials: true });
+      setTopicProgress(prev => ({
+        ...prev,
+        [topicKey]: { ...(prev[topicKey] || {}), [status]: !currentVal }
+      }));
+    } catch { toast.error("Erro ao atualizar progresso"); }
   };
 
   // ========== SIMULADOS FUNCTIONS ==========
@@ -1483,8 +1503,33 @@ export default function Studies() {
                   </Card>
                 )}
 
-                {/* Study Totals Summary */}
-                {overallStudyStats.totals && (
+                {/* Study Totals Summary - Radar Chart */}
+                {overallStudyStats.totals && overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 0 && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-400" />Desempenho por Disciplina</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <RadarChart data={overallStudyStats.disciplinas.slice(0, 6).map(d => ({
+                          nome: d.nome?.length > 12 ? d.nome.substring(0, 12) + '...' : d.nome,
+                          horas: d.tempo_horas || 0,
+                          questoes: Math.min(d.questoes || 0, 100),
+                          acuracia: d.acuracia || 0
+                        }))}>
+                          <PolarGrid stroke="#27272A" />
+                          <PolarAngleAxis dataKey="nome" tick={{ fill: '#71717A', fontSize: 10 }} />
+                          <PolarRadiusAxis tick={{ fill: '#52525B', fontSize: 9 }} />
+                          <Radar name="Horas" dataKey="horas" stroke="#007AFF" fill="#007AFF" fillOpacity={0.2} />
+                          <Radar name="Questões" dataKey="questoes" stroke="#A855F7" fill="#A855F7" fillOpacity={0.15} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                        </RadarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+                {overallStudyStats.totals && !(overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 0) && (
                   <Card className="bg-[#0A0A0A] border-[#27272A]">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-400" />Resumo Geral</CardTitle>
@@ -1969,6 +2014,100 @@ export default function Studies() {
                     </Dialog>
                   </div>
                 </div>
+
+                {/* Conteúdo Programático with Progress Tracking */}
+                {selectedNotebook?.conteudo_programatico?.length > 0 && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-purple-400" />Conteúdo Programático
+                        <Badge variant="outline" className="text-[10px] ml-auto">
+                          {Object.keys(topicProgress).filter(k => topicProgress[k]?.studied).length}/{selectedNotebook.conteudo_programatico.reduce((a, item) => a + 1 + (item.subtopicos?.length || 0), 0)} concluídos
+                        </Badge>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {selectedNotebook.conteudo_programatico.map((item, idx) => {
+                          const topicKey = String(idx);
+                          const tp = topicProgress[topicKey] || {};
+                          return (
+                            <div key={idx} className="border border-[#27272A] rounded-lg overflow-hidden">
+                              <div className="flex items-center gap-2 px-3 py-2 bg-[#121212]">
+                                <button
+                                  onClick={() => toggleTopicProgress(topicKey, 'studied')}
+                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${tp.studied ? 'bg-green-500 border-green-500' : 'border-[#52525B] hover:border-green-500'}`}
+                                >
+                                  {tp.studied && <CheckCircle2 className="w-3 h-3 text-white" />}
+                                </button>
+                                <span className={`text-xs font-medium flex-1 ${tp.studied ? 'text-green-400 line-through' : 'text-white'}`}>{idx + 1}. {item.assunto}</span>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => toggleTopicProgress(topicKey, 'reviewed')}
+                                    title="Revisado"
+                                    className={`px-1.5 py-0.5 rounded text-[9px] border transition-colors ${tp.reviewed ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'border-[#3F3F46] text-[#71717A] hover:border-blue-500'}`}
+                                  >🔄</button>
+                                  <button
+                                    onClick={() => toggleTopicProgress(topicKey, 'mastered')}
+                                    title="Dominado"
+                                    className={`px-1.5 py-0.5 rounded text-[9px] border transition-colors ${tp.mastered ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'border-[#3F3F46] text-[#71717A] hover:border-yellow-500'}`}
+                                  >⭐</button>
+                                </div>
+                              </div>
+                              {item.subtopicos?.length > 0 && (
+                                <div className="px-3 py-2 space-y-1.5 bg-[#0A0A0A]">
+                                  {item.subtopicos.map((sub, si) => {
+                                    const subKey = `${idx}_${si}`;
+                                    const stp = topicProgress[subKey] || {};
+                                    return (
+                                      <div key={si} className="flex items-center gap-2 ml-4">
+                                        <button
+                                          onClick={() => toggleTopicProgress(subKey, 'studied')}
+                                          className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${stp.studied ? 'bg-green-500 border-green-500' : 'border-[#52525B] hover:border-green-500'}`}
+                                        >
+                                          {stp.studied && <CheckCircle2 className="w-2.5 h-2.5 text-white" />}
+                                        </button>
+                                        <span className={`text-[11px] flex-1 ${stp.studied ? 'text-green-400/70 line-through' : 'text-[#A1A1AA]'}`}>{sub}</span>
+                                        <div className="flex gap-0.5">
+                                          <button
+                                            onClick={() => toggleTopicProgress(subKey, 'reviewed')}
+                                            className={`px-1 py-0.5 rounded text-[8px] border ${stp.reviewed ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'border-[#27272A] text-[#52525B]'}`}
+                                          >🔄</button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Quick Action Buttons for Content */}
+                      <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-[#27272A]">
+                        <Button size="sm" onClick={handleGenerateQuiz} className="bg-purple-600 h-7 text-[10px]" disabled={generatingQuiz}>
+                          {generatingQuiz ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Sparkles className="w-3 h-3 mr-1" />Gerar Questões</>}
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] border-yellow-500/30 text-yellow-400" onClick={() => {
+                          if (notes.length > 0) handleGenerateFlashcards(notes[0].note_id);
+                          else toast.info("Crie uma nota primeiro para gerar flashcards");
+                        }} disabled={generatingFlashcards}>
+                          <Brain className="w-3 h-3 mr-1" />Gerar Flashcards
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] border-green-500/30 text-green-400" onClick={() => setShowMindmapDialog(true)}>
+                          <Network className="w-3 h-3 mr-1" />Mapa Mental
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-7 text-[10px] border-blue-500/30 text-blue-400" onClick={() => {
+                          const simForm = { title: `Simulado - ${selectedNotebook.name}`, disciplina: selectedNotebook.name, question_type: "multipla_escolha", num_questions: 10, difficulty: "medio" };
+                          setGenerateForm(simForm);
+                          setShowGenerateDialog(true);
+                        }}>
+                          <ClipboardList className="w-3 h-3 mr-1" />Gerar Simulado
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Notes */}
                 <Card className="bg-[#0A0A0A] border-[#27272A]">
@@ -2989,7 +3128,7 @@ export default function Studies() {
                             <Input value={disc.name} onChange={e => { const u = [...editedDisciplinas]; u[i] = {...u[i], name: e.target.value}; setEditedDisciplinas(u); }}
                               className="bg-[#121212] border-[#27272A] h-7 text-xs font-medium flex-1" />
                           </div>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-2 gap-2">
                             <div>
                               <Label className="text-[10px] text-[#A1A1AA]">Peso (edital)</Label>
                               <Select value={String(disc.weight || 1)} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], weight: parseInt(v)}; setEditedDisciplinas(u); }}>
@@ -3000,24 +3139,13 @@ export default function Studies() {
                               </Select>
                             </div>
                             <div>
-                              <Label className="text-[10px] text-[#A1A1AA]">Dificuldade</Label>
-                              <Select value={disc.dificuldade || "media"} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], dificuldade: v}; setEditedDisciplinas(u); }}>
-                                <SelectTrigger className="bg-[#121212] border-[#27272A] h-7 text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
-                                  <SelectItem value="baixa">Baixa</SelectItem>
-                                  <SelectItem value="media">Média</SelectItem>
-                                  <SelectItem value="alta">Alta</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
                               <Label className="text-[10px] text-[#A1A1AA]">Minha dificuldade</Label>
-                              <Select value={disc.user_difficulty || "media"} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], user_difficulty: v}; setEditedDisciplinas(u); }}>
+                              <Select value={disc.user_difficulty || disc.dificuldade || "media"} onValueChange={v => { const u = [...editedDisciplinas]; u[i] = {...u[i], user_difficulty: v, dificuldade: v}; setEditedDisciplinas(u); }}>
                                 <SelectTrigger className="bg-[#121212] border-[#27272A] h-7 text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
-                                  <SelectItem value="baixa">Fácil pra mim</SelectItem>
+                                  <SelectItem value="baixa">Fácil</SelectItem>
                                   <SelectItem value="media">Normal</SelectItem>
-                                  <SelectItem value="alta">Difícil pra mim</SelectItem>
+                                  <SelectItem value="alta">Difícil</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -3253,7 +3381,16 @@ export default function Studies() {
 
                 {/* Weekly Schedule */}
                 <Card className="bg-[#121212] border-[#27272A]">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-400" />Cronograma Semanal</CardTitle></CardHeader>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm flex items-center gap-2"><Calendar className="w-4 h-4 text-blue-400" />Cronograma Semanal</CardTitle>
+                      <div className="flex gap-2">
+                        <Badge className="bg-blue-500/20 text-blue-400 text-[9px]">📖 Teoria</Badge>
+                        <Badge className="bg-purple-500/20 text-purple-400 text-[9px]">📝 Questões</Badge>
+                        <Badge className="bg-green-500/20 text-green-400 text-[9px]">🔄 Revisão</Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       {(cronogramaData.cronograma || []).map((day, di) => (
@@ -3266,11 +3403,21 @@ export default function Studies() {
                           </div>
                           <div className="p-2 space-y-1">
                             {(day.blocos || []).map((bloco, bi) => (
-                              <div key={bi} className="flex items-start gap-2 p-2 bg-[#0A0A0A] rounded-md">
+                              <div key={bi} className={`flex items-start gap-2 p-2 rounded-md ${
+                                (bloco.tipo_estudo || '').includes('Teoria') ? 'bg-blue-950/30 border border-blue-500/10' :
+                                (bloco.tipo_estudo || '').includes('Questões') ? 'bg-purple-950/30 border border-purple-500/10' :
+                                (bloco.tipo_estudo || '').includes('Revisão') ? 'bg-green-950/30 border border-green-500/10' :
+                                'bg-[#0A0A0A]'
+                              }`}>
                                 <div className="w-1.5 min-h-[2rem] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: bloco.disciplina_color || '#007AFF' }} />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-medium text-white truncate">{bloco.disciplina_nome || bloco.notebook_id}</p>
-                                  <p className="text-[10px] text-[#A1A1AA]">{bloco.tipo_estudo || 'Teoria + Questões'}</p>
+                                  <p className={`text-[10px] font-medium ${
+                                    (bloco.tipo_estudo || '').includes('Teoria') ? 'text-blue-400' :
+                                    (bloco.tipo_estudo || '').includes('Questões') ? 'text-purple-400' :
+                                    (bloco.tipo_estudo || '').includes('Revisão') ? 'text-green-400' :
+                                    'text-[#A1A1AA]'
+                                  }`}>{bloco.tipo_estudo || 'Teoria + Questões'}</p>
                                   {bloco.assuntos_foco && bloco.assuntos_foco.length > 0 && (
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       {bloco.assuntos_foco.map((assunto, ai) => (
@@ -3716,7 +3863,7 @@ export default function Studies() {
                             <div><p className="text-lg font-bold text-white">{disc.study_hours}h</p><p className="text-[9px] text-[#71717A]">Estudado</p></div>
                             <div><p className="text-lg font-bold text-purple-400">{disc.total_questions_answered}</p><p className="text-[9px] text-[#71717A]">Questões</p></div>
                             <div><p className={`text-lg font-bold ${disc.accuracy >= 70 ? 'text-green-400' : disc.accuracy >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{disc.accuracy}%</p><p className="text-[9px] text-[#71717A]">Acerto</p></div>
-                            <div><p className="text-lg font-bold text-blue-400">{disc.num_questoes}</p><p className="text-[9px] text-[#71717A]">Questões Edital</p></div>
+                            <div><p className="text-lg font-bold text-blue-400">{disc.num_questoes || '-'}</p><p className="text-[9px] text-[#71717A]">Questões Edital</p></div>
                           </div>
 
                           {/* Conteúdo Programático Detalhado */}

@@ -120,7 +120,6 @@ export default function Reports() {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [reportType, setReportType] = useState("diário");
-  const [period, setPeriod] = useState("hoje");
 
   useEffect(() => {
     fetchUser();
@@ -147,6 +146,8 @@ export default function Reports() {
 
   const handleGenerateReport = async () => {
     setLoading(true);
+    const periodMap = { "diário": "hoje", "semanal": "esta semana", "mensal": "este mês", "sprint": "esta semana" };
+    const period = periodMap[reportType] || "hoje";
     try {
       await axios.post(`${API}/reports/generate?report_type=${reportType}&period=${period}`, {}, {
         withCredentials: true
@@ -182,23 +183,10 @@ export default function Reports() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-[#121212] border-[#27272A] text-white">
-                        <SelectItem value="diário">Diário</SelectItem>
-                        <SelectItem value="semanal">Semanal</SelectItem>
-                        <SelectItem value="mensal">Mensal</SelectItem>
+                        <SelectItem value="diário">Diário (Hoje)</SelectItem>
+                        <SelectItem value="semanal">Semanal (Esta Semana)</SelectItem>
+                        <SelectItem value="mensal">Mensal (Este Mês)</SelectItem>
                         <SelectItem value="sprint">Fim de Sprint</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex-1">
-                    <Select value={period} onValueChange={setPeriod}>
-                      <SelectTrigger data-testid="report-period-select" className="bg-[#121212] border-[#27272A] text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#121212] border-[#27272A] text-white">
-                        <SelectItem value="hoje">Hoje</SelectItem>
-                        <SelectItem value="esta semana">Esta Semana</SelectItem>
-                        <SelectItem value="este mês">Este Mês</SelectItem>
-                        <SelectItem value="último mês">Último Mês</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -208,7 +196,7 @@ export default function Reports() {
                     disabled={loading}
                     className="bg-[#007AFF] hover:bg-[#0062CC] uppercase text-xs tracking-widest"
                   >
-                    {loading ? "Gerando..." : "Gerar"}
+                    {loading ? "Gerando..." : "Gerar Relatório"}
                   </Button>
                 </div>
               </div>

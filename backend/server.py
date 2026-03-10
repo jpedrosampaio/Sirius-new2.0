@@ -65,6 +65,8 @@ class User(BaseModel):
     picture: Optional[str] = None
     xp: int = 0
     rank: str = "Recruta"
+    birth_date: Optional[str] = None
+    bio: Optional[str] = None
     created_at: datetime
 
 class UserCreate(BaseModel):
@@ -394,6 +396,8 @@ async def get_current_user(authorization: Optional[str] = None, session_token: O
     user_doc.setdefault("xp", 0)
     user_doc.setdefault("rank", "Recruta")
     user_doc.setdefault("picture", None)
+    user_doc.setdefault("birth_date", None)
+    user_doc.setdefault("bio", None)
     
     if isinstance(user_doc['created_at'], str):
         user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
@@ -590,6 +594,102 @@ async def remove_profile_picture(request: Request, session_token: Optional[str] 
     
     return {"message": "Profile picture removed"}
 
+@api_router.patch("/auth/profile")
+async def update_profile(request: Request, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Update user profile info (name, birth_date, bio)"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    update_fields = {}
+    for field in ["name", "birth_date", "bio"]:
+        if field in data:
+            update_fields[field] = data[field]
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": update_fields}
+    )
+    
+    updated_user = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "password": 0})
+    return updated_user
+
+@api_router.get("/auth/birthday-check")
+async def check_birthday(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Check if today is user's birthday"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    birth_date = user_doc.get("birth_date")
+    
+    if not birth_date:
+        return {"is_birthday": False, "age": None}
+    
+    try:
+        bd = datetime.strptime(birth_date, "%Y-%m-%d")
+        today = datetime.now(timezone.utc)
+        is_birthday = bd.month == today.month and bd.day == today.day
+        age = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+        return {"is_birthday": is_birthday, "age": age, "birth_date": birth_date}
+    except Exception:
+        return {"is_birthday": False, "age": None}
+
+@api_router.post("/study/notebooks/{notebook_id}/topic-progress")
+async def update_topic_progress(request: Request, notebook_id: str, data: dict, session_token: Optional[str] = Cookie(None)):
+    """Mark a topic/subtopic as studied, reviewed, etc."""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    topic_key = data.get("topic_key", "")  # e.g. "0" for assunto index or "0_1" for subtopic
+    status = data.get("status", "studied")  # studied, reviewed, mastered
+    checked = data.get("checked", True)
+    
+    if not topic_key:
+        raise HTTPException(status_code=400, detail="topic_key é obrigatório")
+    
+    progress_id = f"tp_{notebook_id}_{user.user_id}"
+    progress_doc = await db.topic_progress.find_one({"progress_id": progress_id}, {"_id": 0})
+    
+    if not progress_doc:
+        progress_doc = {
+            "progress_id": progress_id,
+            "notebook_id": notebook_id,
+            "user_id": user.user_id,
+            "topics": {},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.topic_progress.insert_one(progress_doc)
+    
+    field_key = f"topics.{topic_key}.{status}"
+    if checked:
+        await db.topic_progress.update_one(
+            {"progress_id": progress_id},
+            {"$set": {field_key: True, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    else:
+        await db.topic_progress.update_one(
+            {"progress_id": progress_id},
+            {"$unset": {field_key: ""}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    
+    updated = await db.topic_progress.find_one({"progress_id": progress_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/study/notebooks/{notebook_id}/topic-progress")
+async def get_topic_progress(request: Request, notebook_id: str, session_token: Optional[str] = Cookie(None)):
+    """Get topic progress for a notebook"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    progress_doc = await db.topic_progress.find_one(
+        {"notebook_id": notebook_id, "user_id": user.user_id}, {"_id": 0}
+    )
+    
+    return progress_doc or {"topics": {}}
+
 @api_router.get("/tasks")
 async def get_tasks(request: Request, date: Optional[str] = None, recurrence: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
@@ -638,7 +738,7 @@ async def create_task(request: Request, task_data: TaskCreate, session_token: Op
         "title": task_data.title,
         "description": task_data.description,
         "priority": task_data.priority,
-        "xp_reward": 10 if task_data.priority == "low" else 20 if task_data.priority == "medium" else 30,
+        "xp_reward": 5 if task_data.priority == "low" else 10 if task_data.priority == "medium" else 15,
         "recurrence": task_data.recurrence,
         "is_template": True,
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -765,11 +865,11 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
         )
         
         # Deduct XP
-        new_xp = max(0, user.xp - 15)
+        new_xp = max(0, user.xp - 8)
         new_rank = calculate_rank(new_xp)
         await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
         
-        return {"message": "Habit uncompleted", "streak": streak, "best_streak": best_streak, "xp_earned": -15, "new_xp": new_xp, "uncompleted": True}
+        return {"message": "Habit uncompleted", "streak": streak, "best_streak": best_streak, "xp_earned": -8, "new_xp": new_xp, "uncompleted": True}
     
     # Complete - add date and award XP
     completions = habit['completions'] + [date]
@@ -783,11 +883,11 @@ async def complete_habit(request: Request, habit_id: str, date: str, session_tok
         {"$set": {"completions": completions, "streak": streak, "best_streak": best_streak}}
     )
     
-    new_xp = user.xp + 15
+    new_xp = user.xp + 8
     new_rank = calculate_rank(new_xp)
     await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
     
-    return {"message": "Habit completed", "streak": streak, "best_streak": best_streak, "xp_earned": 15, "new_xp": new_xp, "uncompleted": False}
+    return {"message": "Habit completed", "streak": streak, "best_streak": best_streak, "xp_earned": 8, "new_xp": new_xp, "uncompleted": False}
 
 @api_router.delete("/habits/{habit_id}")
 async def delete_habit(request: Request, habit_id: str, session_token: Optional[str] = Cookie(None)):
@@ -1958,7 +2058,7 @@ async def get_current_challenges(request: Request, session_token: Optional[str] 
                 "challenge_id": f"chal_{uuid.uuid4().hex[:12]}",
                 "title": "Mestre das Tarefas",
                 "description": "Complete 10 tarefas esta semana",
-                "xp_reward": 100,
+                "xp_reward": 50,
                 "week_start": week_start,
                 "week_end": (today + timedelta(days=7-today.weekday())).isoformat(),
                 "completed_by": [],
@@ -1968,7 +2068,7 @@ async def get_current_challenges(request: Request, session_token: Optional[str] 
                 "challenge_id": f"chal_{uuid.uuid4().hex[:12]}",
                 "title": "Guardião dos Hábitos",
                 "description": "Mantenha 5 dias de streak em qualquer hábito",
-                "xp_reward": 150,
+                "xp_reward": 75,
                 "week_start": week_start,
                 "week_end": (today + timedelta(days=7-today.weekday())).isoformat(),
                 "completed_by": [],
@@ -1978,7 +2078,7 @@ async def get_current_challenges(request: Request, session_token: Optional[str] 
                 "challenge_id": f"chal_{uuid.uuid4().hex[:12]}",
                 "title": "Controlador Financeiro",
                 "description": "Registre todas as transações diárias por 5 dias",
-                "xp_reward": 200,
+                "xp_reward": 100,
                 "week_start": week_start,
                 "week_end": (today + timedelta(days=7-today.weekday())).isoformat(),
                 "completed_by": [],
@@ -2068,14 +2168,19 @@ async def get_alerts(request: Request, session_token: Optional[str] = Cookie(Non
 def calculate_rank(xp: int) -> str:
     ranks = [
         (0, "Recruta"),
-        (100, "Soldado"),
-        (300, "Cabo"),
-        (600, "Sargento"),
-        (1000, "Tenente"),
-        (1500, "Capitão"),
-        (2200, "Major"),
-        (3000, "Coronel"),
-        (4000, "General")
+        (200, "Soldado"),
+        (500, "Cabo"),
+        (1000, "Sargento"),
+        (1800, "Subtenente"),
+        (3000, "Tenente"),
+        (4500, "Capitão"),
+        (6500, "Major"),
+        (9000, "Tenente-Coronel"),
+        (12000, "Coronel"),
+        (16000, "General de Brigada"),
+        (21000, "General de Divisão"),
+        (27000, "General de Exército"),
+        (35000, "Marechal")
     ]
     for threshold, rank in reversed(ranks):
         if xp >= threshold:
@@ -2984,7 +3089,7 @@ async def log_workout(request: Request, workout_data: WorkoutLogCreate, session_
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
     # Calcular XP baseado no tipo de atividade e duração
-    base_xp = 20
+    base_xp = 10
     duration_bonus = (workout_data.duration_minutes // 15) * 5  # +5 XP a cada 15 min
     xp_earned = base_xp + duration_bonus
     
@@ -3973,7 +4078,7 @@ async def complete_daily_workout(request: Request, plan_id: str, data: dict, ses
     total_exercises = len(exercises_completed)
     
     # Calculate XP based on completion
-    base_xp = 20
+    base_xp = 10
     completion_bonus = int((completed_count / total_exercises) * 30) if total_exercises > 0 else 0
     duration_bonus = (data.get("duration_minutes", 30) // 15) * 5
     total_xp = base_xp + completion_bonus + duration_bonus
@@ -5221,7 +5326,7 @@ REGRAS IMPORTANTES:
                     current_min = end_min
         
         # Award XP
-        xp_earned = 50
+        xp_earned = 25
         await award_xp(user.user_id, xp_earned)
         
         return {
@@ -5348,6 +5453,10 @@ async def get_edital_verticalizado(request: Request, program_id: str, session_to
     disciplinas_verticalizadas = []
     total_assuntos = 0
     
+    # Check if all num_questoes_edital are the same (AI likely used total instead of per-discipline)
+    all_questoes = [nb.get("num_questoes_edital", 0) for nb in notebooks]
+    all_same_questoes = len(set(all_questoes)) == 1 and all_questoes[0] > 0 and len(all_questoes) > 1
+    
     for nb in sorted(notebooks, key=lambda x: x.get("weight", 1), reverse=True):
         conteudo = nb.get("conteudo_programatico", [])
         topicos = nb.get("topicos", [])
@@ -5361,7 +5470,7 @@ async def get_edital_verticalizado(request: Request, program_id: str, session_to
             "notebook_id": nb.get("notebook_id"),
             "nome": nb.get("name", ""),
             "peso": nb.get("weight", 1),
-            "num_questoes": nb.get("num_questoes_edital", 0),
+            "num_questoes": 0 if all_same_questoes else nb.get("num_questoes_edital", 0),
             "dificuldade": nb.get("dificuldade", "media"),
             "grupo": nb.get("grupo", ""),
             "color": nb.get("color", "#007AFF"),
@@ -5458,6 +5567,7 @@ async def update_program_disciplinas(request: Request, program_id: str, data: di
             
             # Distribute subjects across days
             created_schedules = 0
+            block_count = 0
             for day_idx, day in enumerate(day_names):
                 current_hour = 8
                 current_min = 0
@@ -5490,7 +5600,13 @@ async def update_program_disciplinas(request: Request, program_id: str, data: di
                     end_time = f"{end_hour:02d}:{end_min:02d}"
                     
                     ud = nb.get("user_difficulty", "media")
-                    tipo = "Teoria + Questões" if ud != "alta" else "Foco Intensivo + Questões"
+                    # Cycle through study types: Teoria, Questões, Revisão
+                    study_types_cycle = ["📖 Teoria", "📝 Questões", "🔄 Revisão"]
+                    tipo = study_types_cycle[block_count % 3]
+                    if ud == "alta":
+                        # For difficult subjects, more questions and review
+                        study_types_hard = ["📖 Teoria", "📝 Questões", "📝 Questões", "🔄 Revisão"]
+                        tipo = study_types_hard[block_count % 4]
                     
                     sched_id = f"sched_{uuid.uuid4().hex[:12]}"
                     sched_doc = {
@@ -5508,6 +5624,7 @@ async def update_program_disciplinas(request: Request, program_id: str, data: di
                     }
                     await db.study_schedules.insert_one(sched_doc)
                     created_schedules += 1
+                    block_count += 1
                     
                     current_hour = end_hour
                     current_min = end_min
@@ -5626,7 +5743,7 @@ async def log_questions(request: Request, data: QuestionLogCreate, session_token
     )
     
     # Award XP: 2 XP per correct answer
-    xp_earned = data.correct * 2
+    xp_earned = data.correct
     new_xp = user.xp + xp_earned
     new_rank = calculate_rank(new_xp)
     await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
@@ -5697,7 +5814,7 @@ async def complete_focus_session(request: Request, data: FocusSessionCreate, ses
     today = datetime.now().strftime("%Y-%m-%d")
     
     # XP: 10 XP per 25 min completed
-    xp_earned = max(5, (data.focus_minutes // 25) * 10)
+    xp_earned = max(3, (data.focus_minutes // 25) * 5)
     
     focus_id = f"focus_{uuid.uuid4().hex[:12]}"
     focus_doc = {
@@ -6049,7 +6166,7 @@ async def create_study_task(request: Request, task_data: StudyTaskCreate, sessio
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
-    xp_reward = 10 if task_data.priority == "low" else 20 if task_data.priority == "medium" else 30
+    xp_reward = 5 if task_data.priority == "low" else 10 if task_data.priority == "medium" else 15
     
     task_id = f"stask_{uuid.uuid4().hex[:12]}"
     task_doc = {
@@ -8018,7 +8135,7 @@ REGRAS CRÍTICAS:
                     current_min = end_min
         
         # Award XP
-        xp_earned = 50
+        xp_earned = 25
         await award_xp(user.user_id, xp_earned)
         
         # Clean up analysis

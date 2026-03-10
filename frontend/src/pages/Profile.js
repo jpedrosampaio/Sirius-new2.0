@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Award, Trophy, Star, Shield, Target, TrendingUp, CheckSquare, Camera, Trash2, Upload } from "lucide-react";
+import { Award, Trophy, Star, Shield, Target, TrendingUp, CheckSquare, Camera, Trash2, Upload, Cake, Edit3, Save, X } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { clearToken } from "@/lib/api";
@@ -20,18 +20,24 @@ export default function Profile() {
   const [achievements, setAchievements] = useState([]);
   const [stats, setStats] = useState(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', birth_date: '', bio: '' });
+  const [birthdayInfo, setBirthdayInfo] = useState(null);
+  const [savingProfile, setSavingProfile] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchUser();
     fetchAchievements();
     fetchStats();
+    checkBirthday();
   }, []);
 
   const fetchUser = async () => {
     try {
       const res = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(res.data);
+      setEditForm({ name: res.data.name || '', birth_date: res.data.birth_date || '', bio: res.data.bio || '' });
     } catch (error) {
       toast.error("Erro ao carregar usuário");
     }
@@ -52,6 +58,28 @@ export default function Profile() {
       setAchievements(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Erro ao carregar conquistas", error);
+    }
+  };
+
+  const checkBirthday = async () => {
+    try {
+      const res = await axios.get(`${API}/auth/birthday-check`, { withCredentials: true });
+      setBirthdayInfo(res.data);
+    } catch { /* noop */ }
+  };
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      const res = await axios.patch(`${API}/auth/profile`, editForm, { withCredentials: true });
+      setUser(res.data);
+      setEditingProfile(false);
+      toast.success("Perfil atualizado!");
+      checkBirthday();
+    } catch (error) {
+      toast.error("Erro ao atualizar perfil");
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -116,14 +144,19 @@ export default function Profile() {
 
   const ranks = [
     { name: "Recruta", xp: 0, icon: Shield, color: "#A1A1AA" },
-    { name: "Soldado", xp: 100, icon: Shield, color: "#A1A1AA" },
-    { name: "Cabo", xp: 300, icon: Star, color: "#CD7F32" },
-    { name: "Sargento", xp: 600, icon: Star, color: "#C0C0C0" },
-    { name: "Tenente", xp: 1000, icon: Star, color: "#FFD700" },
-    { name: "Capitão", xp: 1500, icon: Trophy, color: "#FFD700" },
-    { name: "Major", xp: 2200, icon: Trophy, color: "#FFD700" },
-    { name: "Coronel", xp: 3000, icon: Award, color: "#FFD700" },
-    { name: "General", xp: 4000, icon: Award, color: "#FFD700" }
+    { name: "Soldado", xp: 200, icon: Shield, color: "#A1A1AA" },
+    { name: "Cabo", xp: 500, icon: Star, color: "#CD7F32" },
+    { name: "Sargento", xp: 1000, icon: Star, color: "#C0C0C0" },
+    { name: "Subtenente", xp: 1800, icon: Star, color: "#FFD700" },
+    { name: "Tenente", xp: 3000, icon: Trophy, color: "#FFD700" },
+    { name: "Capitão", xp: 4500, icon: Trophy, color: "#FFD700" },
+    { name: "Major", xp: 6500, icon: Trophy, color: "#FF8C00" },
+    { name: "Tenente-Coronel", xp: 9000, icon: Award, color: "#FF4500" },
+    { name: "Coronel", xp: 12000, icon: Award, color: "#FF4500" },
+    { name: "General de Brigada", xp: 16000, icon: Award, color: "#FFD700" },
+    { name: "General de Divisão", xp: 21000, icon: Award, color: "#FFD700" },
+    { name: "General de Exército", xp: 27000, icon: Award, color: "#FFD700" },
+    { name: "Marechal", xp: 35000, icon: Award, color: "#FFD700" }
   ];
 
   const getNextRank = () => {
@@ -158,6 +191,15 @@ export default function Profile() {
         <div className="max-w-5xl mx-auto pt-14 md:pt-0">
           <h1 className="font-heading text-3xl md:text-4xl mb-8" data-testid="profile-title">PERFIL DO OPERADOR</h1>
 
+          {/* Birthday Greeting */}
+          {birthdayInfo?.is_birthday && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-yellow-500/10 via-pink-500/10 to-purple-500/10 border border-yellow-500/30 rounded-lg text-center animate-pulse">
+              <Cake className="w-8 h-8 text-yellow-400 mx-auto mb-2" />
+              <h2 className="font-heading text-xl text-yellow-400">Feliz Aniversário! 🎉</h2>
+              <p className="text-sm text-[#A1A1AA]">Parabéns pelos seus {birthdayInfo.age} anos! Continue firme na missão!</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6 lg:col-span-2">
               <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
@@ -168,7 +210,6 @@ export default function Profile() {
                       {(user.name || 'U').charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
-                  {/* Overlay para upload */}
                   <div className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <input
                       ref={fileInputRef}
@@ -189,7 +230,6 @@ export default function Profile() {
                       )}
                     </button>
                   </div>
-                  {/* Botão de remover foto */}
                   {user.picture && (
                     <button
                       onClick={handleRemovePhoto}
@@ -200,14 +240,70 @@ export default function Profile() {
                   )}
                 </div>
                 <div className="flex-1 text-center sm:text-left min-w-0">
-                  <h2 className="font-heading text-2xl sm:text-3xl mb-2 truncate">{user.name || 'Usuário'}</h2>
-                  <p className="text-[#A1A1AA] mb-4 text-sm truncate">{user.email || ''}</p>
-                  <div className="flex items-center justify-center sm:justify-start space-x-4">
-                    <div className="rank-badge bg-[#007AFF] text-white px-3 py-1 rounded-sm text-sm">
-                      {user.rank || 'Recruta'}
+                  {editingProfile ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[10px] text-[#71717A] uppercase">Nome</label>
+                        <input
+                          type="text"
+                          value={editForm.name}
+                          onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))}
+                          className="w-full bg-[#121212] border border-[#27272A] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[#007AFF]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#71717A] uppercase">Data de Nascimento</label>
+                        <input
+                          type="date"
+                          value={editForm.birth_date}
+                          onChange={e => setEditForm(p => ({ ...p, birth_date: e.target.value }))}
+                          className="w-full bg-[#121212] border border-[#27272A] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[#007AFF]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-[#71717A] uppercase">Bio</label>
+                        <textarea
+                          value={editForm.bio}
+                          onChange={e => setEditForm(p => ({ ...p, bio: e.target.value }))}
+                          rows={2}
+                          maxLength={200}
+                          placeholder="Conte um pouco sobre você..."
+                          className="w-full bg-[#121212] border border-[#27272A] rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-[#007AFF] resize-none"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleSaveProfile} disabled={savingProfile} className="bg-green-600 h-7 text-xs">
+                          <Save className="w-3 h-3 mr-1" />{savingProfile ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingProfile(false)} className="h-7 text-xs">
+                          <X className="w-3 h-3 mr-1" />Cancelar
+                        </Button>
+                      </div>
                     </div>
-                    <div className="font-data text-xl sm:text-2xl">{user.xp ?? 0} XP</div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 justify-center sm:justify-start">
+                        <h2 className="font-heading text-2xl sm:text-3xl truncate">{user.name || 'Usuário'}</h2>
+                        <button onClick={() => setEditingProfile(true)} className="p-1 hover:bg-[#27272A] rounded transition-colors">
+                          <Edit3 className="w-4 h-4 text-[#71717A]" />
+                        </button>
+                      </div>
+                      <p className="text-[#A1A1AA] text-sm truncate">{user.email || ''}</p>
+                      {user.bio && <p className="text-[#71717A] text-xs mt-1 italic">{user.bio}</p>}
+                      {birthdayInfo?.age && (
+                        <p className="text-[#71717A] text-xs mt-1 flex items-center gap-1 justify-center sm:justify-start">
+                          <Cake className="w-3 h-3" /> {birthdayInfo.age} anos
+                          {user.birth_date && <span className="text-[#52525B]">• {new Date(user.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-center sm:justify-start space-x-4 mt-3">
+                        <div className="rank-badge bg-[#007AFF] text-white px-3 py-1 rounded-sm text-sm">
+                          {user.rank || 'Recruta'}
+                        </div>
+                        <div className="font-data text-xl sm:text-2xl">{user.xp ?? 0} XP</div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -255,7 +351,7 @@ export default function Profile() {
 
           <Card className="bg-[#0A0A0A] border-[#27272A] p-6 mb-8">
             <h3 className="font-heading text-2xl mb-6 uppercase">Hierarquia Militar</h3>
-            <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-4">
+            <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-3">
               {ranks.map((rank, index) => {
                 const Icon = rank.icon;
                 const isUnlocked = index <= currentRankIndex;
