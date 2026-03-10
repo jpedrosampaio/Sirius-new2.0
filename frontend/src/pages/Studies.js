@@ -492,12 +492,6 @@ export default function Studies() {
   // Multi-cargo edital
   const [editalAnalysis, setEditalAnalysis] = useState(null);
   const [editalAnalyzing, setEditalAnalyzing] = useState(false);
-  const [editalAreaId, setEditalAreaId] = useState(null);
-
-  // Auto-sync editalAreaId with selectedArea
-  useEffect(() => {
-    if (selectedArea?.area_id) setEditalAreaId(selectedArea.area_id);
-  }, [selectedArea]);
   const [showCargoSelection, setShowCargoSelection] = useState(false);
   const [selectedCargoIndex, setSelectedCargoIndex] = useState(0);
   const [creatingFromCargo, setCreatingFromCargo] = useState(false);
@@ -859,13 +853,12 @@ export default function Studies() {
   // ========== EDITAL IMPORT HANDLERS ==========
   const handleImportEdital = async () => {
     if (!editalFile) { toast.error("Selecione um arquivo PDF do edital"); return; }
-    const areaId = selectedArea?.area_id || editalAreaId;
-    if (!areaId) { toast.error("Selecione uma área primeiro"); return; }
+    if (!selectedArea) { toast.error("Selecione uma área primeiro"); return; }
     setEditalImporting(true);
     try {
       const formData = new FormData();
       formData.append("file", editalFile);
-      formData.append("area_id", areaId);
+      formData.append("area_id", selectedArea.area_id);
       if (editalForm.target_date) formData.append("target_date", editalForm.target_date);
       formData.append("hours_per_day", editalForm.hours_per_day.toString());
       formData.append("days_per_week", editalForm.days_per_week.toString());
@@ -985,8 +978,7 @@ export default function Studies() {
   // ========== MULTI-CARGO EDITAL IMPORT ==========
   const handleAnalyzeEdital = async () => {
     if (!editalFile) { toast.error("Selecione um arquivo PDF do edital"); return; }
-    const areaId = selectedArea?.area_id || editalAreaId;
-    if (!areaId) { toast.error("Selecione uma área primeiro"); return; }
+    if (!selectedArea) { toast.error("Selecione uma área primeiro"); return; }
     setEditalAnalyzing(true);
     try {
       const formData = new FormData();
@@ -1017,7 +1009,7 @@ export default function Studies() {
       const res = await axios.post(`${API}/study/programs/import-edital-with-cargo`, {
         analysis_id: analysisId || editalAnalysis?.analysis_id,
         cargo_index: cargoIdx,
-        area_id: selectedArea?.area_id || editalAreaId,
+        area_id: selectedArea.area_id,
         target_date: editalForm.target_date || null,
         hours_per_day: editalForm.hours_per_day,
         days_per_week: editalForm.days_per_week
@@ -1663,156 +1655,6 @@ export default function Studies() {
 
           {/* ========== PROGRAMAS TAB ========== */}
           <TabsContent value="programas" className="space-y-4">
-            {/* ===== EDITAIS IMPORTADOS SECTION ===== */}
-            {(() => {
-              const editalPrograms = programs.filter(p => p.source_type === "edital_import");
-              if (editalPrograms.length > 0 || !selectedArea) return (
-                <Card className="bg-[#0A0A0A] border-[#27272A] border-l-2 border-l-purple-500">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <FileUp className="w-5 h-5 text-purple-400" />
-                        Editais Importados
-                        {editalPrograms.length > 0 && <Badge className="bg-purple-500/20 text-purple-400 text-[10px]">{editalPrograms.length}</Badge>}
-                      </CardTitle>
-                      <Dialog open={showEditalDialog} onOpenChange={setShowEditalDialog}>
-                        <DialogTrigger asChild>
-                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700 h-8 text-xs">
-                            <Plus className="w-3 h-3 mr-1" />Importar Edital
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-lg">
-                          <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2"><FileUp className="w-5 h-5 text-purple-400" />Importar Edital de Concurso</DialogTitle>
-                            <DialogDescription>Faça upload do PDF do edital e a IA criará um programa de estudos completo com disciplinas, pesos e cronograma.</DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4 py-4">
-                            <div>
-                              <Label className="text-sm font-medium">PDF do Edital *</Label>
-                              <div className={`mt-1 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${editalFile ? 'border-purple-500 bg-purple-500/10' : 'border-[#27272A] hover:border-[#3F3F46]'}`}>
-                                {editalFile ? (
-                                  <div className="flex items-center justify-center gap-2">
-                                    <FileText className="w-5 h-5 text-purple-400" />
-                                    <span className="text-sm text-purple-300">{editalFile.name}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditalFile(null)}><XCircle className="w-4 h-4 text-red-400" /></Button>
-                                  </div>
-                                ) : (
-                                  <label className="cursor-pointer">
-                                    <Upload className="w-8 h-8 mx-auto text-[#A1A1AA] mb-2" />
-                                    <p className="text-sm text-[#A1A1AA]">Clique para selecionar o PDF</p>
-                                    <p className="text-xs text-[#52525B] mt-1">Máximo 20MB</p>
-                                    <input type="file" accept=".pdf" className="hidden" onChange={e => setEditalFile(e.target.files?.[0] || null)} />
-                                  </label>
-                                )}
-                              </div>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium">Área de Estudo *</Label>
-                              <Select value={editalAreaId || ''} onValueChange={v => setEditalAreaId(v)}>
-                                <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue placeholder="Selecione a área" /></SelectTrigger>
-                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
-                                  {areas.map(a => <SelectItem key={a.area_id} value={a.area_id}>{a.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium">Data da Prova (opcional)</Label>
-                              <Input type="date" value={editalForm.target_date} onChange={e => setEditalForm({...editalForm, target_date: e.target.value})} className="bg-[#121212] border-[#27272A] mt-1" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <Label className="text-sm font-medium">Horas por dia</Label>
-                                <Select value={String(editalForm.hours_per_day)} onValueChange={v => setEditalForm({...editalForm, hours_per_day: parseFloat(v)})}>
-                                  <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
-                                  <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
-                                    {[1,2,3,4,5,6,7,8,10,12].map(h => <SelectItem key={h} value={String(h)}>{h}h</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label className="text-sm font-medium">Dias por semana</Label>
-                                <Select value={String(editalForm.days_per_week)} onValueChange={v => setEditalForm({...editalForm, days_per_week: parseInt(v)})}>
-                                  <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
-                                  <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
-                                    {[3,4,5,6,7].map(d => <SelectItem key={d} value={String(d)}>{d} dias</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                            <Button onClick={handleAnalyzeEdital} disabled={!editalFile || editalImporting || editalAnalyzing || !editalAreaId} className="w-full bg-purple-600 hover:bg-purple-700">
-                              {(editalImporting || editalAnalyzing) ? (
-                                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando edital... (pode levar até 1 min)</>
-                              ) : (
-                                <><Sparkles className="w-4 h-4 mr-2" />Gerar Programa de Estudos</>
-                              )}
-                            </Button>
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </CardHeader>
-                  {editalPrograms.length > 0 ? (
-                    <CardContent className="pt-0">
-                      <div className="space-y-3">
-                        {editalPrograms.map(prog => {
-                          const concurso = prog.edital_data?.concurso || {};
-                          const pctCorrect = prog.total_questions > 0 ? Math.round((prog.correct_questions / prog.total_questions) * 100) : 0;
-                          const areaName = areas.find(a => a.area_id === prog.area_id)?.name || '';
-                          return (
-                            <div key={prog.program_id} className="bg-[#121212] border border-[#27272A] rounded-lg p-4 hover:border-purple-500/30 transition-colors">
-                              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: prog.color }} />
-                                    <h3 className="font-bold text-sm truncate">{prog.name}</h3>
-                                  </div>
-                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[#71717A]">
-                                    {concurso.orgao && <span>📋 {concurso.orgao}</span>}
-                                    {concurso.banca && <span>🏛️ {concurso.banca}</span>}
-                                    {areaName && <span className="text-purple-400">📁 {areaName}</span>}
-                                    {prog.target_date && <span>📅 {new Date(prog.target_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span>}
-                                  </div>
-                                  <div className="flex items-center gap-4 mt-2 text-xs">
-                                    <span className="text-blue-400">{prog.notebooks_count || 0} disciplinas</span>
-                                    <span className="text-purple-400">{prog.total_questions || 0} questões</span>
-                                    <span className={pctCorrect >= 70 ? 'text-green-400' : pctCorrect >= 50 ? 'text-yellow-400' : 'text-[#71717A]'}>{pctCorrect}% acerto</span>
-                                    <span className="text-[#52525B]">{Math.round((prog.total_study_time_minutes || 0) / 60)}h estudadas</span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5 flex-shrink-0">
-                                  <Button size="sm" variant="outline" className="h-7 text-[10px] border-purple-500/30 text-purple-400 hover:bg-purple-500/10" onClick={() => handleViewCronograma(prog.program_id)}>
-                                    <LayoutGrid className="w-3 h-3 mr-1" />Cronograma
-                                  </Button>
-                                  <Button size="sm" variant="outline" className="h-7 text-[10px] border-blue-500/30 text-blue-400 hover:bg-blue-500/10" onClick={() => handleViewVerticalizado(prog.program_id)}>
-                                    <Scale className="w-3 h-3 mr-1" />Verticalizado
-                                  </Button>
-                                  <Button size="sm" variant="outline" className="h-7 text-[10px] border-green-500/30 text-green-400 hover:bg-green-500/10" onClick={() => navigateToProgram(prog)}>
-                                    <BookOpen className="w-3 h-3 mr-1" />Matérias
-                                  </Button>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 text-red-500 hover:bg-red-500/10" onClick={() => handleDeleteProgram(prog.program_id)}>
-                                    <Trash2 className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  ) : (
-                    <CardContent className="pt-0">
-                      <div className="text-center py-6 bg-[#121212] rounded-lg border border-dashed border-[#27272A]">
-                        <FileUp className="w-8 h-8 mx-auto text-purple-400/40 mb-2" />
-                        <p className="text-sm text-[#71717A]">Nenhum edital importado ainda</p>
-                        <p className="text-xs text-[#52525B] mt-1">Clique em "Importar Edital" para começar</p>
-                      </div>
-                    </CardContent>
-                  )}
-                </Card>
-              );
-              return null;
-            })()}
-
             {/* Area selector */}
             <div className="flex flex-wrap gap-2 mb-2">
               {areas.map(area => (
@@ -1831,6 +1673,76 @@ export default function Studies() {
                     <p className="text-xs text-[#A1A1AA]">{selectedArea.description || 'Programas e cursos desta área'}</p>
                   </div>
                   <div className="flex gap-2 flex-wrap">
+                    <Dialog open={showEditalDialog} onOpenChange={setShowEditalDialog}>
+                      <DialogTrigger asChild><Button size="sm" className="bg-purple-600 hover:bg-purple-700 h-8 text-xs"><FileUp className="w-3 h-3 mr-1" />Importar Edital</Button></DialogTrigger>
+                      <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-lg">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2"><FileUp className="w-5 h-5 text-purple-400" />Importar Edital de Concurso</DialogTitle>
+                          <DialogDescription>Faça upload do PDF do edital e a IA criará um programa de estudos completo com disciplinas, pesos e cronograma.</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div>
+                            <Label className="text-sm font-medium">PDF do Edital *</Label>
+                            <div className={`mt-1 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${editalFile ? 'border-purple-500 bg-purple-500/10' : 'border-[#27272A] hover:border-[#3F3F46]'}`}>
+                              {editalFile ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  <FileText className="w-5 h-5 text-purple-400" />
+                                  <span className="text-sm text-purple-300">{editalFile.name}</span>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditalFile(null)}><XCircle className="w-4 h-4 text-red-400" /></Button>
+                                </div>
+                              ) : (
+                                <label className="cursor-pointer">
+                                  <Upload className="w-8 h-8 mx-auto text-[#A1A1AA] mb-2" />
+                                  <p className="text-sm text-[#A1A1AA]">Clique para selecionar o PDF</p>
+                                  <p className="text-xs text-[#52525B] mt-1">Máximo 20MB</p>
+                                  <input type="file" accept=".pdf" className="hidden" onChange={e => setEditalFile(e.target.files?.[0] || null)} />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-medium">Data da Prova (opcional)</Label>
+                            <Input type="date" value={editalForm.target_date} onChange={e => setEditalForm({...editalForm, target_date: e.target.value})} className="bg-[#121212] border-[#27272A] mt-1" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-sm font-medium">Horas por dia</Label>
+                              <Select value={String(editalForm.hours_per_day)} onValueChange={v => setEditalForm({...editalForm, hours_per_day: parseFloat(v)})}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  {[1,2,3,4,5,6,7,8,10,12].map(h => <SelectItem key={h} value={String(h)}>{h}h</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-sm font-medium">Dias por semana</Label>
+                              <Select value={String(editalForm.days_per_week)} onValueChange={v => setEditalForm({...editalForm, days_per_week: parseInt(v)})}>
+                                <SelectTrigger className="bg-[#121212] border-[#27272A] mt-1"><SelectValue /></SelectTrigger>
+                                <SelectContent className="bg-[#0A0A0A] border-[#27272A]">
+                                  {[3,4,5,6,7].map(d => <SelectItem key={d} value={String(d)}>{d} dias</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                          <div className="bg-[#121212] border border-[#27272A] rounded-lg p-3">
+                            <p className="text-xs text-[#A1A1AA]"><Sparkles className="w-3 h-3 inline mr-1 text-purple-400" />A IA vai analisar o edital e criar automaticamente:</p>
+                            <ul className="text-xs text-[#A1A1AA] mt-2 space-y-1 ml-4 list-disc">
+                              <li>Todas as disciplinas com pesos e tópicos</li>
+                              <li>Cronograma semanal otimizado</li>
+                              <li>Estratégia de estudo personalizada</li>
+                              <li>Distribuição de tempo por matéria</li>
+                            </ul>
+                          </div>
+                          <Button onClick={handleAnalyzeEdital} disabled={!editalFile || editalImporting || editalAnalyzing} className="w-full bg-purple-600 hover:bg-purple-700">
+                            {(editalImporting || editalAnalyzing) ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analisando edital... (pode levar até 1 min)</>
+                            ) : (
+                              <><Sparkles className="w-4 h-4 mr-2" />Gerar Programa de Estudos</>
+                            )}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                     <Dialog open={showProgramDialog} onOpenChange={setShowProgramDialog}>
                       <DialogTrigger asChild><Button size="sm" className="bg-[#007AFF] h-8 text-xs"><Plus className="w-3 h-3 mr-1" />Novo Programa</Button></DialogTrigger>
                       <DialogContent className="bg-[#0A0A0A] border-[#27272A]">
