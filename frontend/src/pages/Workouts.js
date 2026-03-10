@@ -55,7 +55,6 @@ export default function Workouts() {
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [pdfAnalysis, setPdfAnalysis] = useState(null);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
-  const [detailedStats, setDetailedStats] = useState(null);
   
   // Import workout + saved insights
   const [importFile, setImportFile] = useState(null);

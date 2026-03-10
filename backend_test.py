@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any, List
 
 # Configuration
-BASE_URL = "https://edital-schedule.preview.emergentagent.com/api"
+BASE_URL = "https://workout-debug.preview.emergentagent.com/api"
 TEST_EMAIL = "testedital@test.com"
 TEST_PASSWORD = "Test123!"
 
