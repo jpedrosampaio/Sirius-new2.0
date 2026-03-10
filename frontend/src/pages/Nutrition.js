@@ -16,8 +16,9 @@ import {
   Apple, Plus, Trash2, Droplets, Target, ChefHat, 
   Flame, Drumstick, Wheat, Droplet, Settings, Sparkles,
   UtensilsCrossed, Clock, ChevronLeft, ChevronRight, Loader2,
-  Coffee, Sun, Moon, Cookie
+  Coffee, Sun, Moon, Cookie, TrendingUp, BarChart3
 } from "lucide-react";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -54,6 +55,7 @@ export default function Nutrition() {
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [showRecipeDetailDialog, setShowRecipeDetailDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [weeklyTrend, setWeeklyTrend] = useState(null);
 
   // Meal form state
   const [mealForm, setMealForm] = useState({
@@ -130,6 +132,11 @@ export default function Nutrition() {
       setWaterData(waterRes.data || { total_ml: 0, logs: [] });
       setRecipes(Array.isArray(recipesRes.data) ? recipesRes.data : []);
       setDiets(Array.isArray(dietsRes.data) ? dietsRes.data : []);
+      // Fetch weekly trend
+      try {
+        const trendRes = await axios.get(`${API}/nutrition/weekly-trend`, { withCredentials: true });
+        setWeeklyTrend(trendRes.data || null);
+      } catch (e) { console.error("Weekly trend error:", e); }
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
@@ -655,6 +662,111 @@ export default function Nutrition() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Weekly Nutrition Charts */}
+            {weeklyTrend && weeklyTrend.daily && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Calorie Trend */}
+                <Card className="bg-[#0A0A0A] border-[#27272A]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2"><Flame className="w-4 h-4 text-orange-400" />Calorias - Últimos 7 Dias</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={weeklyTrend.daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                        <XAxis dataKey="day" tick={{ fill: '#71717A', fontSize: 11 }} />
+                        <YAxis tick={{ fill: '#71717A', fontSize: 10 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} />
+                        <Bar dataKey="calorias" fill="#FF9500" name="Calorias" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    {weeklyTrend.goals && (
+                      <div className="flex justify-between text-[10px] text-[#71717A] mt-2 px-2">
+                        <span>Meta: {weeklyTrend.goals.daily_calories} kcal/dia</span>
+                        <span>Média: {weeklyTrend.averages?.calorias || 0} kcal</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Macro Distribution */}
+                <Card className="bg-[#0A0A0A] border-[#27272A]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="w-4 h-4 text-[#007AFF]" />Macronutrientes - Semana</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={weeklyTrend.daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                        <XAxis dataKey="day" tick={{ fill: '#71717A', fontSize: 11 }} />
+                        <YAxis tick={{ fill: '#71717A', fontSize: 10 }} unit="g" />
+                        <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} formatter={(v) => `${v}g`} />
+                        <Line type="monotone" dataKey="proteina" stroke="#EF4444" strokeWidth={2} name="Proteína" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="carboidratos" stroke="#F59E0B" strokeWidth={2} name="Carboidratos" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="gordura" stroke="#8B5CF6" strokeWidth={2} name="Gordura" dot={{ r: 3 }} />
+                        <Legend />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Water Trend */}
+                <Card className="bg-[#0A0A0A] border-[#27272A]">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2"><Droplets className="w-4 h-4 text-blue-400" />Hidratação - Semana</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={weeklyTrend.daily}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                        <XAxis dataKey="day" tick={{ fill: '#71717A', fontSize: 11 }} />
+                        <YAxis tick={{ fill: '#71717A', fontSize: 10 }} unit="ml" />
+                        <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} formatter={(v) => `${v}ml`} />
+                        <Bar dataKey="agua_ml" fill="#3B82F6" name="Água (ml)" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    {weeklyTrend.goals && (
+                      <p className="text-[10px] text-[#71717A] text-center mt-1">Meta: {weeklyTrend.goals.water_goal_ml}ml/dia</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Macro Summary Today */}
+                {stats && stats.consumed && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><Target className="w-4 h-4 text-green-400" />Macros Hoje</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Proteína', value: stats.consumed.protein || 0 },
+                              { name: 'Carboidratos', value: stats.consumed.carbs || 0 },
+                              { name: 'Gordura', value: stats.consumed.fat || 0 }
+                            ].filter(d => d.value > 0)}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={65}
+                            label={(e) => `${e.name}: ${e.value}g`}
+                          >
+                            <Cell fill="#EF4444" />
+                            <Cell fill="#F59E0B" />
+                            <Cell fill="#8B5CF6" />
+                          </Pie>
+                          <Tooltip formatter={(v) => `${v}g`} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
           </TabsContent>
 
           {/* Meals Tab */}

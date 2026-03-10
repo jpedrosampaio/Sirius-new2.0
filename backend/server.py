@@ -2164,6 +2164,192 @@ async def get_finance_stats(request: Request, month: Optional[str] = None, sessi
         "total_income": sum(categories_income.values())
     }
 
+@api_router.get("/finance/trend")
+async def get_finance_trend(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get last 6 months income vs expense trend for charts"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now(timezone.utc)
+    months_data = []
+    
+    for i in range(5, -1, -1):
+        month_date = today - timedelta(days=i*30)
+        month_str = month_date.strftime("%Y-%m")
+        month_label = month_date.strftime("%b/%y")
+        
+        trans = await db.transactions.find(
+            {"user_id": user.user_id, "date": {"$regex": f"^{month_str}"}}, {"_id": 0}
+        ).to_list(500)
+        
+        income = sum(t['amount'] for t in trans if t['type'] == 'income')
+        expense = sum(t['amount'] for t in trans if t['type'] == 'expense')
+        
+        months_data.append({
+            "month": month_label,
+            "month_key": month_str,
+            "receitas": round(income, 2),
+            "despesas": round(expense, 2),
+            "saldo": round(income - expense, 2),
+            "economia": round((income - expense) / income * 100, 1) if income > 0 else 0
+        })
+    
+    # Calculate overall stats
+    total_income_6m = sum(m['receitas'] for m in months_data)
+    total_expense_6m = sum(m['despesas'] for m in months_data)
+    avg_monthly_expense = total_expense_6m / 6
+    savings_rate = round((total_income_6m - total_expense_6m) / total_income_6m * 100, 1) if total_income_6m > 0 else 0
+    
+    return {
+        "trend": months_data,
+        "summary": {
+            "total_income_6m": round(total_income_6m, 2),
+            "total_expense_6m": round(total_expense_6m, 2),
+            "avg_monthly_expense": round(avg_monthly_expense, 2),
+            "savings_rate": savings_rate,
+            "best_month": max(months_data, key=lambda m: m['saldo'])['month'] if months_data else None,
+            "worst_month": min(months_data, key=lambda m: m['saldo'])['month'] if months_data else None
+        }
+    }
+
+@api_router.get("/nutrition/weekly-trend")
+async def get_nutrition_weekly_trend(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get last 7 days nutrition data for charts"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now()
+    days_data = []
+    
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        date_str = day.strftime("%Y-%m-%d")
+        day_label = day.strftime("%a")
+        
+        meals = await db.meals.find({"user_id": user.user_id, "date": date_str}, {"_id": 0}).to_list(50)
+        water = await db.water_logs.find({"user_id": user.user_id, "date": date_str}, {"_id": 0}).to_list(50)
+        
+        cal = sum(m.get("total_calories", 0) for m in meals)
+        prot = sum(m.get("total_protein", 0) for m in meals)
+        carb = sum(m.get("total_carbs", 0) for m in meals)
+        fat = sum(m.get("total_fat", 0) for m in meals)
+        water_ml = sum(w.get("amount_ml", 0) for w in water)
+        
+        days_data.append({
+            "day": day_label,
+            "date": date_str,
+            "calorias": round(cal),
+            "proteina": round(prot, 1),
+            "carboidratos": round(carb, 1),
+            "gordura": round(fat, 1),
+            "agua_ml": water_ml,
+            "refeicoes": len(meals)
+        })
+    
+    goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not goals:
+        goals = {"daily_calories": 2000, "daily_protein": 150, "daily_carbs": 250, "daily_fat": 65, "water_goal_ml": 2000}
+    
+    # Calculate averages
+    days_with_data = [d for d in days_data if d['calorias'] > 0]
+    avg_cal = round(sum(d['calorias'] for d in days_with_data) / max(len(days_with_data), 1))
+    avg_prot = round(sum(d['proteina'] for d in days_with_data) / max(len(days_with_data), 1), 1)
+    
+    return {
+        "daily": days_data,
+        "goals": goals,
+        "averages": {
+            "calorias": avg_cal,
+            "proteina": avg_prot,
+            "dias_registrados": len(days_with_data)
+        }
+    }
+
+@api_router.get("/study/overall-stats")
+async def get_study_overall_stats(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get overall study statistics for charts"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get all notebooks
+    notebooks = await db.notebooks.find({"user_id": user.user_id}, {"_id": 0}).to_list(200)
+    
+    # Study time by discipline
+    disc_data = []
+    total_time = 0
+    total_questions = 0
+    total_correct = 0
+    
+    for nb in notebooks:
+        time_min = nb.get("total_study_time_minutes", 0)
+        questions = nb.get("total_questions", 0)
+        correct = nb.get("correct_questions", 0)
+        total_time += time_min
+        total_questions += questions
+        total_correct += correct
+        
+        if time_min > 0 or questions > 0:
+            disc_data.append({
+                "nome": nb.get("name", ""),
+                "tempo_horas": round(time_min / 60, 1),
+                "questoes": questions,
+                "acertos": correct,
+                "acuracia": round(correct / questions * 100, 1) if questions > 0 else 0,
+                "color": nb.get("color", "#007AFF")
+            })
+    
+    # Focus sessions (last 7 days)
+    today = datetime.now()
+    focus_daily = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        date_str = day.strftime("%Y-%m-%d")
+        sessions = await db.focus_sessions.find({
+            "user_id": user.user_id,
+            "date": date_str
+        }, {"_id": 0}).to_list(50)
+        focus_min = sum(s.get("duration_minutes", 0) for s in sessions)
+        focus_daily.append({
+            "day": day.strftime("%a"),
+            "date": date_str,
+            "minutos": focus_min,
+            "sessoes": len(sessions)
+        })
+    
+    # Question logs (last 7 days)
+    question_daily = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        date_str = day.strftime("%Y-%m-%d")
+        q_logs = await db.question_logs.find({
+            "user_id": user.user_id,
+            "date": date_str
+        }, {"_id": 0}).to_list(100)
+        total_q = sum(q.get("total", 0) for q in q_logs)
+        correct_q = sum(q.get("correct", 0) for q in q_logs)
+        question_daily.append({
+            "day": day.strftime("%a"),
+            "date": date_str,
+            "questoes": total_q,
+            "acertos": correct_q,
+            "acuracia": round(correct_q / total_q * 100, 1) if total_q > 0 else 0
+        })
+    
+    return {
+        "disciplinas": sorted(disc_data, key=lambda x: x["tempo_horas"], reverse=True),
+        "focus_daily": focus_daily,
+        "question_daily": question_daily,
+        "totals": {
+            "tempo_total_horas": round(total_time / 60, 1),
+            "questoes_total": total_questions,
+            "acertos_total": total_correct,
+            "acuracia_geral": round(total_correct / total_questions * 100, 1) if total_questions > 0 else 0,
+            "disciplinas_ativas": len(disc_data)
+        }
+    }
+
+
+
 @api_router.get("/reports/{report_id}/download")
 async def download_report(report_id: str, request: Request, session_token: Optional[str] = Cookie(None)):
     from fastapi.responses import StreamingResponse

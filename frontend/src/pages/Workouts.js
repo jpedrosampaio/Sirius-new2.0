@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle } from "lucide-react";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export default function Workouts() {
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [pdfAnalysis, setPdfAnalysis] = useState(null);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [detailedStats, setDetailedStats] = useState(null);
   
   // Import workout + saved insights
   const [importFile, setImportFile] = useState(null);
@@ -1239,6 +1241,93 @@ export default function Workouts() {
                       <div className="font-data text-3xl text-[#EF4444]">{detailedStats.avg_calories || 0}</div>
                       <div className="text-xs text-[#A1A1AA] uppercase">Cal/Treino</div>
                     </Card>
+                  </div>
+                )}
+
+                {/* Workout Charts */}
+                {detailedStats && detailedStats.daily_data && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Training Frequency Chart */}
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                      <h3 className="font-heading text-sm mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-[#00F0FF]" />Frequência de Treino (30 dias)</h3>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={detailedStats.daily_data.filter((_, i) => i % 2 === 0)}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="date" tick={{ fill: '#71717A', fontSize: 9 }} tickFormatter={(v) => v.slice(5)} />
+                          <YAxis tick={{ fill: '#71717A', fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} />
+                          <Bar dataKey="count" fill="#00F0FF" name="Treinos" radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Card>
+
+                    {/* Duration Trend */}
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                      <h3 className="font-heading text-sm mb-3 flex items-center gap-2"><Timer className="w-4 h-4 text-[#A855F7]" />Duração por Dia (min)</h3>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={detailedStats.daily_data.filter((_, i) => i % 2 === 0)}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="date" tick={{ fill: '#71717A', fontSize: 9 }} tickFormatter={(v) => v.slice(5)} />
+                          <YAxis tick={{ fill: '#71717A', fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} />
+                          <Line type="monotone" dataKey="duration" stroke="#A855F7" strokeWidth={2} dot={false} name="Minutos" />
+                          <Line type="monotone" dataKey="calories" stroke="#EF4444" strokeWidth={1} dot={false} name="Calorias" />
+                          <Legend />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+
+                    {/* Streak & Consistency */}
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                      <h3 className="font-heading text-sm mb-3 flex items-center gap-2"><Flame className="w-4 h-4 text-orange-400" />Consistência</h3>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div>
+                          <p className="font-data text-2xl text-orange-400">{detailedStats.current_streak}</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Sequência Atual</p>
+                        </div>
+                        <div>
+                          <p className="font-data text-2xl text-[#39FF14]">{detailedStats.best_streak}</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Melhor Sequência</p>
+                        </div>
+                        <div>
+                          <p className="font-data text-2xl text-[#00F0FF]">{detailedStats.consistency_percentage}%</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Consistência</p>
+                        </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex justify-between text-[10px] text-[#71717A] mb-1">
+                          <span>{detailedStats.trained_days} de {detailedStats.total_days} dias treinados</span>
+                        </div>
+                        <div className="w-full bg-[#27272A] rounded-full h-2">
+                          <div className="h-2 rounded-full bg-gradient-to-r from-orange-500 to-[#39FF14]" style={{ width: `${detailedStats.consistency_percentage}%` }}></div>
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* Activity Type Distribution */}
+                    {stats && stats.by_activity_type && Object.keys(stats.by_activity_type).length > 0 && (
+                      <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                        <h3 className="font-heading text-sm mb-3 flex items-center gap-2"><Target className="w-4 h-4 text-[#39FF14]" />Tipo de Atividade</h3>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <PieChart>
+                            <Pie
+                              data={Object.entries(stats.by_activity_type).map(([name, value]) => ({ name, value }))}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={70}
+                              label={(entry) => entry.name}
+                            >
+                              {Object.keys(stats.by_activity_type).map((_, i) => (
+                                <Cell key={i} fill={['#00F0FF', '#A855F7', '#39FF14', '#FF9500', '#FF3B30', '#FFD700'][i % 6]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </Card>
+                    )}
                   </div>
                 )}
 

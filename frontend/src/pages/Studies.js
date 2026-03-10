@@ -25,7 +25,7 @@ import {
   SkipForward, Flag, StopCircle, FileUp, Scale, LayoutGrid,
   Download, Image, BellRing, Paperclip, Network
 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
@@ -522,6 +522,7 @@ export default function Studies() {
 
   // Motivational Quote (daily, resets at 5AM)
   const [motivationalQuote, setMotivationalQuote] = useState(null);
+  const [overallStudyStats, setOverallStudyStats] = useState(null);
 
   // Redação
   const [redacaoFile, setRedacaoFile] = useState(null);
@@ -594,6 +595,11 @@ export default function Studies() {
         const quoteR = await axios.get(`${API}/motivational-quote`, { withCredentials: true });
         setMotivationalQuote(quoteR.data || null);
       } catch (e) { console.error("Quote fetch failed:", e); }
+      // Fetch overall study stats for charts
+      try {
+        const studyStatsR = await axios.get(`${API}/study/overall-stats`, { withCredentials: true });
+        setOverallStudyStats(studyStatsR.data || null);
+      } catch (e) { console.error("Study stats fetch failed:", e); }
     } catch (err) {
       console.error(err);
       toast.error("Erro ao carregar dados");
@@ -1411,6 +1417,102 @@ export default function Studies() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Study Charts */}
+            {overallStudyStats && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                {/* Focus Sessions Trend */}
+                {overallStudyStats.focus_daily && overallStudyStats.focus_daily.some(d => d.minutos > 0) && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><Timer className="w-4 h-4 text-red-400" />Sessões de Foco (7 dias)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={overallStudyStats.focus_daily}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="day" tick={{ fill: '#71717A', fontSize: 11 }} />
+                          <YAxis tick={{ fill: '#71717A', fontSize: 10 }} unit="min" />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} formatter={(v) => `${v} min`} />
+                          <Bar dataKey="minutos" fill="#EF4444" name="Minutos" radius={[3, 3, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Question Accuracy Trend */}
+                {overallStudyStats.question_daily && overallStudyStats.question_daily.some(d => d.questoes > 0) && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><BarChart3 className="w-4 h-4 text-purple-400" />Questões (7 dias)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={overallStudyStats.question_daily}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis dataKey="day" tick={{ fill: '#71717A', fontSize: 11 }} />
+                          <YAxis tick={{ fill: '#71717A', fontSize: 10 }} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} />
+                          <Line type="monotone" dataKey="questoes" stroke="#A855F7" strokeWidth={2} name="Questões" dot={{ r: 3 }} />
+                          <Line type="monotone" dataKey="acertos" stroke="#39FF14" strokeWidth={2} name="Acertos" dot={{ r: 3 }} />
+                          <Legend />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Discipline Time Distribution */}
+                {overallStudyStats.disciplinas && overallStudyStats.disciplinas.length > 0 && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-blue-400" />Tempo por Disciplina</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={overallStudyStats.disciplinas.slice(0, 8)} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                          <XAxis type="number" tick={{ fill: '#71717A', fontSize: 10 }} unit="h" />
+                          <YAxis type="category" dataKey="nome" tick={{ fill: '#71717A', fontSize: 9 }} width={90} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff', fontSize: 11 }} formatter={(v) => `${v}h`} />
+                          <Bar dataKey="tempo_horas" fill="#007AFF" name="Horas" radius={[0, 3, 3, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Study Totals Summary */}
+                {overallStudyStats.totals && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-400" />Resumo Geral</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center p-3 bg-[#121212] rounded-lg">
+                          <p className="text-2xl font-bold text-[#007AFF]">{overallStudyStats.totals.tempo_total_horas}h</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Tempo Total</p>
+                        </div>
+                        <div className="text-center p-3 bg-[#121212] rounded-lg">
+                          <p className="text-2xl font-bold text-purple-400">{overallStudyStats.totals.questoes_total}</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Questões Feitas</p>
+                        </div>
+                        <div className="text-center p-3 bg-[#121212] rounded-lg">
+                          <p className={`text-2xl font-bold ${overallStudyStats.totals.acuracia_geral >= 70 ? 'text-green-400' : overallStudyStats.totals.acuracia_geral >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{overallStudyStats.totals.acuracia_geral}%</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Acurácia Geral</p>
+                        </div>
+                        <div className="text-center p-3 bg-[#121212] rounded-lg">
+                          <p className="text-2xl font-bold text-[#00F0FF]">{overallStudyStats.totals.disciplinas_ativas}</p>
+                          <p className="text-[10px] text-[#71717A] uppercase">Disciplinas Ativas</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
 
             {/* Areas Grid */}
             <Card className="bg-[#0A0A0A] border-[#27272A]">

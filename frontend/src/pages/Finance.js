@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, ChevronLeft, Edit2, CheckSquare, Square, MessageSquare, Send, Loader2, Bot, User } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { DollarSign, Plus, TrendingUp, TrendingDown, AlertCircle, Trash2, CreditCard as CreditCardIcon, Calendar, Repeat, Lightbulb, ChevronRight, ChevronLeft, Edit2, CheckSquare, Square, MessageSquare, Send, Loader2, Bot, User, ArrowUpRight, ArrowDownRight, Wallet } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Legend, AreaChart, Area } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -49,6 +49,7 @@ export default function Finance() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [financeTrend, setFinanceTrend] = useState(null);
   const [projectionMonth, setProjectionMonth] = useState(() => {
     const next = new Date();
     next.setMonth(next.getMonth() + 1);
@@ -113,6 +114,7 @@ export default function Finance() {
     fetchBudgets();
     fetchStats();
     fetchCreditCards();
+    fetchFinanceTrend();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
@@ -162,6 +164,15 @@ export default function Finance() {
       setStats(res.data);
     } catch (error) {
       console.error("Erro ao carregar estatísticas");
+    }
+  };
+
+  const fetchFinanceTrend = async () => {
+    try {
+      const res = await axios.get(`${API}/finance/trend`, { withCredentials: true });
+      setFinanceTrend(res.data);
+    } catch (error) {
+      console.error("Erro ao carregar tendência");
     }
   };
 
@@ -535,6 +546,75 @@ export default function Finance() {
                 </PieChart>
               </ResponsiveContainer>
             </Card>
+          )}
+
+          {/* Finance Trend - Last 6 Months */}
+          {financeTrend && financeTrend.trend && financeTrend.trend.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6 lg:col-span-2">
+                <h3 className="font-heading text-lg mb-4 uppercase flex items-center gap-2"><TrendingUp className="w-4 h-4 text-[#007AFF]" />Evolução Financeira (6 meses)</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <AreaChart data={financeTrend.trend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272A" />
+                    <XAxis dataKey="month" tick={{ fill: '#71717A', fontSize: 11 }} />
+                    <YAxis tick={{ fill: '#71717A', fontSize: 11 }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0A0A0A', border: '1px solid #27272A', color: '#fff' }} formatter={(v) => `R$ ${v.toFixed(2)}`} />
+                    <Area type="monotone" dataKey="receitas" stroke="#39FF14" fill="#39FF1420" name="Receitas" />
+                    <Area type="monotone" dataKey="despesas" stroke="#FF3B30" fill="#FF3B3020" name="Despesas" />
+                    <Line type="monotone" dataKey="saldo" stroke="#007AFF" strokeWidth={2} name="Saldo" dot={false} />
+                    <Legend />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Card>
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">
+                <h3 className="font-heading text-lg mb-4 uppercase">Resumo 6 Meses</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#A1A1AA] text-xs">Taxa de Economia</span>
+                    <span className={`font-data text-lg ${financeTrend.summary.savings_rate >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                      {financeTrend.summary.savings_rate}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#27272A] rounded-full h-2">
+                    <div className="h-2 rounded-full bg-gradient-to-r from-[#39FF14] to-[#007AFF]" style={{ width: `${Math.min(Math.max(financeTrend.summary.savings_rate, 0), 100)}%` }}></div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#A1A1AA] text-xs">Receitas (6m)</span>
+                    <span className="font-data text-sm text-[#39FF14]">R$ {financeTrend.summary.total_income_6m.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#A1A1AA] text-xs">Despesas (6m)</span>
+                    <span className="font-data text-sm text-[#FF3B30]">R$ {financeTrend.summary.total_expense_6m.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#A1A1AA] text-xs">Média Mensal Despesas</span>
+                    <span className="font-data text-sm text-white">R$ {financeTrend.summary.avg_monthly_expense.toFixed(2)}</span>
+                  </div>
+                  {financeTrend.summary.best_month && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#A1A1AA] text-xs">Melhor Mês</span>
+                      <span className="font-data text-sm text-[#39FF14]">{financeTrend.summary.best_month}</span>
+                    </div>
+                  )}
+                  {financeTrend.trend.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-[#27272A]">
+                      <p className="text-[10px] text-[#52525B] uppercase tracking-wider mb-2">Economia por Mês</p>
+                      <div className="space-y-1">
+                        {financeTrend.trend.map((m, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="text-[10px] text-[#71717A] w-12">{m.month}</span>
+                            <div className="flex-1 bg-[#27272A] rounded-full h-1.5">
+                              <div className={`h-1.5 rounded-full ${m.economia >= 0 ? 'bg-[#39FF14]' : 'bg-[#FF3B30]'}`} style={{ width: `${Math.min(Math.abs(m.economia), 100)}%` }}></div>
+                            </div>
+                            <span className={`text-[10px] font-data ${m.economia >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>{m.economia}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </div>
           )}
 
           <div className="mb-6">
