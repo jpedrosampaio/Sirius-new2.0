@@ -8537,17 +8537,44 @@ async def general_integrated_chat(request: Request, data: dict, session_token: O
 
     content_lower = content.lower()
 
-    # Detect intent
-    recipe_kw = ["receita", "recipe", "cozinhar", "preparar comida", "fazer um prato", "sugerir comida", "o que comer"]
-    workout_kw = ["treino", "exercício", "exercicio", "ficha de treino", "workout", "malhar", "academia", "musculação"]
-    study_kw = ["cronograma", "plano de estudo", "estudar", "matéria", "disciplina", "concurso"]
-    finance_kw = ["gasto", "despesa", "receita financeira", "saldo", "orçamento", "economizar", "investir"]
+    # Detect intent with expanded keywords
+    recipe_kw = ["receita", "recipe", "cozinhar", "preparar comida", "fazer um prato", "sugerir comida", "o que comer", "cardápio", "refeição"]
+    workout_kw = ["treino", "exercício", "exercicio", "ficha de treino", "workout", "malhar", "academia", "musculação", "ficha"]
+    study_kw = ["cronograma de estudo", "plano de estudo", "matéria de concurso"]
+    
+    # Financial transaction keywords (register money in/out)
+    finance_income_kw = ['ganhei', 'recebi', 'entrou', 'salário', 'salario', 'renda', 'recebimento', 
+                         'depósito', 'deposito', 'pix recebido', 'crédito', 'credito', 'freelance', 
+                         'bônus', 'bonus', 'comissão', 'comissao', 'vendi', 'entrada de']
+    finance_expense_kw = ['gastei', 'paguei', 'comprei', 'compra de', 'boleto', 'parcela', 'débito', 
+                          'debito', 'saída', 'saida', 'pix enviado', 'transferi', 'conta de luz',
+                          'conta de água', 'aluguel de', 'supermercado', 'mercado', 'restaurante']
+    finance_report_kw = ['relatório financeiro', 'relatorio financeiro', 'resumo financeiro', 'como estão minhas finanças',
+                         'como está meu saldo', 'quanto gastei', 'quanto ganhei', 'balanço financeiro',
+                         'extrato', 'situação financeira', 'previsão financeira', 'projeção financeira']
+    
+    # Task/Goal keywords
+    task_kw = ['tarefa', 'task', 'adicionar tarefa', 'criar tarefa', 'nova tarefa', 'to-do', 'todo',
+               'lembrete', 'reminder', 'preciso fazer', 'tenho que fazer', 'não esquecer']
+    goal_kw = ['meta', 'objetivo', 'goal', 'criar meta', 'definir meta', 'quero alcançar',
+               'minha meta', 'definir objetivo']
+    
+    import re
+    amount_pattern = r'(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)'
+    amount_matches = re.findall(amount_pattern, content)
+    has_amount = len(amount_matches) > 0
 
     intent = "general"
     if any(k in content_lower for k in recipe_kw): intent = "recipe"
     elif any(k in content_lower for k in workout_kw): intent = "workout"
+    elif has_amount and any(k in content_lower for k in finance_income_kw) and any(k in content_lower for k in finance_expense_kw): intent = "finance_mixed"
+    elif has_amount and any(k in content_lower for k in finance_income_kw): intent = "finance_income"
+    elif has_amount and any(k in content_lower for k in finance_expense_kw): intent = "finance_expense"
+    elif any(k in content_lower for k in finance_report_kw): intent = "finance_report"
+    elif any(k in content_lower for k in task_kw): intent = "task"
+    elif any(k in content_lower for k in goal_kw): intent = "goal"
     elif any(k in content_lower for k in study_kw): intent = "study"
-    elif any(k in content_lower for k in finance_kw): intent = "finance"
+    elif any(k in content_lower for k in ['gasto', 'despesa', 'receita financeira', 'saldo', 'orçamento', 'economizar', 'investir']): intent = "finance_general"
 
     saved_item = None
     ai_response_text = ""
@@ -8605,9 +8632,265 @@ Ao final, inclua um bloco JSON:
                     saved_item = {"type": "workout", "id": plan_id, "name": plan_data.get("name", "")}
             except: pass
 
+        # FINANCE: Register Income
+        elif intent == "finance_income":
+            prompt = f'''Extraia TODAS as receitas/entradas financeiras desta mensagem.
+Mensagem: "{content}"
+Responda APENAS com JSON array:
+[{{"amount": 5000.0, "category": "salário", "description": "salário mensal"}}]
+Categorias: salário, freelance, investimentos, vendas, reembolso, outros
+Extraia o valor numérico exato. SOMENTE o JSON array.'''
+            response = await call_llm(prompt, f"general_fin_{user.user_id}")
+            try:
+                clean = response.strip()
+                if "```" in clean: clean = clean.split("```")[1].replace("json", "").strip()
+                start_i = clean.find('['); end_i = clean.rfind(']') + 1
+                items = json.loads(clean[start_i:end_i]) if start_i != -1 and end_i > start_i else []
+                if not isinstance(items, list): items = [items]
+                
+                registered = []
+                for td in items:
+                    amt = float(td.get("amount", 0))
+                    if amt > 0:
+                        tid = f"trans_{uuid.uuid4().hex[:12]}"
+                        tdoc = {"transaction_id": tid, "user_id": user.user_id, "type": "income", "amount": amt,
+                                "category": td.get("category", "outros"), "description": td.get("description", ""),
+                                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "created_at": datetime.now(timezone.utc).isoformat()}
+                        await db.transactions.insert_one(tdoc)
+                        registered.append({"type": "income", "amount": amt, "category": td.get("category", "outros"), "description": td.get("description", "")})
+                
+                if registered:
+                    saved_item = {"type": "transactions", "items": registered}
+                    total = sum(r["amount"] for r in registered)
+                    ai_response_text = f"✅ **{len(registered)} receita(s) registrada(s)!**\n\n"
+                    for r in registered:
+                        ai_response_text += f"💰 +R$ {r['amount']:.2f} | {r['category']} | {r['description']}\n"
+                    ai_response_text += f"\n**Total registrado: R$ {total:.2f}**\n\n💡 As transações já estão disponíveis na aba Finanças!"
+                else:
+                    ai_response_text = "Não consegui identificar o valor. Pode repetir? Ex: 'Recebi 3000 de salário'"
+            except Exception as e:
+                ai_response_text = f"Não consegui processar. Tente: 'Recebi 3000 de salário'. Erro: {str(e)}"
+
+        # FINANCE: Register Expense
+        elif intent == "finance_expense":
+            prompt = f'''Extraia TODAS as despesas/gastos desta mensagem.
+Mensagem: "{content}"
+Responda APENAS com JSON array:
+[{{"amount": 150.0, "category": "alimentação", "description": "supermercado"}}]
+Categorias: alimentação, transporte, moradia, saúde, educação, lazer, outros
+Extraia o valor numérico exato. SOMENTE o JSON array.'''
+            response = await call_llm(prompt, f"general_fin_{user.user_id}")
+            try:
+                clean = response.strip()
+                if "```" in clean: clean = clean.split("```")[1].replace("json", "").strip()
+                start_i = clean.find('['); end_i = clean.rfind(']') + 1
+                items = json.loads(clean[start_i:end_i]) if start_i != -1 and end_i > start_i else []
+                if not isinstance(items, list): items = [items]
+                
+                registered = []
+                for td in items:
+                    amt = float(td.get("amount", 0))
+                    if amt > 0:
+                        tid = f"trans_{uuid.uuid4().hex[:12]}"
+                        tdoc = {"transaction_id": tid, "user_id": user.user_id, "type": "expense", "amount": amt,
+                                "category": td.get("category", "outros"), "description": td.get("description", ""),
+                                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "created_at": datetime.now(timezone.utc).isoformat()}
+                        await db.transactions.insert_one(tdoc)
+                        registered.append({"type": "expense", "amount": amt, "category": td.get("category", "outros"), "description": td.get("description", "")})
+                
+                if registered:
+                    saved_item = {"type": "transactions", "items": registered}
+                    total = sum(r["amount"] for r in registered)
+                    ai_response_text = f"✅ **{len(registered)} despesa(s) registrada(s)!**\n\n"
+                    for r in registered:
+                        ai_response_text += f"🔴 -R$ {r['amount']:.2f} | {r['category']} | {r['description']}\n"
+                    ai_response_text += f"\n**Total registrado: R$ {total:.2f}**\n\n💡 As transações já estão disponíveis na aba Finanças!"
+                else:
+                    ai_response_text = "Não consegui identificar o valor. Pode repetir? Ex: 'Gastei 50 no mercado'"
+            except Exception as e:
+                ai_response_text = f"Não consegui processar. Tente: 'Gastei 150 no supermercado'. Erro: {str(e)}"
+
+        # FINANCE: Mixed transactions
+        elif intent == "finance_mixed":
+            prompt = f'''Extraia TODAS as transações financeiras desta mensagem (receitas E despesas).
+Mensagem: "{content}"
+Responda APENAS com JSON array:
+[{{"type": "income", "amount": 5000.0, "category": "salário", "description": "salário"}}, {{"type": "expense", "amount": 50.0, "category": "alimentação", "description": "mercado"}}]
+Categorias receita: salário, freelance, investimentos, vendas, reembolso, outros
+Categorias despesa: alimentação, transporte, moradia, saúde, educação, lazer, outros
+SOMENTE o JSON array.'''
+            response = await call_llm(prompt, f"general_fin_{user.user_id}")
+            try:
+                clean = response.strip()
+                if "```" in clean: clean = clean.split("```")[1].replace("json", "").strip()
+                start_i = clean.find('['); end_i = clean.rfind(']') + 1
+                items = json.loads(clean[start_i:end_i]) if start_i != -1 and end_i > start_i else []
+                if not isinstance(items, list): items = [items]
+                
+                registered = []
+                for td in items:
+                    amt = float(td.get("amount", 0))
+                    t_type = td.get("type", "expense")
+                    if t_type not in ["income", "expense"]: t_type = "expense"
+                    if amt > 0:
+                        tid = f"trans_{uuid.uuid4().hex[:12]}"
+                        tdoc = {"transaction_id": tid, "user_id": user.user_id, "type": t_type, "amount": amt,
+                                "category": td.get("category", "outros"), "description": td.get("description", ""),
+                                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "created_at": datetime.now(timezone.utc).isoformat()}
+                        await db.transactions.insert_one(tdoc)
+                        registered.append({"type": t_type, "amount": amt, "category": td.get("category", "outros"), "description": td.get("description", "")})
+                
+                if registered:
+                    saved_item = {"type": "transactions", "items": registered}
+                    total_in = sum(r["amount"] for r in registered if r["type"] == "income")
+                    total_out = sum(r["amount"] for r in registered if r["type"] == "expense")
+                    ai_response_text = f"✅ **{len(registered)} transação(ões) registrada(s)!**\n\n"
+                    for r in registered:
+                        emoji = "💰" if r["type"] == "income" else "🔴"
+                        sinal = "+" if r["type"] == "income" else "-"
+                        ai_response_text += f"{emoji} {sinal}R$ {r['amount']:.2f} | {r['category']} | {r['description']}\n"
+                    if total_in > 0: ai_response_text += f"\n💚 Total receitas: R$ {total_in:.2f}"
+                    if total_out > 0: ai_response_text += f"\n🔴 Total despesas: R$ {total_out:.2f}"
+                    ai_response_text += "\n\n💡 As transações já estão disponíveis na aba Finanças!"
+                else:
+                    ai_response_text = "Não consegui identificar os valores. Pode detalhar melhor?"
+            except:
+                ai_response_text = "Não consegui processar as transações mistas. Tente uma de cada vez."
+
+        # FINANCE: Report
+        elif intent == "finance_report":
+            current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+            transactions_list = await db.transactions.find(
+                {"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}}, {"_id": 0}
+            ).to_list(500)
+            total_income = sum(t['amount'] for t in transactions_list if t['type'] == 'income')
+            total_expense = sum(t['amount'] for t in transactions_list if t['type'] == 'expense')
+            bal = total_income - total_expense
+            
+            expense_by_cat = {}
+            for t in transactions_list:
+                if t['type'] == 'expense':
+                    expense_by_cat[t['category']] = expense_by_cat.get(t['category'], 0) + t['amount']
+            
+            context_str = f"""Dados financeiros do mês ({current_month}):
+- Receitas: R$ {total_income:.2f}
+- Despesas: R$ {total_expense:.2f}
+- Saldo: R$ {bal:.2f}
+- Transações: {len(transactions_list)}
+- Despesas por categoria: {json.dumps(expense_by_cat, ensure_ascii=False)}"""
+            
+            prompt = f"""{context_str}
+
+O usuário pediu: "{content}"
+
+Gere um relatório/análise financeira detalhado com base nos dados acima. Inclua insights, dicas e sugestões. Use markdown para formatar. Seja objetivo e prático."""
+            
+            response = await call_llm(prompt, f"general_fin_{user.user_id}", "Você é um consultor financeiro pessoal especialista.")
+            ai_response_text = response
+
+        # TASK: Create task
+        elif intent == "task":
+            prompt = f'''O usuário quer criar uma tarefa/lembrete. Extraia as informações:
+Mensagem: "{content}"
+Responda SOMENTE com JSON:
+{{"title": "Título da tarefa", "description": "Descrição detalhada", "due_date": "YYYY-MM-DD ou null", "priority": "high/medium/low", "category": "pessoal/trabalho/estudos/saúde/outros"}}'''
+            response = await call_llm(prompt, f"general_task_{user.user_id}")
+            try:
+                clean = response.strip()
+                if "```" in clean: clean = clean.split("```")[1].replace("json", "").strip()
+                start_i = clean.find('{'); end_i = clean.rfind('}') + 1
+                task_data = json.loads(clean[start_i:end_i])
+                
+                task_id = f"task_{uuid.uuid4().hex[:12]}"
+                task_doc = {
+                    "task_id": task_id,
+                    "user_id": user.user_id,
+                    "title": task_data.get("title", content[:50]),
+                    "description": task_data.get("description", ""),
+                    "due_date": task_data.get("due_date"),
+                    "priority": task_data.get("priority", "medium"),
+                    "category": task_data.get("category", "pessoal"),
+                    "completed": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.tasks.insert_one(task_doc)
+                saved_item = {"type": "task", "id": task_id, "title": task_data.get("title", "")}
+                
+                ai_response_text = f"""✅ **Tarefa criada com sucesso!**
+
+📋 **{task_data.get('title', '')}**
+{f"📝 {task_data.get('description', '')}" if task_data.get('description') else ""}
+{f"📅 Prazo: {task_data.get('due_date')}" if task_data.get('due_date') else ""}
+🔴 Prioridade: {task_data.get('priority', 'medium')}
+
+💡 A tarefa está disponível na aba Tarefas!"""
+            except:
+                ai_response_text = "Não consegui criar a tarefa. Tente: 'Criar tarefa: Estudar direito constitucional até sexta'"
+
+        # GOAL: Create goal
+        elif intent == "goal":
+            prompt = f'''O usuário quer definir uma meta/objetivo. Extraia as informações:
+Mensagem: "{content}"
+Responda SOMENTE com JSON:
+{{"title": "Título da meta", "description": "Descrição", "target_date": "YYYY-MM-DD ou null", "category": "financeiro/saúde/estudos/carreira/pessoal/outros", "target_value": null, "current_value": 0}}'''
+            response = await call_llm(prompt, f"general_goal_{user.user_id}")
+            try:
+                clean = response.strip()
+                if "```" in clean: clean = clean.split("```")[1].replace("json", "").strip()
+                start_i = clean.find('{'); end_i = clean.rfind('}') + 1
+                goal_data = json.loads(clean[start_i:end_i])
+                
+                goal_id = f"goal_{uuid.uuid4().hex[:12]}"
+                goal_doc = {
+                    "goal_id": goal_id,
+                    "user_id": user.user_id,
+                    "title": goal_data.get("title", content[:50]),
+                    "description": goal_data.get("description", ""),
+                    "target_date": goal_data.get("target_date"),
+                    "category": goal_data.get("category", "pessoal"),
+                    "target_value": goal_data.get("target_value"),
+                    "current_value": goal_data.get("current_value", 0),
+                    "completed": False,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.goals.insert_one(goal_doc)
+                saved_item = {"type": "goal", "id": goal_id, "title": goal_data.get("title", "")}
+                
+                ai_response_text = f"""✅ **Meta criada com sucesso!**
+
+🎯 **{goal_data.get('title', '')}**
+{f"📝 {goal_data.get('description', '')}" if goal_data.get('description') else ""}
+{f"📅 Prazo: {goal_data.get('target_date')}" if goal_data.get('target_date') else ""}
+📂 Categoria: {goal_data.get('category', 'pessoal')}
+
+💡 A meta está disponível na aba Metas!"""
+            except:
+                ai_response_text = "Não consegui criar a meta. Tente: 'Minha meta é economizar 5000 até dezembro'"
+
         else:
-            # General / finance / study
-            system = "Você é o assistente pessoal SIRIUS. Ajude o usuário com finanças, estudos, treinos, nutrição e qualquer outro assunto. Responda em português, de forma objetiva e útil."
+            # General / finance_general / study - enriched with app context
+            current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+            fin_trans = await db.transactions.find({"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}}, {"_id": 0}).to_list(50)
+            total_in = sum(t['amount'] for t in fin_trans if t['type'] == 'income')
+            total_out = sum(t['amount'] for t in fin_trans if t['type'] == 'expense')
+            
+            system = f"""Você é o SIRIUS, assistente pessoal completo e integrado. Você pode ajudar com TODAS as áreas:
+
+🏋️ TREINOS: Criar fichas de treino, sugerir exercícios, planos de musculação
+🍽️ ALIMENTAÇÃO: Receitas, planos alimentares, dicas nutricionais  
+📚 ESTUDOS: Cronogramas, planos de estudo para concursos, dicas
+💰 FINANÇAS: Registrar receitas/despesas, relatórios, dicas de economia
+✅ TAREFAS: Criar tarefas, lembretes, organização
+🎯 METAS: Definir e acompanhar objetivos
+
+Contexto rápido do usuário:
+- Finanças do mês: Receitas R$ {total_in:.2f} | Despesas R$ {total_out:.2f} | Saldo R$ {total_in - total_out:.2f}
+
+Se o usuário quiser registrar uma transação financeira, instrua-o a dizer algo como 'Gastei 50 no mercado' ou 'Recebi 3000 de salário'.
+Se quiser criar tarefa: 'Criar tarefa: ...'
+Se quiser criar meta: 'Minha meta é ...'
+
+Responda em português, de forma objetiva, amigável e útil. Use emojis moderadamente."""
             response = await call_llm(content, f"general_chat_{user.user_id}", system)
             ai_response_text = response
 
