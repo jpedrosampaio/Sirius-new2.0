@@ -1388,106 +1388,78 @@ export default function Studies() {
 
           {/* ========== DASHBOARD TAB ========== */}
           <TabsContent value="dashboard" className="space-y-4">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Card className="bg-[#0A0A0A] border-[#27272A]">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[#A1A1AA] text-xs">Tempo Total</p>
-                      <p className="text-xl font-bold text-[#00F0FF]">{stats?.total_study_time_hours || 0}h</p>
-                    </div>
-                    <Clock className="w-6 h-6 text-[#007AFF] opacity-60" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A]">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[#A1A1AA] text-xs">Questões</p>
-                      <p className="text-xl font-bold text-purple-400">{totalQuestions}</p>
-                      <p className="text-xs text-[#A1A1AA]">{accuracy}% acerto</p>
-                    </div>
-                    <BarChart3 className="w-6 h-6 text-purple-500 opacity-60" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A]">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[#A1A1AA] text-xs">Foco Hoje</p>
-                      <p className="text-xl font-bold text-red-400">{focusToday}min</p>
-                    </div>
-                    <Timer className="w-6 h-6 text-red-500 opacity-60" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0A0A0A] border-[#27272A]">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[#A1A1AA] text-xs">Flashcards</p>
-                      <p className="text-xl font-bold text-yellow-400">{stats?.flashcards?.due_today || 0}</p>
-                      <p className="text-xs text-[#A1A1AA]">p/ revisar</p>
-                    </div>
-                    <Brain className="w-6 h-6 text-yellow-500 opacity-60" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* ===== STUDY DASHBOARD ===== */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            {/* ===== UNIFIED STUDY DASHBOARD ===== */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               {[
                 { 
-                  label: "Tempo Estudado", 
-                  value: overallStudyStats?.totals?.tempo_total_horas || 0, 
+                  label: "Tempo Total", 
+                  value: stats?.total_study_time_hours || overallStudyStats?.totals?.tempo_total_horas || 0, 
                   unit: "h", 
-                  icon: <Timer className="w-5 h-5" />,
-                  color: "from-blue-600 to-blue-400",
-                  bgColor: "bg-blue-500/10",
-                  textColor: "text-blue-400"
+                  icon: <Clock className="w-5 h-5" />,
+                  color: "from-cyan-600 to-cyan-400",
+                  bgColor: "bg-cyan-500/10",
+                  textColor: "text-cyan-400"
                 },
                 { 
-                  label: "Questões Feitas", 
-                  value: overallStudyStats?.totals?.questoes_total || 0, 
+                  label: "Questões", 
+                  value: totalQuestions || overallStudyStats?.totals?.questoes_total || 0, 
                   unit: "", 
+                  sub: `${accuracy || overallStudyStats?.totals?.acuracia_geral || 0}% acerto`,
                   icon: <Target className="w-5 h-5" />,
                   color: "from-purple-600 to-purple-400",
                   bgColor: "bg-purple-500/10",
                   textColor: "text-purple-400"
                 },
                 { 
-                  label: "Acurácia", 
-                  value: overallStudyStats?.totals?.acuracia_geral || 0, 
+                  label: "Acurácia Geral", 
+                  value: accuracy || overallStudyStats?.totals?.acuracia_geral || 0, 
                   unit: "%", 
                   icon: <TrendingUp className="w-5 h-5" />,
                   color: "from-green-600 to-green-400",
                   bgColor: "bg-green-500/10",
-                  textColor: (overallStudyStats?.totals?.acuracia_geral || 0) >= 70 ? "text-green-400" : (overallStudyStats?.totals?.acuracia_geral || 0) >= 50 ? "text-yellow-400" : "text-red-400"
+                  textColor: (accuracy || overallStudyStats?.totals?.acuracia_geral || 0) >= 70 ? "text-green-400" : (accuracy || overallStudyStats?.totals?.acuracia_geral || 0) >= 50 ? "text-yellow-400" : "text-red-400"
                 },
                 { 
-                  label: "Disciplinas Ativas", 
+                  label: "Foco Hoje", 
+                  value: focusToday || 0, 
+                  unit: "min", 
+                  icon: <Timer className="w-5 h-5" />,
+                  color: "from-red-600 to-red-400",
+                  bgColor: "bg-red-500/10",
+                  textColor: "text-red-400"
+                },
+                { 
+                  label: "Flashcards", 
+                  value: stats?.flashcards?.due_today || 0, 
+                  unit: "", 
+                  sub: "p/ revisar",
+                  icon: <Brain className="w-5 h-5" />,
+                  color: "from-yellow-600 to-yellow-400",
+                  bgColor: "bg-yellow-500/10",
+                  textColor: "text-yellow-400"
+                },
+                { 
+                  label: "Disciplinas", 
                   value: overallStudyStats?.totals?.disciplinas_ativas || 0, 
                   unit: "", 
+                  sub: "ativas",
                   icon: <BookOpen className="w-5 h-5" />,
-                  color: "from-cyan-600 to-cyan-400",
-                  bgColor: "bg-cyan-500/10",
-                  textColor: "text-cyan-400"
+                  color: "from-blue-600 to-blue-400",
+                  bgColor: "bg-blue-500/10",
+                  textColor: "text-blue-400"
                 }
               ].map((stat, idx) => (
-                <Card key={idx} className="bg-[#0A0A0A] border-[#27272A] p-4 relative overflow-hidden group hover:border-[#3F3F46] transition-colors">
+                <Card key={idx} className="bg-[#0A0A0A] border-[#27272A] p-3 relative overflow-hidden group hover:border-[#3F3F46] transition-colors">
                   <div className={`absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r ${stat.color}`} />
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-[10px] uppercase tracking-wider text-[#71717A] mb-1">{stat.label}</p>
-                      <p className={`text-2xl md:text-3xl font-bold ${stat.textColor} font-data`}>
+                      <p className="text-[9px] uppercase tracking-wider text-[#71717A] mb-0.5">{stat.label}</p>
+                      <p className={`text-xl md:text-2xl font-bold ${stat.textColor} font-data`}>
                         {stat.value}{stat.unit}
                       </p>
+                      {stat.sub && <p className="text-[10px] text-[#52525B]">{stat.sub}</p>}
                     </div>
-                    <div className={`${stat.bgColor} p-2 rounded-lg ${stat.textColor}`}>
+                    <div className={`${stat.bgColor} p-1.5 rounded-lg ${stat.textColor}`}>
                       {stat.icon}
                     </div>
                   </div>
