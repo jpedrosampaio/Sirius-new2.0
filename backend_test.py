@@ -11,7 +11,7 @@ import sys
 from urllib.parse import urljoin
 
 # Configuration
-BASE_URL = "https://ai-workout-tutorials.preview.emergentagent.com/api"
+BASE_URL = "https://api-critical-patch.preview.emergentagent.com/api"
 TEST_EMAIL = "testworkout@test.com"
 TEST_PASSWORD = "Test123!"
 
