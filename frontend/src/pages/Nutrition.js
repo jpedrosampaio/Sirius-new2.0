@@ -16,7 +16,8 @@ import {
   Apple, Plus, Trash2, Droplets, Target, ChefHat, 
   Flame, Drumstick, Wheat, Droplet, Settings, Sparkles,
   UtensilsCrossed, Clock, ChevronLeft, ChevronRight, Loader2,
-  Coffee, Sun, Moon, Cookie, TrendingUp, BarChart3
+  Coffee, Sun, Moon, Cookie, TrendingUp, BarChart3,
+  Calculator, ShoppingCart, Heart, Activity, CheckSquare, Scale, ListChecks
 } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 
@@ -56,6 +57,27 @@ export default function Nutrition() {
   const [showRecipeDetailDialog, setShowRecipeDetailDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [weeklyTrend, setWeeklyTrend] = useState(null);
+
+  // AI Meal Plan
+  const [showMealPlanDialog, setShowMealPlanDialog] = useState(false);
+  const [generatingMealPlan, setGeneratingMealPlan] = useState(false);
+  const [mealPlans, setMealPlans] = useState([]);
+  const [mealPlanForm, setMealPlanForm] = useState({
+    objective: "saude",
+    restrictions: [],
+    meals_per_day: 5,
+    duration: "dia",
+    calories_target: 0
+  });
+  const [selectedMealPlan, setSelectedMealPlan] = useState(null);
+  const [shoppingLists, setShoppingLists] = useState([]);
+
+  // Health Calculator
+  const [calcForm, setCalcForm] = useState({
+    weight: 70, height: 170, age: 25, gender: "male",
+    activity_level: "moderate", objective: "maintain"
+  });
+  const [calcResult, setCalcResult] = useState(null);
 
   // Meal form state
   const [mealForm, setMealForm] = useState({
@@ -253,6 +275,73 @@ export default function Nutrition() {
     return "bg-red-500";
   };
 
+  // AI Meal Plan handlers
+  const handleGenerateMealPlan = async () => {
+    setGeneratingMealPlan(true);
+    try {
+      const res = await axios.post(`${API}/nutrition/meal-plan/generate`, mealPlanForm, { withCredentials: true, timeout: 120000 });
+      if (res.data.success) {
+        toast.success(`Plano alimentar gerado! +${res.data.xp_earned} XP`);
+        setShowMealPlanDialog(false);
+        setSelectedMealPlan(res.data.plan);
+        fetchMealPlans();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao gerar plano alimentar");
+    } finally {
+      setGeneratingMealPlan(false);
+    }
+  };
+
+  const fetchMealPlans = async () => {
+    try {
+      const res = await axios.get(`${API}/nutrition/meal-plans`, { withCredentials: true });
+      setMealPlans(Array.isArray(res.data) ? res.data : []);
+    } catch {}
+  };
+
+  const handleDeleteMealPlan = async (planId) => {
+    try {
+      await axios.delete(`${API}/nutrition/meal-plans/${planId}`, { withCredentials: true });
+      toast.success("Plano removido");
+      if (selectedMealPlan?.plan_id === planId) setSelectedMealPlan(null);
+      fetchMealPlans();
+    } catch { toast.error("Erro ao remover"); }
+  };
+
+  const handleGenerateShoppingList = async (planId) => {
+    try {
+      const res = await axios.post(`${API}/nutrition/shopping-list/generate`, { plan_id: planId }, { withCredentials: true });
+      if (res.data.success) {
+        toast.success("Lista de compras gerada!");
+        setShoppingLists(prev => [res.data.shopping_list, ...prev]);
+      }
+    } catch { toast.error("Erro ao gerar lista"); }
+  };
+
+  const toggleShoppingItem = async (listId, idx) => {
+    try {
+      const res = await axios.patch(`${API}/nutrition/shopping-lists/${listId}/toggle/${idx}`, {}, { withCredentials: true });
+      if (res.data.success) {
+        setShoppingLists(prev => prev.map(l => l.list_id === listId ? {...l, items: res.data.items} : l));
+      }
+    } catch {}
+  };
+
+  const handleCalculateHealth = async () => {
+    try {
+      const res = await axios.post(`${API}/health/calculate`, calcForm, { withCredentials: true });
+      setCalcResult(res.data);
+    } catch { toast.error("Erro ao calcular"); }
+  };
+
+  const toggleMealPlanRestriction = (r) => {
+    setMealPlanForm(prev => ({
+      ...prev,
+      restrictions: prev.restrictions.includes(r) ? prev.restrictions.filter(x => x !== r) : [...prev.restrictions, r]
+    }));
+  };
+
   if (loading && !user) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
@@ -293,7 +382,8 @@ export default function Nutrition() {
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="meals">Refeições</TabsTrigger>
             <TabsTrigger value="recipes">Receitas</TabsTrigger>
-            <TabsTrigger value="diets">Dietas</TabsTrigger>
+            <TabsTrigger value="meal_plans" onClick={fetchMealPlans}>Plano Alimentar</TabsTrigger>
+            <TabsTrigger value="calculator">Calculadora</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -1037,18 +1127,220 @@ export default function Nutrition() {
               </>
             )}
           </TabsContent>
-          <TabsContent value="diets" className="space-y-6">
+          {/* AI Meal Plan Tab */}
+          <TabsContent value="meal_plans" className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-bold">Planos de Dieta</h2>
+              <h2 className="text-xl font-bold">Planos Alimentares com IA</h2>
+              <Dialog open={showMealPlanDialog} onOpenChange={setShowMealPlanDialog}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] text-white">
+                    <Sparkles className="w-4 h-4 mr-2" /> Gerar Plano com IA
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-lg max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-[#A855F7]" /> Gerar Plano Alimentar</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <Label className="text-xs uppercase">Objetivo</Label>
+                      <Select value={mealPlanForm.objective} onValueChange={(v) => setMealPlanForm({...mealPlanForm, objective: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white">
+                          <SelectItem value="saude">Saúde geral</SelectItem>
+                          <SelectItem value="emagrecimento">Emagrecimento</SelectItem>
+                          <SelectItem value="hipertrofia">Hipertrofia</SelectItem>
+                          <SelectItem value="definicao">Definição muscular</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs uppercase">Duração</Label>
+                      <Select value={mealPlanForm.duration} onValueChange={(v) => setMealPlanForm({...mealPlanForm, duration: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white">
+                          <SelectItem value="dia">1 Dia</SelectItem>
+                          <SelectItem value="semana">1 Semana</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs uppercase">Refeições por dia</Label>
+                      <div className="flex gap-2 mt-1">
+                        {[3, 4, 5, 6].map(n => (
+                          <button key={n} onClick={() => setMealPlanForm({...mealPlanForm, meals_per_day: n})}
+                            className={`flex-1 py-2 rounded text-sm ${mealPlanForm.meals_per_day === n ? 'bg-[#007AFF] text-white' : 'bg-[#121212] text-[#A1A1AA] border border-[#27272A]'}`}>
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs uppercase">Meta calórica (0 = automática)</Label>
+                      <Input type="number" value={mealPlanForm.calories_target} onChange={(e) => setMealPlanForm({...mealPlanForm, calories_target: parseInt(e.target.value) || 0})} className="bg-[#121212] border-[#27272A] text-white mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs uppercase mb-2 block">Restrições</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {["vegetariano", "vegano", "sem_gluten", "sem_lactose", "low_carb"].map(r => (
+                          <button key={r} onClick={() => toggleMealPlanRestriction(r)}
+                            className={`px-3 py-1.5 rounded-full text-xs ${mealPlanForm.restrictions.includes(r) ? 'bg-[#A855F7] text-white' : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA]'}`}>
+                            {r.replace('_', ' ')}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <Button onClick={handleGenerateMealPlan} disabled={generatingMealPlan} className="w-full bg-gradient-to-r from-[#A855F7] to-[#00F0FF] text-white">
+                      {generatingMealPlan ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-2" /> Gerar Plano</>}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
+            {mealPlans.length === 0 && !selectedMealPlan ? (
+              <Card className="bg-[#0A0A0A] border-[#27272A]"><CardContent className="text-center py-12"><Apple className="w-12 h-12 mx-auto text-[#A1A1AA] mb-4" /><h3 className="text-lg font-medium mb-2">Nenhum plano alimentar</h3><p className="text-[#A1A1AA]">Gere um plano personalizado com IA</p></CardContent></Card>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {(selectedMealPlan ? [selectedMealPlan, ...mealPlans.filter(p => p.plan_id !== selectedMealPlan.plan_id)] : mealPlans).map(plan => (
+                    <button key={plan.plan_id} onClick={() => setSelectedMealPlan(plan)}
+                      className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap ${selectedMealPlan?.plan_id === plan.plan_id ? 'bg-[#007AFF] text-white' : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA]'}`}>
+                      {plan.name || "Plano"}
+                    </button>
+                  ))}
+                </div>
+                {selectedMealPlan && (
+                  <div className="space-y-4">
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-lg font-bold">{selectedMealPlan.name}</h3>
+                          <p className="text-sm text-[#A1A1AA]">{selectedMealPlan.description}</p>
+                          <div className="flex gap-4 mt-3 text-sm">
+                            <span className="text-[#FF9500]">{selectedMealPlan.calories_total || '---'} kcal</span>
+                            <span className="text-[#FF6B6B]">{selectedMealPlan.macros?.protein_g || 0}g P</span>
+                            <span className="text-[#FFD700]">{selectedMealPlan.macros?.carbs_g || 0}g C</span>
+                            <span className="text-[#00B4D8]">{selectedMealPlan.macros?.fat_g || 0}g G</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleGenerateShoppingList(selectedMealPlan.plan_id)} className="border-[#27272A] text-xs"><ShoppingCart className="w-3 h-3 mr-1" /> Lista</Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteMealPlan(selectedMealPlan.plan_id)} className="text-red-400"><Trash2 className="w-4 h-4" /></Button>
+                        </div>
+                      </div>
+                    </Card>
+                    {(selectedMealPlan.days || []).map((day, dIdx) => (
+                      <Card key={dIdx} className="bg-[#0A0A0A] border-[#27272A] p-4">
+                        <h4 className="font-bold text-sm uppercase text-[#00F0FF] mb-3">{day.day_label || `Dia ${dIdx + 1}`}</h4>
+                        <div className="space-y-3">
+                          {(day.meals || []).map((meal, mIdx) => (
+                            <div key={mIdx} className="bg-[#121212] rounded-lg p-3">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-medium">{meal.time} - {meal.name}</span>
+                                <Badge variant="outline" className="text-[10px]">{meal.total_calories || 0} kcal</Badge>
+                              </div>
+                              {meal.foods && meal.foods.map((f, fIdx) => (
+                                <div key={fIdx} className="flex justify-between text-xs text-[#A1A1AA]"><span>{f.name} ({f.quantity})</span><span>{f.calories} kcal</span></div>
+                              ))}
+                              {meal.preparation && <p className="text-xs text-[#52525B] mt-2 italic">{meal.preparation}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    ))}
+                    {selectedMealPlan.tips && selectedMealPlan.tips.length > 0 && (
+                      <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                        <h4 className="font-bold text-sm text-[#FFD700] mb-2">Dicas</h4>
+                        <ul className="space-y-1">{selectedMealPlan.tips.map((tip, i) => (<li key={i} className="text-xs text-[#A1A1AA]">• {tip}</li>))}</ul>
+                      </Card>
+                    )}
+                    {shoppingLists.length > 0 && (
+                      <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                        <h4 className="font-bold text-sm text-green-400 mb-3">Lista de Compras</h4>
+                        <div className="space-y-1">
+                          {shoppingLists[0].items?.map((item, idx) => (
+                            <div key={idx} onClick={() => toggleShoppingItem(shoppingLists[0].list_id, idx)}
+                              className={`flex items-center gap-2 p-2 rounded cursor-pointer text-sm ${item.checked ? 'text-[#52525B] line-through' : 'text-white'} hover:bg-[#121212]`}>
+                              {item.checked ? <CheckSquare className="w-4 h-4 text-green-500" /> : <div className="w-4 h-4 border border-[#52525B] rounded" />}
+                              <span className="flex-1">{item.name}</span><span className="text-xs text-[#52525B]">{item.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </TabsContent>
 
-            <Card className="bg-[#0A0A0A] border-[#27272A]">
-              <CardContent className="text-center py-12">
-                <Apple className="w-12 h-12 mx-auto text-[#A1A1AA] mb-4" />
-                <h3 className="text-lg font-medium mb-2">Planos de Dieta</h3>
-                <p className="text-[#A1A1AA]">Em breve: Crie e gerencie planos alimentares personalizados</p>
-              </CardContent>
-            </Card>
+          {/* Health Calculator Tab */}
+          <TabsContent value="calculator" className="space-y-6">
+            <h2 className="text-xl font-bold flex items-center gap-2"><Calculator className="w-5 h-5 text-[#00F0FF]" /> Calculadora de Saúde</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                <h3 className="font-bold mb-4">Seus Dados</h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-xs">Peso (kg)</Label><Input type="number" value={calcForm.weight} onChange={(e) => setCalcForm({...calcForm, weight: parseFloat(e.target.value) || 0})} className="bg-[#121212] border-[#27272A] text-white mt-1" /></div>
+                    <div><Label className="text-xs">Altura (cm)</Label><Input type="number" value={calcForm.height} onChange={(e) => setCalcForm({...calcForm, height: parseFloat(e.target.value) || 0})} className="bg-[#121212] border-[#27272A] text-white mt-1" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label className="text-xs">Idade</Label><Input type="number" value={calcForm.age} onChange={(e) => setCalcForm({...calcForm, age: parseInt(e.target.value) || 0})} className="bg-[#121212] border-[#27272A] text-white mt-1" /></div>
+                    <div><Label className="text-xs">Sexo</Label>
+                      <Select value={calcForm.gender} onValueChange={(v) => setCalcForm({...calcForm, gender: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white"><SelectItem value="male">Masculino</SelectItem><SelectItem value="female">Feminino</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div><Label className="text-xs">Nível de Atividade</Label>
+                    <Select value={calcForm.activity_level} onValueChange={(v) => setCalcForm({...calcForm, activity_level: v})}>
+                      <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-[#121212] border-[#27272A] text-white"><SelectItem value="sedentary">Sedentário</SelectItem><SelectItem value="light">Leve (1-3x/sem)</SelectItem><SelectItem value="moderate">Moderado (3-5x/sem)</SelectItem><SelectItem value="active">Ativo (6-7x/sem)</SelectItem><SelectItem value="very_active">Muito ativo</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label className="text-xs">Objetivo</Label>
+                    <Select value={calcForm.objective} onValueChange={(v) => setCalcForm({...calcForm, objective: v})}>
+                      <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-[#121212] border-[#27272A] text-white"><SelectItem value="lose">Emagrecer</SelectItem><SelectItem value="maintain">Manter</SelectItem><SelectItem value="gain">Ganhar massa</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <Button onClick={handleCalculateHealth} className="w-full bg-[#00F0FF] text-black hover:bg-[#00D4E5]"><Calculator className="w-4 h-4 mr-2" /> Calcular</Button>
+                </div>
+              </Card>
+              <div className="space-y-4">
+                {calcResult ? (
+                  <>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                      <h3 className="font-bold mb-4">Resultados</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-[#121212] rounded-lg p-4 text-center"><Scale className="w-6 h-6 mx-auto mb-2 text-[#00F0FF]" /><p className="font-data text-2xl">{calcResult.bmi}</p><p className="text-xs text-[#A1A1AA]">IMC</p><p className={`text-xs mt-1 ${calcResult.bmi >= 18.5 && calcResult.bmi < 25 ? 'text-[#39FF14]' : 'text-[#FF9500]'}`}>{calcResult.bmi_class}</p></div>
+                        <div className="bg-[#121212] rounded-lg p-4 text-center"><Flame className="w-6 h-6 mx-auto mb-2 text-[#FF9500]" /><p className="font-data text-2xl">{calcResult.bmr}</p><p className="text-xs text-[#A1A1AA]">TMB (kcal)</p></div>
+                        <div className="bg-[#121212] rounded-lg p-4 text-center"><Activity className="w-6 h-6 mx-auto mb-2 text-[#A855F7]" /><p className="font-data text-2xl">{calcResult.tdee}</p><p className="text-xs text-[#A1A1AA]">GET (kcal)</p></div>
+                        <div className="bg-[#121212] rounded-lg p-4 text-center"><Target className="w-6 h-6 mx-auto mb-2 text-[#39FF14]" /><p className="font-data text-2xl text-[#39FF14]">{calcResult.calories_target}</p><p className="text-xs text-[#A1A1AA]">Meta (kcal)</p></div>
+                      </div>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                      <h3 className="font-bold mb-4">Macros Recomendados</h3>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-[#121212] rounded-lg p-3 text-center"><p className="font-data text-xl text-[#FF6B6B]">{calcResult.macros.protein_g}g</p><p className="text-xs text-[#A1A1AA]">Proteína ({calcResult.macros.protein_pct}%)</p></div>
+                        <div className="bg-[#121212] rounded-lg p-3 text-center"><p className="font-data text-xl text-[#FFD700]">{calcResult.macros.carbs_g}g</p><p className="text-xs text-[#A1A1AA]">Carboidratos ({calcResult.macros.carbs_pct}%)</p></div>
+                        <div className="bg-[#121212] rounded-lg p-3 text-center"><p className="font-data text-xl text-[#00B4D8]">{calcResult.macros.fat_g}g</p><p className="text-xs text-[#A1A1AA]">Gordura ({calcResult.macros.fat_pct}%)</p></div>
+                      </div>
+                    </Card>
+                    <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="flex justify-between"><span className="text-[#A1A1AA]">Peso ideal:</span><span className="font-data">{calcResult.ideal_weight.min}-{calcResult.ideal_weight.max} kg</span></div>
+                        <div className="flex justify-between"><span className="text-[#A1A1AA]">Água/dia:</span><span className="font-data text-[#00B4D8]">{calcResult.water_liters}L</span></div>
+                      </div>
+                    </Card>
+                  </>
+                ) : (
+                  <Card className="bg-[#0A0A0A] border-[#27272A]"><CardContent className="text-center py-12"><Calculator className="w-12 h-12 mx-auto text-[#A1A1AA] mb-4" /><h3 className="text-lg font-medium mb-2">Calculadora de Saúde</h3><p className="text-[#A1A1AA] text-sm">Preencha seus dados para ver IMC, TMB, GET e macros</p></CardContent></Card>
+                )}
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
 

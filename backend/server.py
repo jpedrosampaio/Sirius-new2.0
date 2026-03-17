@@ -10026,6 +10026,716 @@ async def delete_saved_insight(request: Request, insight_id: str, session_token:
     return {"message": "Insight removido"}
 
 
+# ========== AI MEAL PLAN GENERATION ==========
+@api_router.post("/nutrition/meal-plan/generate")
+async def generate_meal_plan(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Generate a personalized meal plan with AI"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=503, detail="Serviço de IA indisponível")
+    
+    body = await request.json()
+    objective = body.get("objective", "saude")  # saude, emagrecimento, hipertrofia, definicao
+    restrictions = body.get("restrictions", [])  # vegetariano, vegano, sem_gluten, sem_lactose, low_carb
+    meals_per_day = body.get("meals_per_day", 5)
+    duration = body.get("duration", "dia")  # dia, semana
+    calories_target = body.get("calories_target", 0)  # 0 = auto
+    
+    restrictions_text = ""
+    if restrictions:
+        restrictions_text = f"\nRestrições alimentares: {', '.join(restrictions)}"
+    
+    calories_text = ""
+    if calories_target > 0:
+        calories_text = f"\nMeta calórica: {calories_target} kcal/dia"
+    
+    duration_instruction = "Crie um plano para UM DIA." if duration == "dia" else "Crie um plano para UMA SEMANA (segunda a domingo, 7 dias)."
+    
+    prompt = f"""Você é um nutricionista certificado. Gere um plano alimentar completo em JSON.
+
+PARÂMETROS:
+- Objetivo: {objective}
+- Refeições por dia: {meals_per_day}{restrictions_text}{calories_text}
+- {duration_instruction}
+
+FORMATO JSON OBRIGATÓRIO:
+{{
+  "name": "Plano Alimentar - {objective}",
+  "description": "Descrição breve",
+  "calories_total": 2000,
+  "macros": {{"protein_g": 150, "carbs_g": 200, "fat_g": 70, "fiber_g": 30}},
+  "days": [
+    {{
+      "day_name": "dia1",
+      "day_label": "Segunda-feira",
+      "calories": 2000,
+      "meals": [
+        {{
+          "meal_type": "café_da_manhã",
+          "time": "07:00",
+          "name": "Omelete de claras com aveia",
+          "foods": [
+            {{"name": "Clara de ovo", "quantity": "4 unidades", "calories": 68, "protein": 14, "carbs": 0, "fat": 0}},
+            {{"name": "Aveia", "quantity": "40g", "calories": 140, "protein": 5, "carbs": 24, "fat": 3}}
+          ],
+          "total_calories": 208,
+          "preparation": "Bata as claras, adicione sal e temperos. Cozinhe em frigideira antiaderente. Sirva com aveia cozida em água."
+        }}
+      ]
+    }}
+  ],
+  "shopping_list": [
+    {{"name": "Clara de ovo", "quantity": "20 unidades", "category": "proteínas"}},
+    {{"name": "Aveia", "quantity": "200g", "category": "cereais"}}
+  ],
+  "tips": ["Beba no mínimo 2L de água por dia", "Evite comer 2h antes de dormir"]
+}}
+
+IMPORTANTE:
+- Retorne APENAS o JSON, sem markdown, sem ```json
+- Inclua lista de compras (shopping_list) completa
+- Inclua dicas (tips) personalizadas ao objetivo
+- Macros devem ser realistas e adaptados ao objetivo
+- Cada refeição deve ter instrução de preparo
+- {"Retorne apenas 1 dia" if duration == "dia" else "Retorne 7 dias"} no array days"""
+
+    try:
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction="Você é um nutricionista profissional. Sempre responda em JSON válido."
+            )
+        )
+        
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3].strip()
+        if response_text.startswith("json"):
+            response_text = response_text[4:].strip()
+            
+        plan_data = json.loads(response_text)
+        
+        plan_id = f"mealplan_{uuid.uuid4().hex[:12]}"
+        plan_doc = {
+            "plan_id": plan_id,
+            "user_id": user.user_id,
+            "type": "meal_plan",
+            **plan_data,
+            "objective": objective,
+            "restrictions": restrictions,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.meal_plans.insert_one(plan_doc)
+        plan_doc.pop('_id', None)
+        
+        xp_earned = 5
+        new_xp = user.xp + xp_earned
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        
+        return {"success": True, "plan": plan_doc, "xp_earned": xp_earned}
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Erro ao processar resposta da IA. Tente novamente.")
+    except Exception as e:
+        logging.error(f"Meal plan generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar plano alimentar: {str(e)[:100]}")
+
+
+@api_router.get("/nutrition/meal-plans")
+async def get_meal_plans(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    plans = await db.meal_plans.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    return plans
+
+
+@api_router.delete("/nutrition/meal-plans/{plan_id}")
+async def delete_meal_plan(request: Request, plan_id: str, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    result = await db.meal_plans.delete_one({"plan_id": plan_id, "user_id": user.user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    return {"success": True}
+
+
+# ========== HEALTH CALCULATOR ==========
+@api_router.post("/health/calculate")
+async def calculate_health_metrics(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Calculate BMI, BMR, TDEE, and recommended macros"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    weight = float(body.get("weight", 70))
+    height = float(body.get("height", 170))  # cm
+    age = int(body.get("age", 25))
+    gender = body.get("gender", "male")  # male, female
+    activity_level = body.get("activity_level", "moderate")  # sedentary, light, moderate, active, very_active
+    objective = body.get("objective", "maintain")  # lose, maintain, gain
+    
+    # BMI
+    height_m = height / 100
+    bmi = round(weight / (height_m ** 2), 1)
+    
+    if bmi < 18.5:
+        bmi_class = "Abaixo do peso"
+    elif bmi < 25:
+        bmi_class = "Peso normal"
+    elif bmi < 30:
+        bmi_class = "Sobrepeso"
+    elif bmi < 35:
+        bmi_class = "Obesidade grau I"
+    elif bmi < 40:
+        bmi_class = "Obesidade grau II"
+    else:
+        bmi_class = "Obesidade grau III"
+    
+    # BMR (Mifflin-St Jeor)
+    if gender == "male":
+        bmr = round(10 * weight + 6.25 * height - 5 * age + 5)
+    else:
+        bmr = round(10 * weight + 6.25 * height - 5 * age - 161)
+    
+    # TDEE
+    activity_multipliers = {
+        "sedentary": 1.2,
+        "light": 1.375,
+        "moderate": 1.55,
+        "active": 1.725,
+        "very_active": 1.9
+    }
+    tdee = round(bmr * activity_multipliers.get(activity_level, 1.55))
+    
+    # Calorie target based on objective
+    if objective == "lose":
+        calories_target = tdee - 500
+    elif objective == "gain":
+        calories_target = tdee + 300
+    else:
+        calories_target = tdee
+    
+    # Macros
+    if objective == "gain":
+        protein_g = round(weight * 2.0)
+        fat_g = round(weight * 1.0)
+        carbs_g = round((calories_target - (protein_g * 4 + fat_g * 9)) / 4)
+    elif objective == "lose":
+        protein_g = round(weight * 2.2)
+        fat_g = round(weight * 0.8)
+        carbs_g = round((calories_target - (protein_g * 4 + fat_g * 9)) / 4)
+    else:
+        protein_g = round(weight * 1.6)
+        fat_g = round(weight * 1.0)
+        carbs_g = round((calories_target - (protein_g * 4 + fat_g * 9)) / 4)
+    
+    # Ideal weight range (BMI 18.5-24.9)
+    ideal_weight_min = round(18.5 * (height_m ** 2), 1)
+    ideal_weight_max = round(24.9 * (height_m ** 2), 1)
+    
+    # Water intake recommendation
+    water_liters = round(weight * 0.035, 1)
+    
+    result = {
+        "bmi": bmi,
+        "bmi_class": bmi_class,
+        "bmr": bmr,
+        "tdee": tdee,
+        "calories_target": calories_target,
+        "macros": {
+            "protein_g": max(protein_g, 0),
+            "carbs_g": max(carbs_g, 0),
+            "fat_g": max(fat_g, 0),
+            "protein_pct": round(protein_g * 4 / max(calories_target, 1) * 100),
+            "carbs_pct": round(max(carbs_g, 0) * 4 / max(calories_target, 1) * 100),
+            "fat_pct": round(fat_g * 9 / max(calories_target, 1) * 100)
+        },
+        "ideal_weight": {"min": ideal_weight_min, "max": ideal_weight_max},
+        "water_liters": water_liters,
+        "objective": objective,
+        "input": {"weight": weight, "height": height, "age": age, "gender": gender, "activity_level": activity_level}
+    }
+    
+    return result
+
+
+# ========== DASHBOARD WEEKLY SUMMARY ==========
+@api_router.get("/dashboard/weekly-summary")
+async def get_weekly_summary(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get a comprehensive weekly summary across all modules"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now(timezone.utc)
+    week_start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+    week_end = today.strftime("%Y-%m-%d")
+    
+    # Finance summary
+    transactions = await db.transactions.find(
+        {"user_id": user.user_id, "date": {"$gte": week_start, "$lte": week_end}},
+        {"_id": 0}
+    ).to_list(500)
+    
+    total_income = sum(t['amount'] for t in transactions if t.get('type') == 'income')
+    total_expense = sum(t['amount'] for t in transactions if t.get('type') == 'expense')
+    
+    # Workouts summary
+    workouts = await db.workout_logs.find(
+        {"user_id": user.user_id, "date": {"$gte": week_start, "$lte": week_end}},
+        {"_id": 0}
+    ).to_list(100)
+    
+    total_workout_minutes = sum(w.get('duration_minutes', 0) for w in workouts)
+    total_workout_calories = sum(w.get('calories', 0) for w in workouts)
+    
+    # Sessions
+    sessions = await db.workout_sessions.find(
+        {"user_id": user.user_id, "status": "completed", "started_at": {"$gte": week_start}},
+        {"_id": 0}
+    ).to_list(100)
+    
+    avg_difficulty = 0
+    if sessions:
+        difficulties = [s.get('feedback', {}).get('difficulty', 0) for s in sessions if s.get('feedback')]
+        avg_difficulty = round(sum(difficulties) / max(len(difficulties), 1), 1)
+    
+    # Habits summary
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(50)
+    habits_completed_this_week = 0
+    habits_total_possible = 0
+    for h in habits:
+        completions = h.get('completions', [])
+        for c in completions:
+            if c >= week_start and c <= week_end:
+                habits_completed_this_week += 1
+        habits_total_possible += 7
+    
+    habits_pct = round(habits_completed_this_week / max(habits_total_possible, 1) * 100)
+    
+    # Tasks summary
+    tasks = await db.tasks.find({"user_id": user.user_id}, {"_id": 0}).to_list(200)
+    tasks_completed = sum(1 for t in tasks if t.get('completed'))
+    tasks_total = len(tasks)
+    
+    # Study summary
+    study_sessions = await db.study_sessions.find(
+        {"user_id": user.user_id, "date": {"$gte": week_start}},
+        {"_id": 0}
+    ).to_list(100)
+    total_study_minutes = sum(s.get('duration_minutes', 0) for s in study_sessions)
+    
+    return {
+        "period": {"start": week_start, "end": week_end},
+        "finance": {
+            "income": total_income,
+            "expense": total_expense,
+            "balance": total_income - total_expense,
+            "transactions_count": len(transactions)
+        },
+        "workouts": {
+            "count": len(workouts),
+            "total_minutes": total_workout_minutes,
+            "total_calories": total_workout_calories,
+            "sessions_completed": len(sessions),
+            "avg_difficulty": avg_difficulty
+        },
+        "habits": {
+            "completed": habits_completed_this_week,
+            "total_possible": habits_total_possible,
+            "completion_pct": habits_pct,
+            "active_habits": len(habits)
+        },
+        "tasks": {
+            "completed": tasks_completed,
+            "total": tasks_total,
+            "completion_pct": round(tasks_completed / max(tasks_total, 1) * 100)
+        },
+        "study": {
+            "sessions": len(study_sessions),
+            "total_minutes": total_study_minutes
+        },
+        "xp": user.xp,
+        "rank": user.rank
+    }
+
+
+# ========== GLOBAL SEARCH ==========
+@api_router.get("/search/global")
+async def global_search(request: Request, q: str = "", session_token: Optional[str] = Cookie(None)):
+    """Search across all user data"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not q or len(q) < 2:
+        return {"results": []}
+    
+    query_lower = q.lower()
+    results = []
+    
+    # Search transactions
+    transactions = await db.transactions.find(
+        {"user_id": user.user_id, "$or": [
+            {"description": {"$regex": q, "$options": "i"}},
+            {"category": {"$regex": q, "$options": "i"}}
+        ]},
+        {"_id": 0}
+    ).to_list(5)
+    for t in transactions:
+        results.append({
+            "type": "transaction",
+            "icon": "💰",
+            "title": f"{t.get('description', '')} - R$ {t.get('amount', 0):.2f}",
+            "subtitle": f"{t.get('category', '')} · {t.get('date', '')}",
+            "link": "/finance"
+        })
+    
+    # Search tasks
+    tasks = await db.tasks.find(
+        {"user_id": user.user_id, "title": {"$regex": q, "$options": "i"}},
+        {"_id": 0}
+    ).to_list(5)
+    for t in tasks:
+        results.append({
+            "type": "task",
+            "icon": "✅",
+            "title": t.get('title', ''),
+            "subtitle": f"{'Concluída' if t.get('completed') else 'Pendente'}",
+            "link": "/tasks"
+        })
+    
+    # Search habits
+    habits = await db.habits.find(
+        {"user_id": user.user_id, "name": {"$regex": q, "$options": "i"}},
+        {"_id": 0}
+    ).to_list(5)
+    for h in habits:
+        results.append({
+            "type": "habit",
+            "icon": "🔄",
+            "title": h.get('name', ''),
+            "subtitle": f"Streak: {h.get('streak', 0)} dias",
+            "link": "/habits"
+        })
+    
+    # Search workout plans
+    plans = await db.workout_plans.find(
+        {"user_id": user.user_id, "$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}}
+        ]},
+        {"_id": 0}
+    ).to_list(5)
+    for p in plans:
+        results.append({
+            "type": "workout_plan",
+            "icon": "🏋️",
+            "title": p.get('name', ''),
+            "subtitle": f"{len(p.get('exercises', []))} exercícios",
+            "link": "/workouts"
+        })
+    
+    # Search notes
+    notes = await db.study_notes.find(
+        {"user_id": user.user_id, "$or": [
+            {"title": {"$regex": q, "$options": "i"}},
+            {"content": {"$regex": q, "$options": "i"}}
+        ]},
+        {"_id": 0}
+    ).to_list(5)
+    for n in notes:
+        results.append({
+            "type": "note",
+            "icon": "📝",
+            "title": n.get('title', ''),
+            "subtitle": f"Nota de estudo",
+            "link": "/studies"
+        })
+    
+    # Search goals
+    goals = await db.goals.find(
+        {"user_id": user.user_id, "title": {"$regex": q, "$options": "i"}},
+        {"_id": 0}
+    ).to_list(5)
+    for g in goals:
+        results.append({
+            "type": "goal",
+            "icon": "🎯",
+            "title": g.get('title', ''),
+            "subtitle": f"Progresso: {g.get('progress', 0)}%",
+            "link": "/goals"
+        })
+    
+    return {"results": results[:20]}
+
+
+# ========== SMART REMINDERS ==========
+@api_router.get("/reminders/smart")
+async def get_smart_reminders(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Generate smart reminders based on user patterns"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    reminders = []
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_dt = datetime.now(timezone.utc)
+    
+    # Check workout frequency
+    recent_workouts = await db.workout_logs.find(
+        {"user_id": user.user_id, "date": {"$gte": (today_dt - timedelta(days=7)).strftime("%Y-%m-%d")}},
+        {"_id": 0}
+    ).to_list(50)
+    
+    if len(recent_workouts) == 0:
+        reminders.append({
+            "type": "workout",
+            "icon": "🏋️",
+            "message": "Você não treinou nos últimos 7 dias! Que tal retomar hoje?",
+            "priority": "high",
+            "action_link": "/workouts"
+        })
+    elif len(recent_workouts) < 3:
+        reminders.append({
+            "type": "workout",
+            "icon": "💪",
+            "message": f"Apenas {len(recent_workouts)} treino(s) esta semana. Tente manter ao menos 3x/semana!",
+            "priority": "medium",
+            "action_link": "/workouts"
+        })
+    
+    # Check budget alerts
+    month = today[:7]
+    budgets = await db.budgets.find({"user_id": user.user_id, "month": month}, {"_id": 0}).to_list(20)
+    transactions = await db.transactions.find(
+        {"user_id": user.user_id, "date": {"$regex": f"^{month}"}, "type": "expense"},
+        {"_id": 0}
+    ).to_list(500)
+    
+    expense_by_cat = {}
+    for t in transactions:
+        cat = t.get('category', 'outros')
+        expense_by_cat[cat] = expense_by_cat.get(cat, 0) + t.get('amount', 0)
+    
+    for b in budgets:
+        cat = b.get('category', '')
+        limit_val = b.get('limit', 0)
+        spent = expense_by_cat.get(cat, 0)
+        if limit_val > 0 and spent > 0:
+            pct = spent / limit_val * 100
+            if pct >= 90:
+                reminders.append({
+                    "type": "finance",
+                    "icon": "⚠️",
+                    "message": f"Orçamento de {cat}: {pct:.0f}% usado (R$ {spent:.2f} de R$ {limit_val:.2f})",
+                    "priority": "high",
+                    "action_link": "/finance"
+                })
+            elif pct >= 70:
+                reminders.append({
+                    "type": "finance",
+                    "icon": "📊",
+                    "message": f"Orçamento de {cat}: {pct:.0f}% usado. Fique atento!",
+                    "priority": "medium",
+                    "action_link": "/finance"
+                })
+    
+    # Check habit streaks at risk
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(50)
+    for h in habits:
+        completions = h.get('completions', [])
+        if h.get('streak', 0) >= 3 and today not in completions:
+            yesterday = (today_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+            if yesterday in completions:
+                reminders.append({
+                    "type": "habit",
+                    "icon": "🔥",
+                    "message": f"'{h.get('name', '')}': streak de {h.get('streak', 0)} dias em risco! Complete hoje.",
+                    "priority": "high",
+                    "action_link": "/habits"
+                })
+    
+    # Check pending tasks
+    pending_tasks = await db.tasks.find(
+        {"user_id": user.user_id, "completed": False},
+        {"_id": 0}
+    ).to_list(100)
+    
+    overdue = [t for t in pending_tasks if t.get('due_date') and t['due_date'] < today]
+    if overdue:
+        reminders.append({
+            "type": "task",
+            "icon": "📋",
+            "message": f"Você tem {len(overdue)} tarefa(s) atrasada(s)!",
+            "priority": "high",
+            "action_link": "/tasks"
+        })
+    
+    # Sort by priority
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    reminders.sort(key=lambda r: priority_order.get(r.get('priority', 'low'), 2))
+    
+    return {"reminders": reminders}
+
+
+# ========== SHOPPING LIST FROM RECIPES ==========
+@api_router.post("/nutrition/shopping-list/generate")
+async def generate_shopping_list(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Generate shopping list from meal plan or recipes"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    plan_id = body.get("plan_id")
+    recipe_ids = body.get("recipe_ids", [])
+    
+    items = {}
+    
+    if plan_id:
+        plan = await db.meal_plans.find_one({"plan_id": plan_id, "user_id": user.user_id}, {"_id": 0})
+        if plan and plan.get("shopping_list"):
+            for item in plan["shopping_list"]:
+                name = item.get("name", "").lower()
+                if name in items:
+                    items[name]["quantity"] += f" + {item.get('quantity', '')}"
+                else:
+                    items[name] = {
+                        "name": item.get("name", ""),
+                        "quantity": item.get("quantity", ""),
+                        "category": item.get("category", "outros"),
+                        "checked": False
+                    }
+    
+    if recipe_ids:
+        for rid in recipe_ids:
+            recipe = await db.nutrition_recipes.find_one({"recipe_id": rid, "user_id": user.user_id}, {"_id": 0})
+            if recipe:
+                for ing in recipe.get("ingredients", []):
+                    name = ing.lower() if isinstance(ing, str) else ing.get("name", "").lower()
+                    if name not in items:
+                        items[name] = {
+                            "name": ing if isinstance(ing, str) else ing.get("name", ""),
+                            "quantity": "" if isinstance(ing, str) else ing.get("quantity", ""),
+                            "category": "ingredientes",
+                            "checked": False
+                        }
+    
+    shopping_list = list(items.values())
+    
+    list_id = f"shoplist_{uuid.uuid4().hex[:12]}"
+    list_doc = {
+        "list_id": list_id,
+        "user_id": user.user_id,
+        "items": shopping_list,
+        "plan_id": plan_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.shopping_lists.insert_one(list_doc)
+    list_doc.pop('_id', None)
+    
+    return {"success": True, "shopping_list": list_doc}
+
+
+@api_router.get("/nutrition/shopping-lists")
+async def get_shopping_lists(request: Request, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    lists = await db.shopping_lists.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", -1).to_list(10)
+    return lists
+
+
+@api_router.patch("/nutrition/shopping-lists/{list_id}/toggle/{item_idx}")
+async def toggle_shopping_item(request: Request, list_id: str, item_idx: int, session_token: Optional[str] = Cookie(None)):
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    doc = await db.shopping_lists.find_one({"list_id": list_id, "user_id": user.user_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+    
+    items = doc.get("items", [])
+    if 0 <= item_idx < len(items):
+        items[item_idx]["checked"] = not items[item_idx].get("checked", False)
+        await db.shopping_lists.update_one({"list_id": list_id}, {"$set": {"items": items}})
+    
+    return {"success": True, "items": items}
+
+
+# ========== CROSS-MODULE SUGGESTIONS ==========
+@api_router.get("/suggestions/cross-module")
+async def get_cross_module_suggestions(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get smart suggestions that connect different modules"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    suggestions = []
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Check if user just completed a workout -> suggest meal
+    recent_sessions = await db.workout_sessions.find(
+        {"user_id": user.user_id, "status": "completed"},
+        {"_id": 0}
+    ).sort("completed_at", -1).to_list(1)
+    
+    if recent_sessions:
+        last_session = recent_sessions[0]
+        completed_at = last_session.get("completed_at", "")
+        if completed_at and completed_at[:10] == today:
+            suggestions.append({
+                "type": "post_workout",
+                "icon": "🍗",
+                "title": "Refeição pós-treino",
+                "message": "Você treinou hoje! Consuma proteínas e carboidratos nas próximas 2 horas para melhor recuperação.",
+                "action": "Ir para Nutrição",
+                "action_link": "/nutrition"
+            })
+    
+    # Check if studying too long -> suggest break
+    study_today = await db.study_sessions.find(
+        {"user_id": user.user_id, "date": today},
+        {"_id": 0}
+    ).to_list(50)
+    total_study_min = sum(s.get('duration_minutes', 0) for s in study_today)
+    if total_study_min > 120:
+        suggestions.append({
+            "type": "study_break",
+            "icon": "🧘",
+            "title": "Hora de uma pausa",
+            "message": f"Você já estudou {total_study_min} minutos hoje. Uma caminhada de 15 min melhora a concentração!",
+            "action": "Ver treinos rápidos",
+            "action_link": "/workouts"
+        })
+    
+    # Check spending pattern -> suggest budget
+    month = today[:7]
+    month_expenses = await db.transactions.find(
+        {"user_id": user.user_id, "date": {"$regex": f"^{month}"}, "type": "expense"},
+        {"_id": 0}
+    ).to_list(500)
+    
+    total_month_expense = sum(t.get('amount', 0) for t in month_expenses)
+    day_of_month = int(today[8:10])
+    if day_of_month > 0:
+        daily_avg = total_month_expense / day_of_month
+        projected_month = daily_avg * 30
+        if projected_month > total_month_expense * 1.3 and day_of_month < 20:
+            suggestions.append({
+                "type": "finance_alert",
+                "icon": "📊",
+                "title": "Projeção de gastos",
+                "message": f"Seus gastos projetados para o mês: R$ {projected_month:.2f}. Revise seus orçamentos!",
+                "action": "Ver finanças",
+                "action_link": "/finance"
+            })
+    
+    return {"suggestions": suggestions}
+
+
 # Include router AFTER all endpoints are defined
 app.include_router(api_router)
 

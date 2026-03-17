@@ -4,11 +4,14 @@ import MobileNav from "@/components/MobileNav";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   CheckSquare, TrendingUp, DollarSign, Target, Award, Zap,
   Dumbbell, Utensils, BookOpen, Droplets, Flame, Clock, Brain,
-  ClipboardList, BarChart3, Trophy, ListChecks, Hash, Percent
+  ClipboardList, BarChart3, Trophy, ListChecks, Hash, Percent,
+  Search, AlertTriangle, ChevronRight, Bell, Sparkles, X
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -19,6 +22,14 @@ export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [weeklySummary, setWeeklySummary] = useState(null);
+  const [reminders, setReminders] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearch, setShowSearch] = useState(false);
+  const [crossSuggestions, setCrossSuggestions] = useState([]);
+  const [xpAnimation, setXpAnimation] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -32,11 +43,36 @@ export default function Dashboard() {
       ]);
       setUser(userRes.data);
       setStats(statsRes.data);
+      
+      // Fetch additional data in background
+      try {
+        const [weeklyRes, remindersRes, suggestionsRes] = await Promise.all([
+          axios.get(`${API}/dashboard/weekly-summary`, { withCredentials: true }),
+          axios.get(`${API}/reminders/smart`, { withCredentials: true }),
+          axios.get(`${API}/suggestions/cross-module`, { withCredentials: true })
+        ]);
+        setWeeklySummary(weeklyRes.data);
+        setReminders(remindersRes.data.reminders || []);
+        setCrossSuggestions(suggestionsRes.data.suggestions || []);
+      } catch {}
     } catch (error) {
       toast.error("Erro ao carregar dados");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSearch = async (query) => {
+    setSearchQuery(query);
+    if (query.length < 2) { setSearchResults([]); return; }
+    try {
+      const res = await axios.get(`${API}/search/global?q=${encodeURIComponent(query)}`, { withCredentials: true });
+      setSearchResults(res.data.results || []);
+    } catch {}
+  };
+
+  const dismissReminder = (idx) => {
+    setReminders(prev => prev.filter((_, i) => i !== idx));
   };
 
   const getNextRank = () => {
@@ -84,9 +120,89 @@ export default function Dashboard() {
       <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 md:mb-8 pt-12 md:pt-0">
-            <h1 className="font-heading text-2xl md:text-4xl mb-2" data-testid="dashboard-title">CENTRO DE COMANDO</h1>
-            <p className="text-[#A1A1AA] text-sm md:text-base">Visão geral das operações</p>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h1 className="font-heading text-2xl md:text-4xl mb-2" data-testid="dashboard-title">CENTRO DE COMANDO</h1>
+                <p className="text-[#A1A1AA] text-sm md:text-base">Visão geral das operações</p>
+              </div>
+              {/* Global Search */}
+              <div className="relative w-full md:w-80">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#52525B]" />
+                <Input 
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  onFocus={() => setShowSearch(true)}
+                  placeholder="Buscar em tudo..."
+                  className="bg-[#0A0A0A] border-[#27272A] text-white pl-10 pr-8"
+                />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(""); setSearchResults([]); }} className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <X className="w-4 h-4 text-[#52525B]" />
+                  </button>
+                )}
+                {showSearch && searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-[#0A0A0A] border border-[#27272A] rounded-lg shadow-2xl z-50 max-h-80 overflow-y-auto">
+                    {searchResults.map((r, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { navigate(r.link); setShowSearch(false); setSearchQuery(""); }}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-[#121212] transition-colors text-left border-b border-[#27272A] last:border-0"
+                      >
+                        <span className="text-lg">{r.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white truncate">{r.title}</p>
+                          <p className="text-xs text-[#52525B]">{r.subtitle}</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[#52525B]" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
+
+          {/* Smart Reminders */}
+          {reminders.length > 0 && (
+            <div className="mb-6 space-y-2">
+              {reminders.slice(0, 3).map((r, idx) => (
+                <div key={idx} className={`flex items-center gap-3 p-3 rounded-lg border ${
+                  r.priority === 'high' ? 'bg-red-500/5 border-red-900/50' : 'bg-[#0A0A0A] border-[#27272A]'
+                }`}>
+                  <span className="text-lg">{r.icon}</span>
+                  <p className="text-sm text-[#A1A1AA] flex-1">{r.message}</p>
+                  <button onClick={() => navigate(r.action_link)} className="text-xs text-[#007AFF] hover:underline whitespace-nowrap">
+                    Ver
+                  </button>
+                  <button onClick={() => dismissReminder(idx)} className="text-[#52525B] hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Cross-Module Suggestions */}
+          {crossSuggestions.length > 0 && (
+            <div className="mb-6">
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {crossSuggestions.map((s, idx) => (
+                  <Card key={idx} className="bg-gradient-to-r from-[#0A0A0A] to-[#0a0a1a] border-[#27272A] p-4 min-w-[280px] flex-shrink-0">
+                    <div className="flex items-start gap-3">
+                      <span className="text-2xl">{s.icon}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">{s.title}</p>
+                        <p className="text-xs text-[#A1A1AA] mt-1">{s.message}</p>
+                        <button onClick={() => navigate(s.action_link)} className="text-xs text-[#007AFF] hover:underline mt-2 flex items-center gap-1">
+                          {s.action} <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
 
           {stats && (
             <>
@@ -339,6 +455,46 @@ export default function Dashboard() {
                   </div>
                 </Card>
               </div>
+
+              {/* Weekly Summary */}
+              {weeklySummary && (
+                <Card className="bg-gradient-to-r from-[#0A0A0A] to-[#0a0a1a] border-[#27272A] p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <BarChart3 className="w-6 h-6 text-[#007AFF]" />
+                    <h2 className="font-heading text-lg">RESUMO SEMANAL</h2>
+                    <span className="text-xs text-[#52525B]">{weeklySummary.period?.start} → {weeklySummary.period?.end}</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="bg-[#121212] rounded-lg p-3 text-center">
+                      <DollarSign className="w-5 h-5 mx-auto mb-1 text-[#39FF14]" />
+                      <p className={`font-data text-lg ${(weeklySummary.finance?.balance || 0) >= 0 ? 'text-[#39FF14]' : 'text-[#FF3B30]'}`}>
+                        R$ {(weeklySummary.finance?.balance || 0).toFixed(0)}
+                      </p>
+                      <p className="text-[10px] text-[#52525B]">Saldo Semana</p>
+                    </div>
+                    <div className="bg-[#121212] rounded-lg p-3 text-center">
+                      <Dumbbell className="w-5 h-5 mx-auto mb-1 text-[#FF6B6B]" />
+                      <p className="font-data text-lg text-white">{weeklySummary.workouts?.count || 0}</p>
+                      <p className="text-[10px] text-[#52525B]">Treinos ({weeklySummary.workouts?.total_minutes || 0}min)</p>
+                    </div>
+                    <div className="bg-[#121212] rounded-lg p-3 text-center">
+                      <Flame className="w-5 h-5 mx-auto mb-1 text-[#FF9500]" />
+                      <p className="font-data text-lg text-white">{weeklySummary.habits?.completion_pct || 0}%</p>
+                      <p className="text-[10px] text-[#52525B]">Hábitos</p>
+                    </div>
+                    <div className="bg-[#121212] rounded-lg p-3 text-center">
+                      <CheckSquare className="w-5 h-5 mx-auto mb-1 text-[#007AFF]" />
+                      <p className="font-data text-lg text-white">{weeklySummary.tasks?.completed || 0}/{weeklySummary.tasks?.total || 0}</p>
+                      <p className="text-[10px] text-[#52525B]">Tarefas</p>
+                    </div>
+                    <div className="bg-[#121212] rounded-lg p-3 text-center">
+                      <BookOpen className="w-5 h-5 mx-auto mb-1 text-[#A78BFA]" />
+                      <p className="font-data text-lg text-white">{weeklySummary.study?.total_minutes || 0}</p>
+                      <p className="text-[10px] text-[#52525B]">Min Estudados</p>
+                    </div>
+                  </div>
+                </Card>
+              )}
             </>
           )}
         </div>

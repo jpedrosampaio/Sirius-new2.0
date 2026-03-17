@@ -2586,7 +2586,7 @@ frontend:
 
 test_plan:
   current_focus:
-    - "Finance categories CRUD endpoints"
+    - "New endpoints: health calc, weekly summary, search, reminders, meal plan, shopping list"
   test_all: false
   test_priority: "high_first"
   completed_focus:
@@ -2598,29 +2598,18 @@ test_plan:
 agent_communication:
     - agent: "main"
       message: |
-        LATEST: Testing custom finance categories endpoints:
+        Test these NEW endpoints in order. Login first.
+        Login: POST /api/auth/login {"email":"testworkout@test.com","password":"Test123!"}
         
-        1. POST /api/auth/login - Login as testworkout@test.com / Test123!
-        
-        2. GET /api/finance/categories - Get all categories (default + custom)
-           Expected: Returns {categories: [{name, is_default, ...}]}
-        
-        3. POST /api/finance/categories - Create custom category
-           Body: {"name": "roupas"}
-           Expected: {success: true, category: {name: "roupas", is_default: false}}
-        
-        4. GET /api/finance/categories - Verify "roupas" appears now
-        
-        5. POST /api/finance/categories - Try duplicate default (should fail 400)
-           Body: {"name": "alimentação"} 
-           Expected: 400 error
-        
-        6. DELETE /api/finance/categories/roupas - Delete custom category
-           Expected: {success: true}
-        
-        7. DELETE /api/finance/categories/alimentação - Try delete default (should fail 400)
-           Expected: 400 error
-        The AI generation endpoint may take 20-40 seconds, use timeout=120000.
+        1. POST /api/health/calculate {"weight":75,"height":175,"age":28,"gender":"male","activity_level":"moderate","objective":"maintain"}
+        2. GET /api/dashboard/weekly-summary
+        3. GET /api/search/global?q=treino
+        4. GET /api/reminders/smart
+        5. GET /api/suggestions/cross-module
+        6. POST /api/nutrition/meal-plan/generate {"objective":"hipertrofia","restrictions":[],"meals_per_day":5,"duration":"dia","calories_target":0} TIMEOUT=120s
+        7. GET /api/nutrition/meal-plans
+        8. POST /api/nutrition/shopping-list/generate {"plan_id":"<from step 6>"}
+        The AI meal plan generation may take 30+ seconds.
 
 ## New Changes - Round 9 (Workout AI + Sessions + Duration)
 
