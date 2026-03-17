@@ -2586,53 +2586,60 @@ frontend:
 
 test_plan:
   current_focus:
-    - "AI Workout Generation endpoint" 
-    - "Workout Session endpoints"
-    - "Plan duration field"
+    - "Finance categories CRUD endpoints"
   test_all: false
   test_priority: "high_first"
   completed_focus:
     - "AI Workout Generation endpoint - TESTED AND WORKING ✅"
     - "Workout Session endpoints - TESTED AND WORKING ✅"
     - "Plan duration field - TESTED AND WORKING ✅"
+    - "Finance categories CRUD endpoints - TESTED AND WORKING ✅"
 
 agent_communication:
     - agent: "main"
       message: |
-        Implemented 3 major new features for the Workout area. Need testing of new backend endpoints:
+        LATEST: Testing custom finance categories endpoints:
         
-        1. POST /api/workout-plans/generate - AI generates workout plan with tutorials and YouTube links
-           Body: {"objective": "hipertrofia", "level": "intermediario", "muscle_groups": [], "duration": "dia"}
-           Expected: Returns {success: true, plan: {...}, xp_earned: 5}
+        1. POST /api/auth/login - Login as testworkout@test.com / Test123!
         
-        2. POST /api/workout-sessions/start - Start an active workout session
-           Body: {"plan_id": "<plan_id_from_step_1>", "day_index": 0, "rest_timer_seconds": 60}
-           Expected: Returns session object with exercises array
+        2. GET /api/finance/categories - Get all categories (default + custom)
+           Expected: Returns {categories: [{name, is_default, ...}]}
         
-        3. GET /api/workout-sessions/active - Get current active session
-           Expected: Returns {active: true/false, session: {...}}
+        3. POST /api/finance/categories - Create custom category
+           Body: {"name": "roupas"}
+           Expected: {success: true, category: {name: "roupas", is_default: false}}
         
-        4. PATCH /api/workout-sessions/<session_id>/exercise/0 - Update exercise in session
-           Body: {"completed": true, "sets_completed": 3}
-           Expected: Returns updated session
+        4. GET /api/finance/categories - Verify "roupas" appears now
         
-        5. POST /api/workout-sessions/<session_id>/complete - Complete session with feedback
-           Body: {"difficulty": 4, "feeling": "bom", "notes": "Treino intenso"}
-           Expected: Returns {success: true, xp_earned: ..., total_duration_seconds: ...}
+        5. POST /api/finance/categories - Try duplicate default (should fail 400)
+           Body: {"name": "alimentação"} 
+           Expected: 400 error
         
-        6. GET /api/workout-sessions - Get session history
-           Expected: Returns array of completed sessions
+        6. DELETE /api/finance/categories/roupas - Delete custom category
+           Expected: {success: true}
         
-        7. POST /api/workout-sessions/<session_id>/abandon - Abandon active session
-           Expected: Returns {message: "Sessão abandonada"}
-        
-        IMPORTANT: Test in sequence - first generate a plan, then start session from it, update exercises, then complete.
-        Test user: Use any existing test user. Auth via session cookie.
+        7. DELETE /api/finance/categories/alimentação - Try delete default (should fail 400)
+           Expected: 400 error
         The AI generation endpoint may take 20-40 seconds, use timeout=120000.
 
 ## New Changes - Round 9 (Workout AI + Sessions + Duration)
 
 backend:
+  - task: "Finance categories CRUD endpoints"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented custom finance categories CRUD endpoints: GET /api/finance/categories returns default + custom categories with is_default flag, POST creates custom categories with validation against defaults and duplicates, DELETE removes custom categories but protects default ones."
+      - working: true
+        agent: "testing"
+        comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL 9 TESTS PASSED (100% SUCCESS RATE). **Authentication:** Successfully logged in with testworkout@test.com / Test123! as specified. **GET /api/finance/categories (Initial):** Retrieved 10 default categories including alimentação, transporte, moradia, saúde, educação, lazer with proper is_default=true flags. **POST /api/finance/categories:** Successfully created custom category 'roupas' with response {success: true, category: {name: 'roupas', is_default: false}}. **GET Categories (Verification):** Confirmed 'roupas' appears in list with is_default=false. **Error Validation:** ✅ POST with 'alimentação' correctly returned 400 error 'Essa categoria já existe como padrão', ✅ POST with duplicate 'roupas' correctly returned 400 error 'Você já tem uma categoria com esse nome'. **DELETE /api/finance/categories/roupas:** Successfully deleted custom category with {success: true, message: 'Categoria removida'}. **DELETE Protection:** DELETE /api/finance/categories/alimentação correctly returned 400 error 'Não é possível excluir categorias padrão'. **Final Verification:** Confirmed 'roupas' is completely removed from categories list. All endpoints working exactly as specified in review request."
+
   - task: "AI Workout Generation with tutorials (POST /api/workout-plans/generate)"
     implemented: true
     working: true
@@ -2825,3 +2832,85 @@ frontend:
         - Full integration with authentication and Google Gemini AI
         
         **✅ No critical issues found. All workout endpoints are production-ready and meet all specification requirements.**
+    - agent: "testing"
+      message: |
+        ✅ FINANCE CATEGORIES CRUD TESTING COMPLETE - ALL 9 TESTS PASSED (100% SUCCESS RATE)
+        
+        **Test Environment:**
+        - User: testworkout@test.com / Test123! (as specified in review request)
+        - Backend URL: https://ai-workout-tutorials.preview.emergentagent.com/api
+        - Authentication: Session cookie method working correctly
+        - Test Date: 2026-03-10
+        
+        **✅ ALL 9 SPECIFIED TEST STEPS PASSED:**
+        
+        **1. Authentication ✅**
+        - POST /api/auth/login with testworkout@test.com / Test123! successful
+        - Session cookies working correctly for subsequent requests
+        
+        **2. GET /api/finance/categories (Initial) ✅**
+        - Retrieved 10 default categories with proper structure {categories: [{name, is_default}...]}
+        - All expected defaults found: alimentação, transporte, moradia, saúde, educação, lazer, etc.
+        - All default categories correctly marked with is_default=true
+        - Response format exactly as specified: {categories: [{name, is_default}...]}
+        
+        **3. POST /api/finance/categories (Create Custom) ✅**
+        - Successfully created custom category with body {"name": "roupas"}
+        - Response: {success: true, category: {name: "roupas", is_default: false, icon: "", color: ""}}
+        - Custom category properly marked with is_default=false
+        - Response structure matches specification exactly
+        
+        **4. GET /api/finance/categories (Verification) ✅**
+        - Confirmed "roupas" now appears in categories list
+        - "roupas" category correctly shows is_default=false
+        - All default categories still present and working
+        
+        **5. Error Validation - Duplicate Default ✅**
+        - POST with body {"name": "alimentação"} correctly returned 400 error
+        - Error message: "Essa categoria já existe como padrão"
+        - Proper validation prevents duplicating default categories
+        
+        **6. Error Validation - Duplicate Custom ✅**
+        - POST with body {"name": "roupas"} correctly returned 400 error  
+        - Error message: "Você já tem uma categoria com esse nome"
+        - Proper validation prevents duplicating existing custom categories
+        
+        **7. DELETE Custom Category ✅**
+        - DELETE /api/finance/categories/roupas succeeded
+        - Response: {success: true, message: "Categoria removida"}
+        - Custom category properly removed from system
+        
+        **8. DELETE Protection - Default Category ✅**
+        - DELETE /api/finance/categories/alimentação correctly returned 400 error
+        - Error message: "Não é possível excluir categorias padrão"
+        - System properly protects default categories from deletion
+        
+        **9. Final Verification ✅**
+        - GET /api/finance/categories confirmed "roupas" is completely gone
+        - Category count returned to original 10 default categories
+        - No data inconsistencies or orphaned records
+        
+        **🔗 Integration Status:**
+        - Session-based authentication working correctly
+        - Database operations: All CRUD operations functional (create, read, delete)
+        - Data validation: All business rules properly enforced
+        - Error handling: Appropriate HTTP status codes and messages
+        - Data persistence: Categories correctly stored and retrieved
+        
+        **📊 Test Coverage:**
+        - All endpoints specified in review request: 100% tested
+        - All test scenarios: 9/9 passed (100%)
+        - Authentication flow: Working correctly
+        - Error conditions: All properly validated
+        - Data lifecycle: Complete create → verify → delete → verify cycle
+        
+        **📋 CONCLUSION:**
+        The Finance Categories CRUD endpoints are **FULLY FUNCTIONAL** and working exactly as specified:
+        - Default categories system working correctly with proper is_default flags
+        - Custom category creation with validation against defaults and duplicates
+        - Proper error handling for all invalid operations (400 status codes)
+        - Custom category deletion with protection of default categories
+        - Complete data consistency throughout all operations
+        - Session authentication integrated properly with all endpoints
+        
+        **✅ No critical issues found. All endpoints production-ready and meeting specification requirements exactly as requested.**

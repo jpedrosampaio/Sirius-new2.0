@@ -106,7 +106,46 @@ export default function Finance() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
 
-  const categories = ["alimentação", "transporte", "moradia", "saúde", "educação", "lazer", "outros"];
+  // Dynamic categories
+  const [categories, setCategories] = useState(["alimentação", "transporte", "moradia", "saúde", "educação", "lazer", "investimentos", "salário", "freelance", "outros"]);
+  const [allCategoriesData, setAllCategoriesData] = useState([]);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryLoading, setCategoryLoading] = useState(false);
+
+  const fetchCategories = async () => {
+    try {
+      const res = await axios.get(`${API}/finance/categories`, { withCredentials: true });
+      const cats = res.data.categories || [];
+      setAllCategoriesData(cats);
+      setCategories(cats.map(c => c.name));
+    } catch {}
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    setCategoryLoading(true);
+    try {
+      await axios.post(`${API}/finance/categories`, { name: newCategoryName.trim() }, { withCredentials: true });
+      toast.success(`Categoria "${newCategoryName.trim()}" criada!`);
+      setNewCategoryName("");
+      fetchCategories();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao criar categoria");
+    } finally {
+      setCategoryLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async (catName) => {
+    try {
+      await axios.delete(`${API}/finance/categories/${encodeURIComponent(catName)}`, { withCredentials: true });
+      toast.success(`Categoria "${catName}" removida`);
+      fetchCategories();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao remover categoria");
+    }
+  };
 
   useEffect(() => {
     fetchUser();
@@ -115,6 +154,7 @@ export default function Finance() {
     fetchStats();
     fetchCreditCards();
     fetchFinanceTrend();
+    fetchCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
 
@@ -634,6 +674,7 @@ export default function Finance() {
               <TabsTrigger value="bills" onClick={() => fetchMonthlyBills()}>Contas do Mês</TabsTrigger>
               <TabsTrigger value="projections">Projeção</TabsTrigger>
               <TabsTrigger value="finance_chat">Chat Financeiro</TabsTrigger>
+              <TabsTrigger value="categories">Categorias</TabsTrigger>
             </TabsList>
 
             <TabsContent value="transactions" className="mt-6">
@@ -1561,6 +1602,77 @@ export default function Finance() {
                   <Button type="submit" disabled={chatLoading || !chatInput.trim()} size="icon" className="bg-[#007AFF] shrink-0"><Send className="w-4 h-4" /></Button>
                 </form>
               </Card>
+            </TabsContent>
+
+            {/* CATEGORIES TAB */}
+            <TabsContent value="categories" className="mt-6">
+              <div className="space-y-6">
+                {/* Add new category */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <h3 className="font-heading text-lg mb-4">ADICIONAR CATEGORIA</h3>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="Nome da nova categoria..."
+                      className="bg-[#121212] border-[#27272A] text-white flex-1"
+                      onKeyDown={(e) => e.key === 'Enter' && handleCreateCategory()}
+                      maxLength={30}
+                    />
+                    <Button 
+                      onClick={handleCreateCategory} 
+                      disabled={categoryLoading || !newCategoryName.trim()}
+                      className="bg-[#007AFF] hover:bg-[#0062CC]"
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> Adicionar
+                    </Button>
+                  </div>
+                  <p className="text-xs text-[#52525B] mt-2">Máximo 30 caracteres. A categoria será convertida para minúsculas.</p>
+                </Card>
+
+                {/* Category List */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-6">
+                  <h3 className="font-heading text-lg mb-4">SUAS CATEGORIAS ({categories.length})</h3>
+                  <div className="space-y-2">
+                    {allCategoriesData.length > 0 ? allCategoriesData.map((cat, idx) => (
+                      <div 
+                        key={cat.name} 
+                        className="flex items-center justify-between p-3 rounded bg-[#121212] border border-[#27272A] hover:border-[#3f3f46] transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-[#52525B] text-sm font-mono w-6">{idx + 1}.</span>
+                          <span className="text-white capitalize">{cat.name}</span>
+                          {cat.is_default && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#007AFF]/20 text-[#007AFF] border border-[#007AFF]/30">
+                              padrão
+                            </span>
+                          )}
+                        </div>
+                        {!cat.is_default && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleDeleteCategory(cat.name)}
+                            className="text-red-500 hover:text-red-400 h-8 w-8 p-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )) : categories.map((cat, idx) => (
+                      <div 
+                        key={cat} 
+                        className="flex items-center justify-between p-3 rounded bg-[#121212] border border-[#27272A]"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-[#52525B] text-sm font-mono w-6">{idx + 1}.</span>
+                          <span className="text-white capitalize">{cat}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
             </TabsContent>
 
           </Tabs>

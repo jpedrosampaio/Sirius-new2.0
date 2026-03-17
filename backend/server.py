@@ -2269,6 +2269,92 @@ def calculate_best_streak(completions: List[str]) -> int:
     
     return best_streak
 
+# ========== FINANCE CATEGORIES ==========
+DEFAULT_FINANCE_CATEGORIES = ["alimentação", "transporte", "moradia", "saúde", "educação", "lazer", "investimentos", "salário", "freelance", "outros"]
+
+@api_router.get("/finance/categories")
+async def get_finance_categories(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get user's finance categories (default + custom)"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    user_cats = await db.finance_categories.find(
+        {"user_id": user.user_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    custom_names = [c["name"] for c in user_cats]
+    
+    # Build full category list: defaults + user custom ones
+    all_categories = []
+    for cat in DEFAULT_FINANCE_CATEGORIES:
+        all_categories.append({"name": cat, "is_default": True})
+    for c in user_cats:
+        if c["name"] not in DEFAULT_FINANCE_CATEGORIES:
+            all_categories.append({"name": c["name"], "is_default": False, "icon": c.get("icon", ""), "color": c.get("color", "")})
+    
+    return {"categories": all_categories}
+
+
+@api_router.post("/finance/categories")
+async def create_finance_category(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Create a custom finance category"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    name = body.get("name", "").strip().lower()
+    icon = body.get("icon", "")
+    color = body.get("color", "")
+    
+    if not name:
+        raise HTTPException(status_code=400, detail="Nome da categoria é obrigatório")
+    
+    if len(name) > 30:
+        raise HTTPException(status_code=400, detail="Nome muito longo (máx 30 caracteres)")
+    
+    # Check if already exists (default or custom)
+    all_defaults = [c.lower() for c in DEFAULT_FINANCE_CATEGORIES]
+    if name in all_defaults:
+        raise HTTPException(status_code=400, detail="Essa categoria já existe como padrão")
+    
+    existing = await db.finance_categories.find_one({"user_id": user.user_id, "name": name})
+    if existing:
+        raise HTTPException(status_code=400, detail="Você já tem uma categoria com esse nome")
+    
+    cat_doc = {
+        "cat_id": f"cat_{uuid.uuid4().hex[:12]}",
+        "user_id": user.user_id,
+        "name": name,
+        "icon": icon,
+        "color": color,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.finance_categories.insert_one(cat_doc)
+    
+    return {"success": True, "category": {"name": name, "is_default": False, "icon": icon, "color": color}}
+
+
+@api_router.delete("/finance/categories/{category_name}")
+async def delete_finance_category(request: Request, category_name: str, session_token: Optional[str] = Cookie(None)):
+    """Delete a custom finance category"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    decoded_name = category_name.lower().strip()
+    
+    # Can't delete default categories
+    if decoded_name in [c.lower() for c in DEFAULT_FINANCE_CATEGORIES]:
+        raise HTTPException(status_code=400, detail="Não é possível excluir categorias padrão")
+    
+    result = await db.finance_categories.delete_one({"user_id": user.user_id, "name": decoded_name})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Categoria não encontrada")
+    
+    return {"success": True, "message": "Categoria removida"}
+
+
 @api_router.get("/finance/stats")
 async def get_finance_stats(request: Request, month: Optional[str] = None, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
