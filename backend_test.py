@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 # Configuration
-API_URL = "https://api-critical-patch.preview.emergentagent.com/api"
+API_URL = "https://build-error-preview-2.preview.emergentagent.com/api"
 TEST_USER = {
     "email": "testworkout@test.com",
     "password": "Test123!"

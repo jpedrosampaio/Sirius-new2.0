@@ -10,7 +10,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
 # Backend URL
-BACKEND_URL = "https://api-critical-patch.preview.emergentagent.com"
+BACKEND_URL = "https://build-error-preview-2.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 def get_auth_token():

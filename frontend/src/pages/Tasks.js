@@ -109,11 +109,6 @@ export default function Tasks() {
   const [open, setOpen] = useState(false);
   const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", recurrence: "once" });
 
-  useEffect(() => {
-    fetchUser();
-    fetchTasks();
-  }, [selectedDate, activeTab]);
-
   const fetchUser = async () => {
     try {
       const res = await axios.get(`${API}/auth/me`, { withCredentials: true });
@@ -123,7 +118,7 @@ export default function Tasks() {
     }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const url = activeTab === "all"
         ? `${API}/tasks?date=${selectedDate}`
@@ -133,7 +128,12 @@ export default function Tasks() {
     } catch (error) {
       toast.error("Erro ao carregar tarefas");
     }
-  };
+  }, [selectedDate, activeTab]);
+
+  useEffect(() => {
+    fetchUser();
+    fetchTasks();
+  }, [selectedDate, activeTab, fetchTasks]);
 
   const handleCreateTask = async () => {
     if (!newTask.title.trim()) {
@@ -219,7 +219,7 @@ export default function Tasks() {
       toast.error("Erro ao mover tarefa");
       fetchTasks();
     }
-  }, [tasks, selectedDate]);
+  }, [tasks, selectedDate, fetchTasks]);
 
   const totalDone = tasks.filter(t => t.completed).length;
   const totalTasks = tasks.length;

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
 import { Card } from "@/components/ui/card";
@@ -50,7 +50,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchEvents();
-  }, [year, month]);
+  }, [fetchEvents]);
 
   const fetchUser = async () => {
     try {
@@ -59,7 +59,7 @@ export default function CalendarPage() {
     } catch {}
   };
 
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     setLoading(true);
     try {
       const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
@@ -72,7 +72,7 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [year, month]);
 
   const navigate = (dir) => {
     setCurrentDate(prev => {
