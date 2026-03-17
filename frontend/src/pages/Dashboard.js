@@ -14,6 +14,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
+import Onboarding from "@/components/Onboarding";
+import { LoadingSkeleton } from "@/components/XpAnimation";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -104,8 +106,18 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050505]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#007AFF]"></div>
+      <div className="flex min-h-screen bg-[#050505]">
+        <Sidebar user={user} />
+        <div className="flex-1 p-4 md:p-8 md:ml-72">
+          <div className="mb-8 pt-12 md:pt-0">
+            <div className="h-8 bg-[#27272A] rounded w-64 animate-pulse mb-4" />
+            <div className="h-4 bg-[#1a1a1a] rounded w-40 animate-pulse" />
+          </div>
+          <LoadingSkeleton type="stats" count={4} />
+          <div className="mt-6">
+            <LoadingSkeleton type="card" count={2} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -116,6 +128,7 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-screen bg-[#050505]">
+      <Onboarding />
       <Sidebar user={user} />
       <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto">
