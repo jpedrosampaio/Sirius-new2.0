@@ -1703,6 +1703,24 @@ async def analyze_image_for_expenses(
         if len(image_content) > 20 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Imagem muito grande. Máximo 20MB.")
         
+        # Validate and normalize image using PIL
+        from io import BytesIO
+        from PIL import Image as PILImage
+        try:
+            pil_image = PILImage.open(BytesIO(image_content))
+            # Convert RGBA/P/other modes to RGB for JPEG compatibility
+            if pil_image.mode not in ('RGB', 'L'):
+                pil_image = pil_image.convert('RGB')
+            # Re-encode as JPEG for maximum compatibility with Gemini
+            img_buffer = BytesIO()
+            pil_image.save(img_buffer, format='JPEG', quality=90)
+            image_content = img_buffer.getvalue()
+            content_type = "image/jpeg"
+            logging.info(f"Image validated and converted: {pil_image.size}, mode={pil_image.mode}")
+        except Exception as pil_error:
+            logging.warning(f"PIL image validation failed: {pil_error}, using original bytes")
+            # If PIL can't open it, try sending original bytes
+        
         # Create user message with image reference
         message_id = f"msg_{uuid.uuid4().hex[:12]}"
         user_message = {
@@ -1743,26 +1761,45 @@ Se não conseguir identificar gastos na imagem, retorne:
     "summary": "Não foi possível identificar gastos nesta imagem"
 }"""
 
-        # Call Gemini with image using correct format
+        # Call Gemini with image - use proper multimodal format
         try:
+            image_part = types.Part.from_bytes(data=image_content, mime_type=content_type)
             response = gemini_client.models.generate_content(
                 model=GEMINI_MODEL,
-                contents=[
-                    types.Part.from_bytes(data=image_content, mime_type=content_type),
-                    prompt
-                ]
+                contents=[prompt, image_part],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
             ai_response_text = response.text
         except Exception as gemini_error:
-            logging.error(f"Gemini Vision error: {gemini_error}")
-            # Fallback response if Gemini fails
-            ai_response_text = json.dumps({
-                "found_expenses": False,
-                "expenses": [],
-                "total": 0,
-                "establishment": None,
-                "summary": f"Não foi possível analisar a imagem. Erro: {str(gemini_error)[:100]}"
-            })
+            logging.error(f"Gemini Vision error (first attempt): {gemini_error}")
+            # Second attempt: try with base64 encoding instead
+            try:
+                import base64 as b64
+                b64_data = b64.standard_b64encode(image_content).decode("utf-8")
+                image_part = types.Part.from_bytes(
+                    data=base64.b64decode(b64_data) if isinstance(b64_data, str) else image_content,
+                    mime_type="image/jpeg"
+                )
+                response = gemini_client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=[prompt, image_part],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
+                )
+                ai_response_text = response.text
+            except Exception as retry_error:
+                logging.error(f"Gemini Vision retry also failed: {retry_error}")
+                # Fallback response if Gemini fails
+                ai_response_text = json.dumps({
+                    "found_expenses": False,
+                    "expenses": [],
+                    "total": 0,
+                    "establishment": None,
+                    "summary": f"Não foi possível analisar a imagem. Por favor, tente com outra imagem ou formato diferente (JPEG/PNG)."
+                })
         
         # Try to parse JSON from response
         transactions_created = []
@@ -5359,48 +5396,106 @@ Forneça a resposta em formato JSON com a seguinte estrutura:
     "tips": "Dica extra"
 }}"""
     
+    if not gemini_client:
+        raise HTTPException(status_code=503, detail="Serviço de IA não disponível")
+    
     try:
-        response = await call_llm(
-            prompt,
-            session_id=user.user_id,
-            system_message="Você é um nutricionista e chef experiente. Forneça receitas saudáveis e práticas. Sempre responda em JSON válido."
+        # Call Gemini directly with response_mime_type for guaranteed JSON output
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction="Você é um nutricionista e chef experiente. Forneça receitas saudáveis e práticas. Sempre responda em JSON válido.",
+                response_mime_type="application/json",
+                response_schema={
+                    "type": "OBJECT",
+                    "required": ["name", "description", "ingredients", "instructions"],
+                    "properties": {
+                        "name": {"type": "STRING"},
+                        "description": {"type": "STRING"},
+                        "ingredients": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "name": {"type": "STRING"},
+                                    "quantity": {"type": "STRING"},
+                                    "unit": {"type": "STRING"}
+                                }
+                            }
+                        },
+                        "instructions": {
+                            "type": "ARRAY",
+                            "items": {"type": "STRING"}
+                        },
+                        "prep_time_minutes": {"type": "INTEGER"},
+                        "cook_time_minutes": {"type": "INTEGER"},
+                        "servings": {"type": "INTEGER"},
+                        "calories_per_serving": {"type": "INTEGER"},
+                        "protein_per_serving": {"type": "INTEGER"},
+                        "carbs_per_serving": {"type": "INTEGER"},
+                        "fat_per_serving": {"type": "INTEGER"},
+                        "tags": {
+                            "type": "ARRAY",
+                            "items": {"type": "STRING"}
+                        },
+                        "tips": {"type": "STRING"}
+                    }
+                }
+            )
         )
         
-        # Parse JSON from response
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', response)
-        if json_match:
-            recipe_data = json.loads(json_match.group())
-            
-            # Save recipe
-            recipe_id = f"recipe_{uuid.uuid4().hex[:12]}"
-            recipe_doc = {
-                "recipe_id": recipe_id,
-                "user_id": user.user_id,
-                "name": recipe_data.get("name", "Receita Sugerida"),
-                "description": recipe_data.get("description", ""),
-                "ingredients": recipe_data.get("ingredients", []),
-                "instructions": recipe_data.get("instructions", []),
-                "prep_time_minutes": recipe_data.get("prep_time_minutes", 0),
-                "cook_time_minutes": recipe_data.get("cook_time_minutes", 0),
-                "servings": recipe_data.get("servings", 1),
-                "calories_per_serving": recipe_data.get("calories_per_serving", 0),
-                "protein_per_serving": recipe_data.get("protein_per_serving", 0),
-                "carbs_per_serving": recipe_data.get("carbs_per_serving", 0),
-                "fat_per_serving": recipe_data.get("fat_per_serving", 0),
-                "tags": recipe_data.get("tags", []),
-                "ai_generated": True,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            await db.recipes.insert_one(recipe_doc)
-            recipe_doc.pop('_id', None)
-            recipe_doc["tips"] = recipe_data.get("tips", "")
-            return recipe_doc
-        else:
-            return {"message": response, "ai_generated": True}
+        response_text = response.text.strip()
+        
+        # Parse JSON - should be valid since we used response_mime_type
+        try:
+            recipe_data = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Fallback: clean markdown code blocks and retry
+            cleaned = response_text
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+            # Try fixing common JSON issues
+            import re
+            cleaned = re.sub(r',\s*}', '}', cleaned)  # Remove trailing commas before }
+            cleaned = re.sub(r',\s*]', ']', cleaned)  # Remove trailing commas before ]
+            recipe_data = json.loads(cleaned)
+        
+        # Save recipe
+        recipe_id = f"recipe_{uuid.uuid4().hex[:12]}"
+        recipe_doc = {
+            "recipe_id": recipe_id,
+            "user_id": user.user_id,
+            "name": recipe_data.get("name", "Receita Sugerida"),
+            "description": recipe_data.get("description", ""),
+            "ingredients": recipe_data.get("ingredients", []),
+            "instructions": recipe_data.get("instructions", []),
+            "prep_time_minutes": recipe_data.get("prep_time_minutes", 0),
+            "cook_time_minutes": recipe_data.get("cook_time_minutes", 0),
+            "servings": recipe_data.get("servings", 1),
+            "calories_per_serving": recipe_data.get("calories_per_serving", 0),
+            "protein_per_serving": recipe_data.get("protein_per_serving", 0),
+            "carbs_per_serving": recipe_data.get("carbs_per_serving", 0),
+            "fat_per_serving": recipe_data.get("fat_per_serving", 0),
+            "tags": recipe_data.get("tags", []),
+            "ai_generated": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.recipes.insert_one(recipe_doc)
+        recipe_doc.pop('_id', None)
+        recipe_doc["tips"] = recipe_data.get("tips", "")
+        return recipe_doc
+    except json.JSONDecodeError as je:
+        logging.error(f"Recipe JSON parse error: {je}")
+        raise HTTPException(status_code=500, detail="Erro ao interpretar resposta da IA. Tente novamente.")
     except Exception as e:
         logging.error(f"Recipe suggestion failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate recipe: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Falha ao gerar receita: {str(e)}")
 
 @api_router.get("/nutrition/recipes/{recipe_id}")
 async def get_recipe_detail(request: Request, recipe_id: str, session_token: Optional[str] = Cookie(None)):

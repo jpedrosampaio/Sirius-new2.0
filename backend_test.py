@@ -1,291 +1,297 @@
 #!/usr/bin/env python3
-"""
-Backend Testing for Finance Categories CRUD Endpoints
-Tests the finance categories endpoints as specified in review request.
-"""
 
-import requests
+import asyncio
+import aiohttp
 import json
+import logging
+from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 import time
-import sys
-from urllib.parse import urljoin
 
-# Configuration
-BASE_URL = "https://api-critical-patch.preview.emergentagent.com/api"
-TEST_EMAIL = "testworkout@test.com"
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Backend URL as specified in the review request
+BACKEND_URL = "https://api-critical-patch.preview.emergentagent.com/api"
+
+# Test credentials as specified in the review request
+TEST_EMAIL = "testworkout@test.com" 
 TEST_PASSWORD = "Test123!"
 
-class FinanceCategoriesTester:
+class BackendTester:
     def __init__(self):
-        self.session = requests.Session()
-        self.base_url = BASE_URL
-        self.test_data = {}
+        self.session = None
+        self.session_cookie = None
         
-    def log(self, message):
-        """Log test messages with timestamp"""
-        print(f"[{time.strftime('%H:%M:%S')}] {message}")
+    async def __aenter__(self):
+        self.session = aiohttp.ClientSession()
+        return self
         
-    def test_auth_login(self):
-        """Test login as testworkout@test.com / Test123!"""
-        self.log("🔐 Testing Authentication...")
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+    
+    async def login(self):
+        """Login and get session cookie"""
+        logger.info("🔑 Logging in with testworkout@test.com...")
         
-        # Login
         login_data = {
             "email": TEST_EMAIL,
             "password": TEST_PASSWORD
         }
         
-        login_response = self.session.post(f"{self.base_url}/auth/login", json=login_data)
-        if login_response.status_code == 200:
-            self.log("✅ Login successful")
-            return True
-        else:
-            self.log(f"❌ Login failed: {login_response.status_code} - {login_response.text}")
-            return False
-            
-    def test_get_categories_initial(self):
-        """Test GET /api/finance/categories - Should return default categories"""
-        self.log("📋 Testing GET Categories (initial)...")
-        
-        response = self.session.get(f"{self.base_url}/finance/categories")
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Check response structure
-            if "categories" in data and isinstance(data["categories"], list):
-                categories = data["categories"]
-                default_count = len([c for c in categories if c.get("is_default", False)])
-                custom_count = len([c for c in categories if not c.get("is_default", True)])
-                
-                self.log(f"✅ Categories retrieved: {len(categories)} total ({default_count} defaults, {custom_count} custom)")
-                
-                # Check for specific default categories
-                category_names = [c["name"] for c in categories]
-                expected_defaults = ["alimentação", "transporte", "moradia", "saúde", "educação", "lazer"]
-                
-                found_defaults = [cat for cat in expected_defaults if cat in category_names]
-                self.log(f"📝 Default categories found: {', '.join(found_defaults)}")
-                
-                return True
-            else:
-                self.log(f"❌ Invalid response structure: {data}")
+        async with self.session.post(f"{BACKEND_URL}/auth/login", json=login_data) as resp:
+            if resp.status == 200:
+                # Extract session cookie from response
+                for name, morsel in resp.cookies.items():
+                    if name == "session_token":
+                        self.session_cookie = morsel.value
+                        logger.info(f"✅ Login successful! Session cookie obtained.")
+                        return True
+                logger.error("❌ Login response 200 but no session_token cookie found")
                 return False
-        else:
-            self.log(f"❌ Get categories failed: {response.status_code} - {response.text}")
-            return False
-            
-    def test_create_custom_category(self):
-        """Test POST /api/finance/categories - Create custom category 'roupas'"""
-        self.log("🆕 Testing Create Custom Category (roupas)...")
-        
-        category_data = {
-            "name": "roupas"
-        }
-        
-        response = self.session.post(f"{self.base_url}/finance/categories", json=category_data)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Check response structure
-            if (data.get("success") == True and 
-                "category" in data and 
-                data["category"].get("name") == "roupas" and 
-                data["category"].get("is_default") == False):
-                
-                self.log("✅ Custom category 'roupas' created successfully")
-                self.log(f"📝 Response: {data}")
-                return True
             else:
-                self.log(f"❌ Invalid response structure: {data}")
+                error_text = await resp.text()
+                logger.error(f"❌ Login failed: {resp.status} - {error_text}")
                 return False
-        else:
-            self.log(f"❌ Create custom category failed: {response.status_code} - {response.text}")
-            return False
-            
-    def test_get_categories_with_custom(self):
-        """Test GET /api/finance/categories - Verify 'roupas' now appears"""
-        self.log("👀 Testing GET Categories (with custom)...")
+    
+    async def create_test_image(self):
+        """Create a simple test image with text that looks like a receipt"""
+        logger.info("🖼️ Creating test JPEG image...")
         
-        response = self.session.get(f"{self.base_url}/finance/categories")
+        # Create a simple receipt-like image
+        img = Image.new('RGB', (400, 600), color='white')
+        draw = ImageDraw.Draw(img)
         
-        if response.status_code == 200:
-            data = response.json()
-            
-            if "categories" in data:
-                categories = data["categories"]
-                category_names = [c["name"] for c in categories]
+        # Try to use a basic font, fallback to default if not available
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+            font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12)
+        except:
+            font = ImageFont.load_default()
+            font_small = font
+        
+        # Draw receipt content
+        y_pos = 20
+        draw.text((20, y_pos), "SUPERMERCADO BOM PREÇO", fill='black', font=font)
+        y_pos += 30
+        draw.text((20, y_pos), "Rua das Flores, 123", fill='black', font=font_small)
+        y_pos += 20
+        draw.text((20, y_pos), "Tel: (11) 1234-5678", fill='black', font=font_small)
+        y_pos += 40
+        
+        draw.text((20, y_pos), "Data: 10/03/2026 14:30", fill='black', font=font_small)
+        y_pos += 30
+        
+        # Items
+        draw.text((20, y_pos), "1x Frango 1kg       R$ 12,50", fill='black', font=font_small)
+        y_pos += 20
+        draw.text((20, y_pos), "2x Arroz 5kg        R$ 25,00", fill='black', font=font_small)
+        y_pos += 20
+        draw.text((20, y_pos), "1x Brócolis         R$  3,50", fill='black', font=font_small)
+        y_pos += 20
+        draw.text((20, y_pos), "3x Tomate           R$  6,00", fill='black', font=font_small)
+        y_pos += 30
+        
+        draw.line([(20, y_pos), (380, y_pos)], fill='black', width=1)
+        y_pos += 10
+        draw.text((20, y_pos), "TOTAL:              R$ 47,00", fill='black', font=font)
+        y_pos += 30
+        
+        draw.text((20, y_pos), "Pagamento: Cartão de Débito", fill='black', font=font_small)
+        y_pos += 20
+        draw.text((20, y_pos), "Obrigado pela preferência!", fill='black', font=font_small)
+        
+        # Save to BytesIO
+        img_buffer = BytesIO()
+        img.save(img_buffer, format='JPEG', quality=90)
+        img_buffer.seek(0)
+        
+        logger.info("✅ Test JPEG image created successfully")
+        return img_buffer.getvalue()
+    
+    async def test_image_analysis(self):
+        """Test POST /api/chat/analyze-image endpoint with multipart form"""
+        logger.info("🧪 Testing POST /api/chat/analyze-image endpoint...")
+        
+        # Create test image
+        image_data = await self.create_test_image()
+        
+        # Prepare multipart form data
+        data = aiohttp.FormData()
+        data.add_field('image', image_data, filename='receipt.jpg', content_type='image/jpeg')
+        data.add_field('description', 'teste de análise')
+        
+        # Add session cookie
+        cookies = {'session_token': self.session_cookie} if self.session_cookie else {}
+        
+        start_time = time.time()
+        
+        try:
+            timeout = aiohttp.ClientTimeout(total=60)  # 60 seconds as specified
+            async with self.session.post(
+                f"{BACKEND_URL}/chat/analyze-image", 
+                data=data,
+                cookies=cookies,
+                timeout=timeout
+            ) as resp:
+                elapsed = time.time() - start_time
+                logger.info(f"⏱️ Image analysis took {elapsed:.1f} seconds")
                 
-                if "roupas" in category_names:
-                    # Find the roupas category
-                    roupas_cat = next((c for c in categories if c["name"] == "roupas"), None)
-                    if roupas_cat and roupas_cat.get("is_default") == False:
-                        self.log("✅ Custom category 'roupas' found in list with is_default=false")
+                if resp.status == 200:
+                    result = await resp.json()
+                    logger.info("✅ POST /api/chat/analyze-image - SUCCESS")
+                    logger.info(f"📝 Response keys: {list(result.keys())}")
+                    
+                    # Check expected response structure
+                    if 'user_message' in result and 'ai_message' in result and 'transactions_created' in result:
+                        logger.info("✅ Response contains expected fields: user_message, ai_message, transactions_created")
+                        
+                        ai_message = result.get('ai_message', {})
+                        transactions = result.get('transactions_created', [])
+                        
+                        logger.info(f"🤖 AI Response length: {len(ai_message.get('content', ''))}")
+                        logger.info(f"💰 Transactions created: {len(transactions)}")
+                        
+                        if transactions:
+                            logger.info("📊 Transaction details:")
+                            for i, t in enumerate(transactions, 1):
+                                logger.info(f"  {i}. R$ {t.get('amount', 0):.2f} - {t.get('category', 'N/A')} - {t.get('description', 'N/A')}")
+                        
                         return True
                     else:
-                        self.log("❌ 'roupas' category found but has wrong is_default value")
+                        logger.error(f"❌ Missing expected response fields. Got: {list(result.keys())}")
                         return False
                 else:
-                    self.log("❌ Custom category 'roupas' not found in categories list")
-                    self.log(f"📝 Available categories: {category_names}")
+                    error_text = await resp.text()
+                    logger.error(f"❌ POST /api/chat/analyze-image failed: {resp.status} - {error_text}")
                     return False
-            else:
-                self.log(f"❌ Invalid response structure: {data}")
-                return False
-        else:
-            self.log(f"❌ Get categories failed: {response.status_code} - {response.text}")
+                    
+        except asyncio.TimeoutError:
+            logger.error("❌ POST /api/chat/analyze-image - TIMEOUT (60s exceeded)")
             return False
-            
-    def test_create_duplicate_default(self):
-        """Test POST /api/finance/categories - Try to create 'alimentação' (should fail 400)"""
-        self.log("🚫 Testing Create Duplicate Default Category (alimentação)...")
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ POST /api/chat/analyze-image error after {elapsed:.1f}s: {str(e)}")
+            return False
+    
+    async def test_recipe_suggest(self):
+        """Test POST /api/nutrition/recipes/suggest endpoint with JSON body"""
+        logger.info("🧪 Testing POST /api/nutrition/recipes/suggest endpoint...")
         
-        category_data = {
-            "name": "alimentação"
+        # Test data as specified in the review request
+        recipe_data = {
+            "diet_type": "balanceada",
+            "meal_type": "almoço", 
+            "available_ingredients": ["frango", "arroz", "brócolis"],
+            "restrictions": [],
+            "cuisine": "brasileira",
+            "max_prep_time_minutes": 45
         }
         
-        response = self.session.post(f"{self.base_url}/finance/categories", json=category_data)
+        # Add session cookie
+        cookies = {'session_token': self.session_cookie} if self.session_cookie else {}
         
-        if response.status_code == 400:
-            data = response.json()
-            self.log("✅ Correctly rejected duplicate default category with 400 error")
-            self.log(f"📝 Error message: {data.get('detail', 'No detail')}")
-            return True
-        else:
-            self.log(f"❌ Expected 400 error for duplicate default, got: {response.status_code} - {response.text}")
-            return False
-            
-    def test_create_duplicate_custom(self):
-        """Test POST /api/finance/categories - Try to create 'roupas' again (should fail 400)"""
-        self.log("🚫 Testing Create Duplicate Custom Category (roupas)...")
+        headers = {'Content-Type': 'application/json'}
+        start_time = time.time()
         
-        category_data = {
-            "name": "roupas"
-        }
-        
-        response = self.session.post(f"{self.base_url}/finance/categories", json=category_data)
-        
-        if response.status_code == 400:
-            data = response.json()
-            self.log("✅ Correctly rejected duplicate custom category with 400 error")
-            self.log(f"📝 Error message: {data.get('detail', 'No detail')}")
-            return True
-        else:
-            self.log(f"❌ Expected 400 error for duplicate custom, got: {response.status_code} - {response.text}")
-            return False
-            
-    def test_delete_custom_category(self):
-        """Test DELETE /api/finance/categories/roupas - Should succeed"""
-        self.log("🗑️ Testing Delete Custom Category (roupas)...")
-        
-        response = self.session.delete(f"{self.base_url}/finance/categories/roupas")
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("success") == True:
-                self.log("✅ Custom category 'roupas' deleted successfully")
-                self.log(f"📝 Response: {data}")
-                return True
-            else:
-                self.log(f"❌ Invalid response structure: {data}")
-                return False
-        else:
-            self.log(f"❌ Delete custom category failed: {response.status_code} - {response.text}")
-            return False
-            
-    def test_delete_default_category(self):
-        """Test DELETE /api/finance/categories/alimentação - Should fail 400"""
-        self.log("🚫 Testing Delete Default Category (alimentação)...")
-        
-        response = self.session.delete(f"{self.base_url}/finance/categories/alimentação")
-        
-        if response.status_code == 400:
-            data = response.json()
-            self.log("✅ Correctly rejected delete default category with 400 error")
-            self.log(f"📝 Error message: {data.get('detail', 'No detail')}")
-            return True
-        else:
-            self.log(f"❌ Expected 400 error for deleting default, got: {response.status_code} - {response.text}")
-            return False
-            
-    def test_get_categories_final(self):
-        """Test GET /api/finance/categories - Verify 'roupas' is gone"""
-        self.log("🔍 Testing GET Categories (final verification)...")
-        
-        response = self.session.get(f"{self.base_url}/finance/categories")
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if "categories" in data:
-                categories = data["categories"]
-                category_names = [c["name"] for c in categories]
+        try:
+            timeout = aiohttp.ClientTimeout(total=60)  # 60 seconds as specified
+            async with self.session.post(
+                f"{BACKEND_URL}/nutrition/recipes/suggest",
+                json=recipe_data,
+                cookies=cookies,
+                headers=headers,
+                timeout=timeout
+            ) as resp:
+                elapsed = time.time() - start_time
+                logger.info(f"⏱️ Recipe suggestion took {elapsed:.1f} seconds")
                 
-                if "roupas" not in category_names:
-                    self.log("✅ Confirmed 'roupas' category is gone from list")
+                if resp.status == 200:
+                    result = await resp.json()
+                    logger.info("✅ POST /api/nutrition/recipes/suggest - SUCCESS")
+                    logger.info(f"📝 Response keys: {list(result.keys())}")
                     
-                    # Count categories again
-                    default_count = len([c for c in categories if c.get("is_default", False)])
-                    custom_count = len([c for c in categories if not c.get("is_default", True)])
-                    self.log(f"📝 Final count: {len(categories)} total ({default_count} defaults, {custom_count} custom)")
+                    # Check expected response structure for recipe data
+                    required_fields = ['name', 'ingredients', 'instructions', 'calories_per_serving']
+                    has_required = all(field in result for field in required_fields)
                     
-                    return True
+                    if has_required:
+                        logger.info("✅ Response contains expected recipe fields")
+                        logger.info(f"🍽️ Recipe Name: {result.get('name', 'N/A')}")
+                        logger.info(f"🥘 Ingredients count: {len(result.get('ingredients', []))}")
+                        logger.info(f"📋 Instructions count: {len(result.get('instructions', []))}")
+                        logger.info(f"🔥 Calories per serving: {result.get('calories_per_serving', 'N/A')}")
+                        logger.info(f"⏱️ Prep time: {result.get('prep_time_minutes', 'N/A')} min")
+                        logger.info(f"🍳 Cook time: {result.get('cook_time_minutes', 'N/A')} min")
+                        
+                        return True
+                    else:
+                        missing_fields = [f for f in required_fields if f not in result]
+                        logger.error(f"❌ Missing required recipe fields: {missing_fields}")
+                        logger.error(f"Available fields: {list(result.keys())}")
+                        return False
                 else:
-                    self.log("❌ 'roupas' category still found in list (should be deleted)")
+                    error_text = await resp.text()
+                    logger.error(f"❌ POST /api/nutrition/recipes/suggest failed: {resp.status} - {error_text}")
                     return False
-            else:
-                self.log(f"❌ Invalid response structure: {data}")
-                return False
-        else:
-            self.log(f"❌ Get categories failed: {response.status_code} - {response.text}")
+                    
+        except asyncio.TimeoutError:
+            logger.error("❌ POST /api/nutrition/recipes/suggest - TIMEOUT (60s exceeded)")
             return False
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"❌ POST /api/nutrition/recipes/suggest error after {elapsed:.1f}s: {str(e)}")
+            return False
+
+async def main():
+    """Run all backend tests"""
+    logger.info("🚀 Starting Backend P0 Fixes Testing")
+    logger.info(f"🔗 Backend URL: {BACKEND_URL}")
+    logger.info(f"👤 Test User: {TEST_EMAIL}")
+    logger.info("=" * 60)
+    
+    results = {
+        'login': False,
+        'image_analysis': False,
+        'recipe_suggest': False
+    }
+    
+    async with BackendTester() as tester:
+        # Step 1: Login
+        results['login'] = await tester.login()
+        if not results['login']:
+            logger.error("❌ Cannot continue without successful login")
+            return results
             
-    def run_all_tests(self):
-        """Run all finance categories CRUD tests in sequence"""
-        self.log("🚀 Starting Finance Categories CRUD Testing...")
-        self.log(f"🔗 Backend URL: {self.base_url}")
-        self.log(f"👤 Test User: {TEST_EMAIL}")
+        logger.info("=" * 60)
         
-        tests = [
-            ("Login Authentication", self.test_auth_login),
-            ("GET Categories (Initial)", self.test_get_categories_initial),
-            ("POST Create Custom Category", self.test_create_custom_category),
-            ("GET Categories (With Custom)", self.test_get_categories_with_custom),
-            ("POST Create Duplicate Default (Error)", self.test_create_duplicate_default),
-            ("POST Create Duplicate Custom (Error)", self.test_create_duplicate_custom),
-            ("DELETE Custom Category", self.test_delete_custom_category),
-            ("DELETE Default Category (Error)", self.test_delete_default_category),
-            ("GET Categories (Final Verification)", self.test_get_categories_final),
-        ]
+        # Step 2: Test image analysis endpoint (previously failing)
+        results['image_analysis'] = await tester.test_image_analysis()
         
-        passed = 0
-        total = len(tests)
+        logger.info("=" * 60)
         
-        for test_name, test_func in tests:
-            self.log(f"\n{'='*60}")
-            self.log(f"Testing: {test_name}")
-            self.log(f"{'='*60}")
-            
-            try:
-                result = test_func()
-                if result:
-                    passed += 1
-                    self.log(f"✅ {test_name} - PASSED")
-                else:
-                    self.log(f"❌ {test_name} - FAILED")
-            except Exception as e:
-                self.log(f"💥 {test_name} - ERROR: {str(e)}")
-                
-        self.log(f"\n{'='*60}")
-        self.log(f"FINAL RESULTS: {passed}/{total} tests passed ({passed/total*100:.1f}%)")
-        self.log(f"{'='*60}")
-        
-        return passed, total
+        # Step 3: Test recipe suggest endpoint (previously failing) 
+        results['recipe_suggest'] = await tester.test_recipe_suggest()
+    
+    logger.info("=" * 60)
+    logger.info("📊 FINAL TEST RESULTS:")
+    logger.info(f"🔑 Authentication: {'✅ PASS' if results['login'] else '❌ FAIL'}")
+    logger.info(f"🖼️ Image Analysis Fix: {'✅ PASS' if results['image_analysis'] else '❌ FAIL'}")
+    logger.info(f"🍽️ Recipe Suggest Fix: {'✅ PASS' if results['recipe_suggest'] else '❌ FAIL'}")
+    
+    passed_count = sum(1 for v in results.values() if v)
+    total_count = len(results)
+    
+    logger.info(f"📈 SUCCESS RATE: {passed_count}/{total_count} ({(passed_count/total_count)*100:.1f}%)")
+    
+    if passed_count == total_count:
+        logger.info("🎉 ALL P0 FIXES WORKING CORRECTLY!")
+    else:
+        logger.info("⚠️ Some P0 fixes still have issues - see details above")
+    
+    return results
 
 if __name__ == "__main__":
-    tester = FinanceCategoriesTester()
-    passed, total = tester.run_all_tests()
-    
-    # Exit with appropriate code
-    sys.exit(0 if passed == total else 1)
+    asyncio.run(main())
