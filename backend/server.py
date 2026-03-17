@@ -1101,9 +1101,117 @@ async def get_achievements(request: Request, session_token: Optional[str] = Cook
     
     achievements = await db.achievements.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
     for achievement in achievements:
-        if isinstance(achievement['unlocked_at'], str):
+        if isinstance(achievement.get('unlocked_at'), str):
             achievement['unlocked_at'] = datetime.fromisoformat(achievement['unlocked_at'])
     return achievements
+
+
+@api_router.get("/achievements/full")
+async def get_full_achievements(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get all possible achievements with progress tracking"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Fetch data for progress calculation
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    tasks_completed = await db.task_instances.count_documents({"user_id": user.user_id, "completed": True})
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+    transactions = await db.transactions.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    study_sessions = await db.study_sessions.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    workout_logs = await db.workout_logs.find({"user_id": user.user_id, "completed": True}, {"_id": 0}).to_list(1000)
+    flashcards = await db.flashcards.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    meals = await db.meals.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    goals = await db.goals.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    study_streak = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    total_study_minutes = sum(s.get("duration_minutes", 0) for s in study_sessions)
+    total_workout_minutes = sum(w.get("duration_minutes", 0) for w in workout_logs)
+    max_habit_streak = max((h.get("current_streak", 0) for h in habits), default=0)
+    longest_study_streak = study_streak.get("longest_streak", 0) if study_streak else 0
+    
+    # Define all achievements
+    all_achievements = [
+        # Tasks
+        {"id": "task_1", "title": "Primeira Missão", "description": "Complete sua primeira tarefa", "icon": "check", "category": "tasks", "color": "#007AFF", "target": 1, "current": min(tasks_completed, 1)},
+        {"id": "task_10", "title": "Executor", "description": "Complete 10 tarefas", "icon": "check-double", "category": "tasks", "color": "#007AFF", "target": 10, "current": min(tasks_completed, 10)},
+        {"id": "task_50", "title": "Produtivo", "description": "Complete 50 tarefas", "icon": "list-checks", "category": "tasks", "color": "#007AFF", "target": 50, "current": min(tasks_completed, 50)},
+        {"id": "task_200", "title": "Imparável", "description": "Complete 200 tarefas", "icon": "rocket", "category": "tasks", "color": "#007AFF", "target": 200, "current": min(tasks_completed, 200)},
+        
+        # Habits
+        {"id": "habit_create", "title": "Novo Hábito", "description": "Crie seu primeiro hábito", "icon": "trending-up", "category": "habits", "color": "#39FF14", "target": 1, "current": min(len(habits), 1)},
+        {"id": "habit_streak_7", "title": "Semana Perfeita", "description": "Mantenha um streak de 7 dias em um hábito", "icon": "flame", "category": "habits", "color": "#39FF14", "target": 7, "current": min(max_habit_streak, 7)},
+        {"id": "habit_streak_30", "title": "Mês de Ferro", "description": "Mantenha um streak de 30 dias", "icon": "flame", "category": "habits", "color": "#39FF14", "target": 30, "current": min(max_habit_streak, 30)},
+        {"id": "habit_streak_100", "title": "Disciplina Absoluta", "description": "100 dias de streak em um hábito", "icon": "crown", "category": "habits", "color": "#39FF14", "target": 100, "current": min(max_habit_streak, 100)},
+        
+        # Finance
+        {"id": "fin_first", "title": "Primeiro Registro", "description": "Registre sua primeira transação", "icon": "dollar", "category": "finance", "color": "#FF9500", "target": 1, "current": min(len(transactions), 1)},
+        {"id": "fin_50", "title": "Controlador", "description": "Registre 50 transações", "icon": "wallet", "category": "finance", "color": "#FF9500", "target": 50, "current": min(len(transactions), 50)},
+        {"id": "fin_200", "title": "Mestre das Finanças", "description": "Registre 200 transações", "icon": "bar-chart", "category": "finance", "color": "#FF9500", "target": 200, "current": min(len(transactions), 200)},
+        
+        # Study
+        {"id": "study_first", "title": "Primeira Sessão", "description": "Realize sua primeira sessão de estudo", "icon": "book", "category": "study", "color": "#A855F7", "target": 1, "current": min(len(study_sessions), 1)},
+        {"id": "study_hours_10", "title": "Estudioso", "description": "Acumule 10 horas de estudo", "icon": "clock", "category": "study", "color": "#A855F7", "target": 600, "current": min(total_study_minutes, 600)},
+        {"id": "study_hours_50", "title": "Acadêmico", "description": "Acumule 50 horas de estudo", "icon": "graduation-cap", "category": "study", "color": "#A855F7", "target": 3000, "current": min(total_study_minutes, 3000)},
+        {"id": "study_streak_14", "title": "Foco Total", "description": "14 dias consecutivos de estudo", "icon": "target", "category": "study", "color": "#A855F7", "target": 14, "current": min(longest_study_streak, 14)},
+        {"id": "flash_100", "title": "Memorização", "description": "Crie 100 flashcards", "icon": "brain", "category": "study", "color": "#A855F7", "target": 100, "current": min(len(flashcards), 100)},
+        
+        # Workouts
+        {"id": "gym_first", "title": "Primeiro Treino", "description": "Complete seu primeiro treino", "icon": "dumbbell", "category": "workouts", "color": "#EF4444", "target": 1, "current": min(len(workout_logs), 1)},
+        {"id": "gym_20", "title": "Atleta", "description": "Complete 20 treinos", "icon": "medal", "category": "workouts", "color": "#EF4444", "target": 20, "current": min(len(workout_logs), 20)},
+        {"id": "gym_hours_10", "title": "Forte", "description": "Acumule 10 horas de treino", "icon": "timer", "category": "workouts", "color": "#EF4444", "target": 600, "current": min(total_workout_minutes, 600)},
+        
+        # Nutrition
+        {"id": "meal_first", "title": "Primeira Refeição", "description": "Registre sua primeira refeição", "icon": "utensils", "category": "nutrition", "color": "#22C55E", "target": 1, "current": min(len(meals), 1)},
+        {"id": "meal_50", "title": "Alimentação Consciente", "description": "Registre 50 refeições", "icon": "apple", "category": "nutrition", "color": "#22C55E", "target": 50, "current": min(len(meals), 50)},
+        
+        # Goals
+        {"id": "goal_create", "title": "Visionário", "description": "Crie sua primeira meta", "icon": "target", "category": "goals", "color": "#F59E0B", "target": 1, "current": min(len(goals), 1)},
+        {"id": "goal_5", "title": "Ambicioso", "description": "Tenha 5 metas ativas", "icon": "trophy", "category": "goals", "color": "#F59E0B", "target": 5, "current": min(len(goals), 5)},
+        
+        # XP / Rank
+        {"id": "xp_100", "title": "Soldado", "description": "Alcance 100 XP", "icon": "zap", "category": "xp", "color": "#FFD700", "target": 100, "current": min(user.xp, 100)},
+        {"id": "xp_500", "title": "Veterano", "description": "Alcance 500 XP", "icon": "star", "category": "xp", "color": "#FFD700", "target": 500, "current": min(user.xp, 500)},
+        {"id": "xp_1000", "title": "Lenda", "description": "Alcance 1000 XP", "icon": "crown", "category": "xp", "color": "#FFD700", "target": 1000, "current": min(user.xp, 1000)},
+        {"id": "xp_3000", "title": "Supremo", "description": "Alcance 3000 XP", "icon": "shield", "category": "xp", "color": "#FFD700", "target": 3000, "current": min(user.xp, 3000)},
+    ]
+    
+    # Unlocked achievements from DB
+    unlocked = await db.achievements.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+    unlocked_titles = set(a.get("title", "") for a in unlocked)
+    
+    # Mark unlocked and auto-unlock new ones
+    result = []
+    newly_unlocked = []
+    for ach in all_achievements:
+        ach["progress"] = round((ach["current"] / ach["target"]) * 100, 1) if ach["target"] > 0 else 0
+        ach["unlocked"] = ach["progress"] >= 100 or ach["title"] in unlocked_titles
+        
+        # Auto-unlock if progress is 100% but not yet in DB
+        if ach["progress"] >= 100 and ach["title"] not in unlocked_titles:
+            ach["unlocked"] = True
+            newly_unlocked.append(ach)
+            await db.achievements.insert_one({
+                "achievement_id": f"ach_{uuid.uuid4().hex[:12]}",
+                "user_id": user.user_id,
+                "title": ach["title"],
+                "description": ach["description"],
+                "icon": ach["icon"],
+                "category": ach["category"],
+                "unlocked_at": datetime.now(timezone.utc).isoformat()
+            })
+        
+        result.append(ach)
+    
+    total_unlocked = len([a for a in result if a["unlocked"]])
+    
+    return {
+        "achievements": result,
+        "total": len(result),
+        "unlocked": total_unlocked,
+        "locked": len(result) - total_unlocked,
+        "completion_pct": round((total_unlocked / len(result)) * 100, 1) if result else 0,
+        "newly_unlocked": [{"title": a["title"], "description": a["description"]} for a in newly_unlocked]
+    }
 
 @api_router.get("/chat/messages")
 async def get_chat_messages(request: Request, session_token: Optional[str] = Cookie(None)):
@@ -2072,6 +2180,127 @@ async def get_dashboard_stats(request: Request, session_token: Optional[str] = C
         "simulado_stats": simulado_stats,
         "question_overview": question_overview
     }
+
+
+@api_router.get("/stats/analytics")
+async def get_analytics_data(request: Request, days: int = 7, session_token: Optional[str] = Cookie(None)):
+    """Get historical analytics data for dashboard charts"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if days > 90:
+        days = 90
+    
+    # Generate date range
+    today = datetime.now(timezone.utc)
+    date_range = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
+    
+    # Fetch all required data in parallel
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(1000)
+    
+    # Task instances for date range
+    task_instances = await db.task_instances.find({
+        "user_id": user.user_id,
+        "date": {"$gte": date_range[0], "$lte": date_range[-1]}
+    }, {"_id": 0}).to_list(5000)
+    
+    # Transactions for date range
+    transactions = await db.transactions.find({
+        "user_id": user.user_id,
+        "date": {"$gte": date_range[0], "$lte": date_range[-1]}
+    }, {"_id": 0}).to_list(5000)
+    
+    # Study sessions
+    study_sessions = await db.study_sessions.find({
+        "user_id": user.user_id,
+        "date": {"$gte": date_range[0], "$lte": date_range[-1]}
+    }, {"_id": 0}).to_list(5000)
+    
+    # Workout logs
+    workout_logs = await db.workout_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": date_range[0], "$lte": date_range[-1]},
+        "completed": True
+    }, {"_id": 0}).to_list(1000)
+    
+    # Question logs
+    question_logs = await db.question_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": date_range[0], "$lte": date_range[-1]}
+    }, {"_id": 0}).to_list(5000)
+    
+    # XP history from various collections
+    xp_logs = await db.xp_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": date_range[0], "$lte": date_range[-1]}
+    }, {"_id": 0}).to_list(5000)
+    
+    # Build daily data
+    daily_data = []
+    cumulative_xp = 0
+    
+    for date in date_range:
+        day_label = date[5:]  # MM-DD format
+        
+        # Tasks
+        tasks_done = len([t for t in task_instances if t.get("date") == date and t.get("completed")])
+        
+        # Habits
+        habits_done = len([h for h in habits if date in h.get("completions", [])])
+        habits_total = len(habits)
+        
+        # Finance
+        day_income = sum(t["amount"] for t in transactions if t.get("date") == date and t.get("type") == "income")
+        day_expenses = sum(t["amount"] for t in transactions if t.get("date") == date and t.get("type") == "expense")
+        
+        # Study
+        study_minutes = sum(s.get("duration_minutes", 0) for s in study_sessions if s.get("date") == date)
+        
+        # Workouts
+        workouts_done = len([w for w in workout_logs if w.get("date") == date])
+        workout_minutes = sum(w.get("duration_minutes", 0) for w in workout_logs if w.get("date") == date)
+        
+        # Questions
+        questions_answered = sum(q.get("total", 0) for q in question_logs if q.get("date") == date)
+        questions_correct = sum(q.get("correct", 0) for q in question_logs if q.get("date") == date)
+        
+        # XP
+        day_xp = sum(x.get("amount", 0) for x in xp_logs if x.get("date") == date)
+        cumulative_xp += day_xp
+        
+        daily_data.append({
+            "date": date,
+            "label": day_label,
+            "tasks": tasks_done,
+            "habits": habits_done,
+            "habits_total": habits_total,
+            "income": round(day_income, 2),
+            "expenses": round(day_expenses, 2),
+            "balance": round(day_income - day_expenses, 2),
+            "study_min": study_minutes,
+            "workouts": workouts_done,
+            "workout_min": workout_minutes,
+            "questions": questions_answered,
+            "correct": questions_correct,
+            "xp": day_xp,
+            "xp_cumulative": cumulative_xp,
+        })
+    
+    return {
+        "days": days,
+        "data": daily_data,
+        "totals": {
+            "tasks": sum(d["tasks"] for d in daily_data),
+            "habits_avg": round(sum(d["habits"] for d in daily_data) / max(len(daily_data), 1), 1),
+            "income": round(sum(d["income"] for d in daily_data), 2),
+            "expenses": round(sum(d["expenses"] for d in daily_data), 2),
+            "study_hours": round(sum(d["study_min"] for d in daily_data) / 60, 1),
+            "workouts": sum(d["workouts"] for d in daily_data),
+            "questions": sum(d["questions"] for d in daily_data),
+            "xp_earned": sum(d["xp"] for d in daily_data),
+        }
+    }
+
 
 @api_router.post("/goals/{goal_id}/check")
 async def check_goal_day(request: Request, goal_id: str, date: str, session_token: Optional[str] = Cookie(None)):
@@ -10771,6 +11000,381 @@ async def get_cross_module_suggestions(request: Request, session_token: Optional
     suggestions = []
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     
+
+# ===== EXPORT ENDPOINTS =====
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+
+@api_router.get("/export/finance/{format}")
+async def export_finance(request: Request, format: str, session_token: Optional[str] = Cookie(None)):
+    """Export financial data as PDF or Excel"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    transactions = await db.transactions.find({"user_id": user.user_id}, {"_id": 0}).sort("date", -1).to_list(5000)
+    
+    if format == "excel":
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Transações"
+        
+        # Header styling
+        header_fill = PatternFill(start_color="007AFF", end_color="007AFF", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin")
+        )
+        
+        headers = ["Data", "Descrição", "Categoria", "Tipo", "Valor (R$)"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+            cell.border = thin_border
+        
+        total_income = 0
+        total_expenses = 0
+        for row, t in enumerate(transactions, 2):
+            ws.cell(row=row, column=1, value=t.get("date", "")).border = thin_border
+            ws.cell(row=row, column=2, value=t.get("description", "")).border = thin_border
+            ws.cell(row=row, column=3, value=t.get("category", "")).border = thin_border
+            tipo = "Receita" if t.get("type") == "income" else "Despesa"
+            ws.cell(row=row, column=4, value=tipo).border = thin_border
+            amount = t.get("amount", 0)
+            ws.cell(row=row, column=5, value=amount).border = thin_border
+            ws.cell(row=row, column=5).number_format = '#,##0.00'
+            if t.get("type") == "income":
+                total_income += amount
+            else:
+                total_expenses += amount
+        
+        # Summary row
+        summary_row = len(transactions) + 3
+        ws.cell(row=summary_row, column=3, value="TOTAL RECEITAS:").font = Font(bold=True)
+        ws.cell(row=summary_row, column=5, value=total_income).font = Font(bold=True, color="00AA00")
+        ws.cell(row=summary_row, column=5).number_format = '#,##0.00'
+        ws.cell(row=summary_row + 1, column=3, value="TOTAL DESPESAS:").font = Font(bold=True)
+        ws.cell(row=summary_row + 1, column=5, value=total_expenses).font = Font(bold=True, color="FF0000")
+        ws.cell(row=summary_row + 1, column=5).number_format = '#,##0.00'
+        ws.cell(row=summary_row + 2, column=3, value="SALDO:").font = Font(bold=True)
+        ws.cell(row=summary_row + 2, column=5, value=total_income - total_expenses).font = Font(bold=True)
+        ws.cell(row=summary_row + 2, column=5).number_format = '#,##0.00'
+        
+        # Auto-fit columns
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 30)
+        
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=financas_sirius.xlsx"}
+        )
+    
+    elif format == "pdf":
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        
+        buf = BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=18, textColor=colors.HexColor('#007AFF'))
+        elements.append(Paragraph("Relatório Financeiro - Sirius", title_style))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph(f"Usuário: {user.name}", styles['Normal']))
+        elements.append(Paragraph(f"Data: {datetime.now().strftime('%d/%m/%Y')}", styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        # Table
+        data = [["Data", "Descrição", "Categoria", "Tipo", "Valor"]]
+        total_income = 0
+        total_expenses = 0
+        for t in transactions[:200]:
+            tipo = "Receita" if t.get("type") == "income" else "Despesa"
+            amount = t.get("amount", 0)
+            data.append([
+                t.get("date", ""),
+                t.get("description", "")[:30],
+                t.get("category", ""),
+                tipo,
+                f"R$ {amount:.2f}"
+            ])
+            if t.get("type") == "income":
+                total_income += amount
+            else:
+                total_expenses += amount
+        
+        data.append(["", "", "", "RECEITAS:", f"R$ {total_income:.2f}"])
+        data.append(["", "", "", "DESPESAS:", f"R$ {total_expenses:.2f}"])
+        data.append(["", "", "", "SALDO:", f"R$ {total_income - total_expenses:.2f}"])
+        
+        table = Table(data, colWidths=[2.5*cm, 5*cm, 3*cm, 2.5*cm, 3*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007AFF')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -4), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -4), [colors.white, colors.HexColor('#F5F5F5')]),
+            ('FONTNAME', (3, -3), (-1, -1), 'Helvetica-Bold'),
+        ]))
+        elements.append(table)
+        doc.build(elements)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=financas_sirius.pdf"}
+        )
+    
+    raise HTTPException(status_code=400, detail="Formato deve ser 'excel' ou 'pdf'")
+
+
+@api_router.get("/export/study/{format}")
+async def export_study(request: Request, format: str, session_token: Optional[str] = Cookie(None)):
+    """Export study data as PDF or Excel"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    notebooks = await db.notebooks.find({"user_id": user.user_id}, {"_id": 0}).to_list(100)
+    sessions = await db.study_sessions.find({"user_id": user.user_id}, {"_id": 0}).sort("date", -1).to_list(5000)
+    flashcards = await db.flashcards.find({"user_id": user.user_id}, {"_id": 0}).to_list(5000)
+    
+    if format == "excel":
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        
+        wb = openpyxl.Workbook()
+        
+        # Sheet 1: Study Sessions
+        ws1 = wb.active
+        ws1.title = "Sessões de Estudo"
+        header_fill = PatternFill(start_color="A855F7", end_color="A855F7", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        thin_border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+        
+        headers = ["Data", "Matéria", "Tipo", "Duração (min)", "Pomodoros"]
+        for col, h in enumerate(headers, 1):
+            cell = ws1.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
+        
+        for row, s in enumerate(sessions, 2):
+            ws1.cell(row=row, column=1, value=s.get("date", "")).border = thin_border
+            ws1.cell(row=row, column=2, value=s.get("notebook_name", "")).border = thin_border
+            ws1.cell(row=row, column=3, value=s.get("session_type", "study")).border = thin_border
+            ws1.cell(row=row, column=4, value=s.get("duration_minutes", 0)).border = thin_border
+            ws1.cell(row=row, column=5, value=s.get("pomodoros", 0)).border = thin_border
+        
+        total_row = len(sessions) + 3
+        ws1.cell(row=total_row, column=3, value="TOTAL:").font = Font(bold=True)
+        ws1.cell(row=total_row, column=4, value=sum(s.get("duration_minutes", 0) for s in sessions)).font = Font(bold=True)
+        
+        # Sheet 2: Notebooks overview
+        ws2 = wb.create_sheet("Matérias")
+        headers2 = ["Matéria", "Área", "Flashcards", "Sessões"]
+        for col, h in enumerate(headers2, 1):
+            cell = ws2.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
+        
+        for row, nb in enumerate(notebooks, 2):
+            nb_id = nb.get("notebook_id", "")
+            nb_flashcards = len([f for f in flashcards if f.get("notebook_id") == nb_id])
+            nb_sessions = len([s for s in sessions if s.get("notebook_id") == nb_id])
+            ws2.cell(row=row, column=1, value=nb.get("name", "")).border = thin_border
+            ws2.cell(row=row, column=2, value=nb.get("area_name", "")).border = thin_border
+            ws2.cell(row=row, column=3, value=nb_flashcards).border = thin_border
+            ws2.cell(row=row, column=4, value=nb_sessions).border = thin_border
+        
+        for ws in [ws1, ws2]:
+            for col in ws.columns:
+                max_len = max(len(str(cell.value or "")) for cell in col)
+                ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 30)
+        
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=estudos_sirius.xlsx"}
+        )
+    
+    elif format == "pdf":
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        
+        buf = BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=18, textColor=colors.HexColor('#A855F7'))
+        elements.append(Paragraph("Relatório de Estudos - Sirius", title_style))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph(f"Usuário: {user.name}", styles['Normal']))
+        elements.append(Paragraph(f"Data: {datetime.now().strftime('%d/%m/%Y')}", styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        # Notebooks summary
+        elements.append(Paragraph("Resumo por Matéria", styles['Heading2']))
+        nb_data = [["Matéria", "Área", "Flashcards", "Sessões"]]
+        for nb in notebooks:
+            nb_id = nb.get("notebook_id", "")
+            nb_data.append([
+                nb.get("name", "")[:25],
+                nb.get("area_name", "")[:20],
+                str(len([f for f in flashcards if f.get("notebook_id") == nb_id])),
+                str(len([s for s in sessions if s.get("notebook_id") == nb_id]))
+            ])
+        
+        table = Table(nb_data, colWidths=[5*cm, 4*cm, 3*cm, 3*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#A855F7')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 20))
+        
+        # Summary stats
+        total_minutes = sum(s.get("duration_minutes", 0) for s in sessions)
+        total_hours = total_minutes / 60
+        elements.append(Paragraph(f"Total de horas estudadas: {total_hours:.1f}h ({total_minutes} min)", styles['Normal']))
+        elements.append(Paragraph(f"Total de sessões: {len(sessions)}", styles['Normal']))
+        elements.append(Paragraph(f"Total de flashcards: {len(flashcards)}", styles['Normal']))
+        
+        doc.build(elements)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=estudos_sirius.pdf"}
+        )
+    
+    raise HTTPException(status_code=400, detail="Formato deve ser 'excel' ou 'pdf'")
+
+
+@api_router.get("/export/nutrition/{format}")
+async def export_nutrition(request: Request, format: str, session_token: Optional[str] = Cookie(None)):
+    """Export nutrition data as PDF or Excel"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    meals = await db.meals.find({"user_id": user.user_id}, {"_id": 0}).sort("date", -1).to_list(5000)
+    
+    if format == "excel":
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Border, Side
+        
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Refeições"
+        header_fill = PatternFill(start_color="22C55E", end_color="22C55E", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+        thin_border = Border(left=Side(style="thin"), right=Side(style="thin"), top=Side(style="thin"), bottom=Side(style="thin"))
+        
+        headers = ["Data", "Refeição", "Calorias", "Proteína(g)", "Carbos(g)", "Gordura(g)"]
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = thin_border
+        
+        for row, m in enumerate(meals, 2):
+            ws.cell(row=row, column=1, value=m.get("date", "")).border = thin_border
+            ws.cell(row=row, column=2, value=m.get("meal_type", "")).border = thin_border
+            ws.cell(row=row, column=3, value=round(m.get("total_calories", 0), 1)).border = thin_border
+            ws.cell(row=row, column=4, value=round(m.get("total_protein", 0), 1)).border = thin_border
+            ws.cell(row=row, column=5, value=round(m.get("total_carbs", 0), 1)).border = thin_border
+            ws.cell(row=row, column=6, value=round(m.get("total_fat", 0), 1)).border = thin_border
+        
+        for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 25)
+        
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=nutricao_sirius.xlsx"}
+        )
+    
+    elif format == "pdf":
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        
+        buf = BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=1.5*cm, bottomMargin=1.5*cm)
+        styles = getSampleStyleSheet()
+        elements = []
+        
+        title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=18, textColor=colors.HexColor('#22C55E'))
+        elements.append(Paragraph("Relatório Nutricional - Sirius", title_style))
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph(f"Usuário: {user.name}", styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        data = [["Data", "Refeição", "Calorias", "Proteína", "Carbos", "Gordura"]]
+        for m in meals[:200]:
+            data.append([
+                m.get("date", ""),
+                m.get("meal_type", ""),
+                f"{m.get('total_calories', 0):.0f}",
+                f"{m.get('total_protein', 0):.1f}g",
+                f"{m.get('total_carbs', 0):.1f}g",
+                f"{m.get('total_fat', 0):.1f}g",
+            ])
+        
+        table = Table(data, colWidths=[2.5*cm, 3*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2.5*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#22C55E')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
+        ]))
+        elements.append(table)
+        doc.build(elements)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=nutricao_sirius.pdf"}
+        )
+    
+    raise HTTPException(status_code=400, detail="Formato deve ser 'excel' ou 'pdf'")
+
+
     # Check if user just completed a workout -> suggest meal
     recent_sessions = await db.workout_sessions.find(
         {"user_id": user.user_id, "status": "completed"},

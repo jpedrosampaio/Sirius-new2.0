@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell, Apple, BookOpen } from "lucide-react";
+import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell, Apple, BookOpen, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
@@ -103,6 +103,7 @@ export default function Sidebar({ user }) {
     { icon: Target, label: "Metas", path: "/goals" },
     { icon: MessageSquare, label: "Assistente", path: "/chat" },
     { icon: Bell, label: "Notificações", path: "/notifications" },
+    { icon: Trophy, label: "Conquistas", path: "/achievements" },
     { icon: FileText, label: "Relatórios", path: "/reports" },
     { icon: User, label: "Perfil", path: "/profile" }
   ];

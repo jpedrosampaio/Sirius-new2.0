@@ -12,6 +12,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis
 import axios from "axios";
 import { toast } from "sonner";
 
+import ExportButtons from "@/components/ExportButtons";
+
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
@@ -531,8 +533,13 @@ export default function Finance() {
       <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8 pt-14 md:pt-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
-            <h1 className="font-heading text-3xl md:text-4xl mb-2">FINANÇAS</h1>
-            <p className="text-[#A1A1AA]">Controle total do seu dinheiro</p>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <h1 className="font-heading text-3xl md:text-4xl mb-2">FINANÇAS</h1>
+                <p className="text-[#A1A1AA]">Controle total do seu dinheiro</p>
+              </div>
+              <ExportButtons module="finance" />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">

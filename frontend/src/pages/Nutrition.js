@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import axios from "axios";
+import ExportButtons from "@/components/ExportButtons";
 import { 
   Apple, Plus, Trash2, Droplets, Target, ChefHat, 
   Flame, Drumstick, Wheat, Droplet, Settings, Sparkles,
@@ -362,6 +363,7 @@ export default function Nutrition() {
             <p className="text-[#A1A1AA]">Controle sua nutrição e alcance seus objetivos</p>
           </div>
           <div className="flex items-center gap-2">
+            <ExportButtons module="nutrition" />
             <Button variant="outline" size="icon" onClick={() => changeDate(-1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>

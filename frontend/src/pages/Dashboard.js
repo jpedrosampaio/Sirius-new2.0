@@ -9,13 +9,18 @@ import {
   CheckSquare, TrendingUp, DollarSign, Target, Award, Zap,
   Dumbbell, Utensils, BookOpen, Droplets, Flame, Clock, Brain,
   ClipboardList, BarChart3, Trophy, ListChecks, Hash, Percent,
-  Search, AlertTriangle, ChevronRight, Bell, Sparkles, X
+  Search, AlertTriangle, ChevronRight, Bell, Sparkles, X,
+  Activity, Calendar
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
 import Onboarding from "@/components/Onboarding";
 import { LoadingSkeleton } from "@/components/XpAnimation";
+import {
+  ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from "recharts";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -31,6 +36,8 @@ export default function Dashboard() {
   const [showSearch, setShowSearch] = useState(false);
   const [crossSuggestions, setCrossSuggestions] = useState([]);
   const [xpAnimation, setXpAnimation] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [analyticsDays, setAnalyticsDays] = useState(7);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -48,14 +55,16 @@ export default function Dashboard() {
       
       // Fetch additional data in background
       try {
-        const [weeklyRes, remindersRes, suggestionsRes] = await Promise.all([
+        const [weeklyRes, remindersRes, suggestionsRes, analyticsRes] = await Promise.all([
           axios.get(`${API}/dashboard/weekly-summary`, { withCredentials: true }),
           axios.get(`${API}/reminders/smart`, { withCredentials: true }),
-          axios.get(`${API}/suggestions/cross-module`, { withCredentials: true })
+          axios.get(`${API}/suggestions/cross-module`, { withCredentials: true }),
+          axios.get(`${API}/stats/analytics?days=7`, { withCredentials: true })
         ]);
         setWeeklySummary(weeklyRes.data);
         setReminders(remindersRes.data.reminders || []);
         setCrossSuggestions(suggestionsRes.data.suggestions || []);
+        setAnalytics(analyticsRes.data);
       } catch {}
     } catch (error) {
       toast.error("Erro ao carregar dados");
@@ -75,6 +84,14 @@ export default function Dashboard() {
 
   const dismissReminder = (idx) => {
     setReminders(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const fetchAnalytics = async (d) => {
+    setAnalyticsDays(d);
+    try {
+      const res = await axios.get(`${API}/stats/analytics?days=${d}`, { withCredentials: true });
+      setAnalytics(res.data);
+    } catch {}
   };
 
   const getNextRank = () => {
@@ -509,6 +526,151 @@ export default function Dashboard() {
                 </Card>
               )}
             </>
+          )}
+
+          {/* ===== ANALYTICS CHARTS ===== */}
+          {analytics && analytics.data && analytics.data.length > 0 && (
+            <div className="mt-8">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <Activity className="w-6 h-6 text-[#007AFF]" />
+                  <h2 className="font-heading text-lg md:text-xl">ANÁLISE DE EVOLUÇÃO</h2>
+                </div>
+                <div className="flex gap-1 bg-[#0A0A0A] border border-[#27272A] rounded-lg p-1">
+                  {[7, 14, 30].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => fetchAnalytics(d)}
+                      className={"px-3 py-1 text-xs rounded-md transition-colors " + (analyticsDays === d ? "bg-[#007AFF] text-white" : "text-[#52525B] hover:text-white")}
+                    >
+                      {d}d
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Tarefas & Hábitos */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <CheckSquare className="w-5 h-5 text-[#007AFF]" />
+                    <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider">Tarefas & Hábitos</h3>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={analytics.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
+                      <XAxis dataKey="label" tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <YAxis tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <Tooltip
+                        contentStyle={{ background: "#0A0A0A", border: "1px solid #27272A", borderRadius: 8, color: "#fff", fontSize: 12 }}
+                        labelStyle={{ color: "#A1A1AA" }}
+                      />
+                      <Bar dataKey="tasks" name="Tarefas" fill="#007AFF" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="habits" name="Hábitos" fill="#39FF14" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                {/* Finanças */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <DollarSign className="w-5 h-5 text-[#FF9500]" />
+                    <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider">Receitas vs Despesas</h3>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={analytics.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#39FF14" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#39FF14" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#FF3B30" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#FF3B30" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
+                      <XAxis dataKey="label" tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <YAxis tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <Tooltip
+                        contentStyle={{ background: "#0A0A0A", border: "1px solid #27272A", borderRadius: 8, color: "#fff", fontSize: 12 }}
+                        formatter={(val) => ["R$ " + Number(val).toFixed(2)]}
+                      />
+                      <Area type="monotone" dataKey="income" name="Receitas" stroke="#39FF14" fill="url(#gradIncome)" strokeWidth={2} />
+                      <Area type="monotone" dataKey="expenses" name="Despesas" stroke="#FF3B30" fill="url(#gradExpense)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                {/* Tempo de Estudo */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <BookOpen className="w-5 h-5 text-[#A78BFA]" />
+                    <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider">Tempo de Estudo (min)</h3>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={analytics.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="gradStudy" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#A78BFA" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#A78BFA" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
+                      <XAxis dataKey="label" tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <YAxis tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <Tooltip
+                        contentStyle={{ background: "#0A0A0A", border: "1px solid #27272A", borderRadius: 8, color: "#fff", fontSize: 12 }}
+                        formatter={(val) => [val + " min"]}
+                      />
+                      <Area type="monotone" dataKey="study_min" name="Estudo" stroke="#A78BFA" fill="url(#gradStudy)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+
+                {/* XP Acumulado */}
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Zap className="w-5 h-5 text-[#FFD700]" />
+                    <h3 className="text-sm font-medium text-[#A1A1AA] uppercase tracking-wider">XP Ganho</h3>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={analytics.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
+                      <XAxis dataKey="label" tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <YAxis tick={{ fill: "#52525B", fontSize: 11 }} axisLine={{ stroke: "#27272A" }} />
+                      <Tooltip
+                        contentStyle={{ background: "#0A0A0A", border: "1px solid #27272A", borderRadius: 8, color: "#fff", fontSize: 12 }}
+                      />
+                      <Line type="monotone" dataKey="xp" name="XP do Dia" stroke="#FFD700" strokeWidth={2} dot={{ fill: "#FFD700", r: 3 }} />
+                      <Line type="monotone" dataKey="xp_cumulative" name="XP Acumulado" stroke="#007AFF" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+              </div>
+
+              {/* Summary totals */}
+              {analytics.totals && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+                  <div className="bg-[#0A0A0A] border border-[#27272A] rounded-lg p-3 text-center">
+                    <p className="font-data text-xl text-[#007AFF]">{analytics.totals.tasks}</p>
+                    <p className="text-[10px] text-[#52525B] uppercase">Tarefas Feitas</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] border border-[#27272A] rounded-lg p-3 text-center">
+                    <p className="font-data text-xl text-[#A78BFA]">{analytics.totals.study_hours}h</p>
+                    <p className="text-[10px] text-[#52525B] uppercase">Horas Estudadas</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] border border-[#27272A] rounded-lg p-3 text-center">
+                    <p className="font-data text-xl text-[#FF6B6B]">{analytics.totals.workouts}</p>
+                    <p className="text-[10px] text-[#52525B] uppercase">Treinos</p>
+                  </div>
+                  <div className="bg-[#0A0A0A] border border-[#27272A] rounded-lg p-3 text-center">
+                    <p className="font-data text-xl text-[#FFD700]">{analytics.totals.xp_earned}</p>
+                    <p className="text-[10px] text-[#52525B] uppercase">XP Ganho</p>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

@@ -13,6 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import axios from "axios";
+import ExportButtons from "@/components/ExportButtons";
 import {
   BookOpen, Plus, Trash2, Folder, FileText, Clock, Calendar,
   Brain, Layers, Target, Trophy, Flame, ChevronRight, Loader2,
@@ -1327,6 +1328,7 @@ export default function Studies() {
             <p className="text-[#A1A1AA] text-sm">Organize, estude e evolua com inteligência</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <ExportButtons module="study" />
             <Badge className="bg-orange-500/20 text-orange-400"><Flame className="w-3 h-3 mr-1" />{streak.current_streak || 0} dias</Badge>
             <Badge className="bg-purple-500/20 text-purple-400"><Trophy className="w-3 h-3 mr-1" />Recorde: {streak.best_streak || 0}</Badge>
             <Badge className="bg-blue-500/20 text-blue-400"><Hash className="w-3 h-3 mr-1" />{totalQuestions} questões</Badge>
