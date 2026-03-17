@@ -38,6 +38,8 @@ export default function Dashboard() {
   const [xpAnimation, setXpAnimation] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [analyticsDays, setAnalyticsDays] = useState(7);
+  const [dailySummary, setDailySummary] = useState(null);
+  const [globalStreaks, setGlobalStreaks] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -55,16 +57,20 @@ export default function Dashboard() {
       
       // Fetch additional data in background
       try {
-        const [weeklyRes, remindersRes, suggestionsRes, analyticsRes] = await Promise.all([
+        const [weeklyRes, remindersRes, suggestionsRes, analyticsRes, streaksRes, dailyRes] = await Promise.all([
           axios.get(`${API}/dashboard/weekly-summary`, { withCredentials: true }),
           axios.get(`${API}/reminders/smart`, { withCredentials: true }),
           axios.get(`${API}/suggestions/cross-module`, { withCredentials: true }),
-          axios.get(`${API}/stats/analytics?days=7`, { withCredentials: true })
+          axios.get(`${API}/stats/analytics?days=7`, { withCredentials: true }),
+          axios.get(`${API}/streaks/global`, { withCredentials: true }),
+          axios.get(`${API}/dashboard/daily-summary`, { withCredentials: true })
         ]);
         setWeeklySummary(weeklyRes.data);
         setReminders(remindersRes.data.reminders || []);
         setCrossSuggestions(suggestionsRes.data.suggestions || []);
         setAnalytics(analyticsRes.data);
+        setGlobalStreaks(streaksRes.data);
+        setDailySummary(dailyRes.data);
       } catch {}
     } catch (error) {
       toast.error("Erro ao carregar dados");
@@ -236,6 +242,120 @@ export default function Dashboard() {
 
           {stats && (
             <>
+              {/* Daily Summary + Streaks Row */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6 md:mb-8">
+                {/* AI Daily Summary Widget */}
+                {dailySummary && dailySummary.summary && (
+                  <Card className="bg-gradient-to-br from-[#0A0A0A] to-[#121212] border-[#27272A] p-4 md:p-5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-40 h-40 bg-[#007AFF]/5 rounded-full blur-[60px] pointer-events-none" />
+                    <div className="relative z-10">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#007AFF] to-[#A855F7] flex items-center justify-center">
+                          <Sparkles className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-heading text-sm">BRIEFING DIÁRIO</h3>
+                          <p className="text-[10px] text-[#52525B]">Gerado por IA</p>
+                        </div>
+                        {dailySummary.summary.score !== undefined && (
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <div className="w-10 h-10 rounded-full border-2 flex items-center justify-center" style={{ borderColor: dailySummary.summary.score >= 70 ? '#39FF14' : dailySummary.summary.score >= 40 ? '#FF9500' : '#FF3B30' }}>
+                              <span className="font-data text-xs" style={{ color: dailySummary.summary.score >= 70 ? '#39FF14' : dailySummary.summary.score >= 40 ? '#FF9500' : '#FF3B30' }}>{dailySummary.summary.score}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-[#D4D4D8] mb-2">{dailySummary.summary.greeting}</p>
+                      <p className="text-xs text-[#A1A1AA] mb-3">{dailySummary.summary.progress_summary}</p>
+                      {dailySummary.summary.pending_items && dailySummary.summary.pending_items.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-[10px] text-[#52525B] uppercase tracking-wider mb-1.5">Pendente</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {dailySummary.summary.pending_items.slice(0, 5).map((item, i) => (
+                              <span key={i} className="text-[10px] bg-[#1A1A1A] text-[#A1A1AA] px-2 py-0.5 rounded-full">{item}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {dailySummary.summary.priority_action && (
+                        <div className="bg-[#007AFF]/10 border border-[#007AFF]/20 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-[#007AFF] uppercase tracking-wider mb-0.5">Ação Prioritária</p>
+                          <p className="text-xs text-white">{dailySummary.summary.priority_action}</p>
+                        </div>
+                      )}
+                      {dailySummary.summary.motivation && (
+                        <p className="text-[10px] text-[#52525B] italic mt-2">"{dailySummary.summary.motivation}"</p>
+                      )}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Global Streaks Widget */}
+                {globalStreaks && (
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-6 h-6 text-[#FF9500]" />
+                        <h3 className="font-heading text-sm">STREAK GLOBAL</h3>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="font-data text-2xl text-[#FF9500]">{globalStreaks.current_streak}</p>
+                          <p className="text-[10px] text-[#52525B] uppercase">Dias</p>
+                        </div>
+                        {globalStreaks.longest_streak > 0 && (
+                          <div className="text-right border-l border-[#27272A] pl-3">
+                            <p className="font-data text-lg text-[#FFD700]">{globalStreaks.longest_streak}</p>
+                            <p className="text-[10px] text-[#52525B] uppercase">Recorde</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {/* Weekly Heatmap */}
+                    <div className="flex gap-1.5 mb-4">
+                      {(globalStreaks.heatmap || []).map((day, i) => (
+                        <div key={i} className="flex-1 text-center">
+                          <div className={"w-full aspect-square rounded-md flex items-center justify-center text-[10px] font-data transition-colors " + (day.active ? "text-white" : "text-[#3F3F46]")} style={{ backgroundColor: day.active ? (day.count >= 3 ? '#FF9500' : day.count >= 2 ? '#FF9500AA' : '#FF950066') : '#1A1A1A' }}>
+                            {day.count || '-'}
+                          </div>
+                          <p className="text-[8px] text-[#3F3F46] mt-1">{day.date.slice(8)}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Module Streaks */}
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[
+                        { key: "tasks", label: "Tarefas", icon: CheckSquare, color: "#007AFF" },
+                        { key: "habits", label: "Hábitos", icon: TrendingUp, color: "#39FF14" },
+                        { key: "study", label: "Estudos", icon: BookOpen, color: "#A855F7" },
+                        { key: "workouts", label: "Treinos", icon: Dumbbell, color: "#EF4444" },
+                        { key: "nutrition", label: "Nutrição", icon: Utensils, color: "#22C55E" },
+                      ].map(m => {
+                        const ModIcon = m.icon;
+                        const streak = (globalStreaks.module_streaks || {})[m.key] || 0;
+                        return (
+                          <div key={m.key} className="text-center bg-[#121212] rounded-lg p-2">
+                            <ModIcon className="w-3.5 h-3.5 mx-auto mb-1" style={{ color: streak > 0 ? m.color : '#3F3F46' }} />
+                            <p className="font-data text-sm" style={{ color: streak > 0 ? m.color : '#3F3F46' }}>{streak}</p>
+                            <p className="text-[7px] text-[#3F3F46] uppercase">{m.label}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Combo bonus */}
+                    {globalStreaks.combo_count >= 2 && (
+                      <div className="mt-3 bg-[#FF9500]/10 border border-[#FF9500]/20 rounded-lg px-3 py-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Zap className="w-4 h-4 text-[#FFD700]" />
+                          <span className="text-xs text-[#FFD700]">COMBO x{globalStreaks.combo_count}</span>
+                        </div>
+                        <span className="text-xs font-data text-[#FF9500]">+{globalStreaks.combo_bonus_xp} XP bônus</span>
+                      </div>
+                    )}
+                  </Card>
+                )}
+              </div>
+
               {/* Row 1: Quick Stats */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
                 <Card className="bg-[#0A0A0A] border-[#27272A] p-4 md:p-6">

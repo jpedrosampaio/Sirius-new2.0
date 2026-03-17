@@ -10750,6 +10750,289 @@ async def get_weekly_summary(request: Request, session_token: Optional[str] = Co
     }
 
 
+
+# ========== UNIFIED STREAKS ==========
+@api_router.get("/streaks/global")
+async def get_global_streaks(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get unified streaks across all modules"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today = datetime.now(timezone.utc)
+    today_str = today.strftime("%Y-%m-%d")
+    
+    # Check last 120 days for activity
+    active_days = set()
+    module_days = {"tasks": set(), "habits": set(), "study": set(), "workouts": set(), "nutrition": set()}
+    
+    lookback_start = (today - timedelta(days=120)).strftime("%Y-%m-%d")
+    
+    # Tasks
+    task_instances = await db.task_instances.find(
+        {"user_id": user.user_id, "completed": True, "date": {"$gte": lookback_start}},
+        {"_id": 0, "date": 1}
+    ).to_list(5000)
+    for t in task_instances:
+        active_days.add(t["date"])
+        module_days["tasks"].add(t["date"])
+    
+    # Habits
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0, "completions": 1}).to_list(500)
+    for h in habits:
+        for c in h.get("completions", []):
+            if c >= lookback_start:
+                active_days.add(c)
+                module_days["habits"].add(c)
+    
+    # Study
+    study_sessions = await db.study_sessions.find(
+        {"user_id": user.user_id, "date": {"$gte": lookback_start}},
+        {"_id": 0, "date": 1}
+    ).to_list(5000)
+    for s in study_sessions:
+        active_days.add(s["date"])
+        module_days["study"].add(s["date"])
+    
+    # Workouts
+    workout_logs = await db.workout_logs.find(
+        {"user_id": user.user_id, "completed": True, "date": {"$gte": lookback_start}},
+        {"_id": 0, "date": 1}
+    ).to_list(1000)
+    for w in workout_logs:
+        active_days.add(w["date"])
+        module_days["workouts"].add(w["date"])
+    
+    # Nutrition
+    meals = await db.meals.find(
+        {"user_id": user.user_id, "date": {"$gte": lookback_start}},
+        {"_id": 0, "date": 1}
+    ).to_list(5000)
+    for m in meals:
+        active_days.add(m["date"])
+        module_days["nutrition"].add(m["date"])
+    
+    # Calculate current streak
+    current_streak = 0
+    check_date = today
+    while True:
+        ds = check_date.strftime("%Y-%m-%d")
+        if ds in active_days:
+            current_streak += 1
+            check_date -= timedelta(days=1)
+        else:
+            # Allow today to be "not yet active" and still count yesterday's streak
+            if ds == today_str and current_streak == 0:
+                check_date -= timedelta(days=1)
+                continue
+            break
+    
+    # Calculate longest streak
+    sorted_days = sorted(active_days)
+    longest_streak = 0
+    temp_streak = 0
+    prev_date = None
+    for ds in sorted_days:
+        d = datetime.strptime(ds, "%Y-%m-%d")
+        if prev_date and (d - prev_date).days == 1:
+            temp_streak += 1
+        else:
+            temp_streak = 1
+        longest_streak = max(longest_streak, temp_streak)
+        prev_date = d
+    
+    # Calculate combo bonus (how many modules active today)
+    today_modules = []
+    for mod, days in module_days.items():
+        if today_str in days:
+            today_modules.append(mod)
+    
+    combo_count = len(today_modules)
+    combo_bonus_xp = 0
+    if combo_count >= 3:
+        combo_bonus_xp = combo_count * 5
+    elif combo_count >= 2:
+        combo_bonus_xp = combo_count * 3
+    
+    # Last 7 days heatmap
+    heatmap = []
+    for i in range(6, -1, -1):
+        d = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+        day_modules = []
+        for mod, days in module_days.items():
+            if d in days:
+                day_modules.append(mod)
+        heatmap.append({
+            "date": d,
+            "active": d in active_days,
+            "modules": day_modules,
+            "count": len(day_modules)
+        })
+    
+    # Module-specific streaks
+    module_streaks = {}
+    for mod, days in module_days.items():
+        mod_streak = 0
+        cd = today
+        while True:
+            ds = cd.strftime("%Y-%m-%d")
+            if ds in days:
+                mod_streak += 1
+                cd -= timedelta(days=1)
+            else:
+                if ds == today_str and mod_streak == 0:
+                    cd -= timedelta(days=1)
+                    continue
+                break
+        module_streaks[mod] = mod_streak
+    
+    return {
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
+        "total_active_days": len(active_days),
+        "today_modules": today_modules,
+        "combo_count": combo_count,
+        "combo_bonus_xp": combo_bonus_xp,
+        "heatmap": heatmap,
+        "module_streaks": module_streaks
+    }
+
+
+# ========== DAILY SUMMARY (AI) ==========
+@api_router.get("/dashboard/daily-summary")
+async def get_daily_summary(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Generate AI-powered daily briefing"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Check cache first (valid for 4 hours)
+    cached = await db.daily_summaries.find_one(
+        {"user_id": user.user_id, "date": today_str},
+        {"_id": 0}
+    )
+    if cached and cached.get("summary"):
+        created = cached.get("created_at", "")
+        if created:
+            try:
+                cache_time = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                if (datetime.now(timezone.utc) - cache_time).total_seconds() < 14400:
+                    return cached
+            except Exception:
+                pass
+    
+    # Gather data for the summary
+    tasks = await db.tasks.find({"user_id": user.user_id, "is_template": True}, {"_id": 0}).to_list(200)
+    task_instances = await db.task_instances.find(
+        {"user_id": user.user_id, "date": today_str}, {"_id": 0}
+    ).to_list(500)
+    completed_task_ids = set(i["task_id"] for i in task_instances if i.get("completed"))
+    
+    pending_tasks = [t for t in tasks if t["task_id"] not in completed_task_ids and t.get("recurrence") in ("daily", "once")]
+    done_tasks = [t for t in tasks if t["task_id"] in completed_task_ids]
+    
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(50)
+    habits_done = [h for h in habits if today_str in h.get("completions", [])]
+    habits_pending = [h for h in habits if today_str not in h.get("completions", [])]
+    
+    study_sessions = await db.study_sessions.find(
+        {"user_id": user.user_id, "date": today_str}, {"_id": 0}
+    ).to_list(100)
+    study_minutes = sum(s.get("duration_minutes", 0) for s in study_sessions)
+    
+    meals = await db.meals.find(
+        {"user_id": user.user_id, "date": today_str}, {"_id": 0}
+    ).to_list(20)
+    total_calories = sum(m.get("total_calories", 0) for m in meals)
+    
+    workout_logs = await db.workout_logs.find(
+        {"user_id": user.user_id, "date": today_str}, {"_id": 0}
+    ).to_list(10)
+    
+    # Build context for AI
+    context = f"""Dados do dia ({today_str}) do usuário {user.name}:
+- Rank: {user.rank} | XP: {user.xp}
+- Tarefas pendentes: {len(pending_tasks)} ({', '.join(t['title'] for t in pending_tasks[:5])})
+- Tarefas concluídas: {len(done_tasks)}
+- Hábitos pendentes: {len(habits_pending)} ({', '.join(h['name'] for h in habits_pending[:5])})
+- Hábitos concluídos: {len(habits_done)}
+- Estudo: {study_minutes} minutos em {len(study_sessions)} sessões
+- Refeições: {len(meals)} registradas, {total_calories:.0f} kcal total
+- Treinos: {len(workout_logs)} realizados"""
+    
+    prompt = f"""{context}
+
+Gere um resumo diário motivacional e prático em PORTUGUÊS para este usuário.
+Inclua:
+1. Saudação personalizada usando o nome e rank
+2. Resumo do progresso até agora no dia
+3. O que ainda falta fazer (tarefas e hábitos pendentes)
+4. Dica motivacional breve no estilo militar/disciplina
+5. Uma sugestão de ação prioritária
+
+Responda em formato JSON:
+{{"greeting": "...", "progress_summary": "...", "pending_items": ["item1", "item2", ...], "motivation": "...", "priority_action": "...", "score": 0-100}}
+
+O score deve refletir o progresso do dia (0 = nada feito, 100 = tudo feito)."""
+
+    summary_data = None
+    
+    if gemini_client:
+        try:
+            response = gemini_client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            summary_data = json.loads(response.text)
+        except Exception as e:
+            logging.error(f"Daily summary AI error: {e}")
+    
+    # Fallback if AI fails
+    if not summary_data:
+        total_items = len(pending_tasks) + len(habits_pending) + len(done_tasks) + len(habits_done)
+        done_items = len(done_tasks) + len(habits_done)
+        score = round((done_items / max(total_items, 1)) * 100)
+        
+        summary_data = {
+            "greeting": f"Bom dia, {user.name}! Seu rank atual é {user.rank}.",
+            "progress_summary": f"Você já concluiu {len(done_tasks)} tarefas e {len(habits_done)} hábitos hoje. {'Estudou ' + str(study_minutes) + ' min. ' if study_minutes else ''}{'Treinou! ' if workout_logs else ''}{'Registrou ' + str(len(meals)) + ' refeições.' if meals else ''}",
+            "pending_items": [t["title"] for t in pending_tasks[:5]] + [h["name"] for h in habits_pending[:5]],
+            "motivation": "Disciplina é o que te move quando a motivação falta. Continue!",
+            "priority_action": pending_tasks[0]["title"] if pending_tasks else (habits_pending[0]["name"] if habits_pending else "Dia limpo! Descanse ou avance no extra."),
+            "score": score
+        }
+    
+    result = {
+        "user_id": user.user_id,
+        "date": today_str,
+        "summary": summary_data,
+        "raw_data": {
+            "tasks_pending": len(pending_tasks),
+            "tasks_done": len(done_tasks),
+            "habits_pending": len(habits_pending),
+            "habits_done": len(habits_done),
+            "study_minutes": study_minutes,
+            "meals_count": len(meals),
+            "calories": round(total_calories),
+            "workouts_count": len(workout_logs)
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Cache the summary
+    await db.daily_summaries.update_one(
+        {"user_id": user.user_id, "date": today_str},
+        {"$set": result},
+        upsert=True
+    )
+    
+    return result
+
+
+
 # ========== GLOBAL SEARCH ==========
 @api_router.get("/search/global")
 async def global_search(request: Request, q: str = "", session_token: Optional[str] = Cookie(None)):
