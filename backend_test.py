@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timezone
 
 # Configuration
-BACKEND_URL = "https://workout-debug.preview.emergentagent.com/api"
+BACKEND_URL = "https://ai-workout-tutorials.preview.emergentagent.com/api"
 TEST_USER_EMAIL = "testedital@test.com"
 TEST_USER_PASSWORD = "Test123!"
 
