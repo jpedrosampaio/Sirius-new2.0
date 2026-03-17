@@ -836,6 +836,66 @@ async def delete_task(request: Request, task_id: str, session_token: Optional[st
         raise HTTPException(status_code=404, detail="Task not found")
     return {"message": "Task deleted"}
 
+
+@api_router.patch("/tasks/{task_id}/status")
+async def update_task_status(request: Request, task_id: str, session_token: Optional[str] = Cookie(None)):
+    """Update task kanban status (todo, in_progress, done)"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    new_status = body.get("status", "todo")
+    date = body.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    
+    if new_status not in ("todo", "in_progress", "done"):
+        raise HTTPException(status_code=400, detail="Status must be todo, in_progress, or done")
+    
+    task = await db.tasks.find_one({"task_id": task_id, "user_id": user.user_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    completed = new_status == "done"
+    instance = await db.task_instances.find_one({"task_id": task_id, "date": date}, {"_id": 0})
+    
+    if not instance:
+        instance_id = f"inst_{uuid.uuid4().hex[:12]}"
+        instance_doc = {
+            "instance_id": instance_id,
+            "task_id": task_id,
+            "user_id": user.user_id,
+            "date": date,
+            "completed": completed,
+            "status": new_status,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.task_instances.insert_one(instance_doc)
+        was_completed = False
+    else:
+        was_completed = instance.get("completed", False)
+        await db.task_instances.update_one(
+            {"instance_id": instance["instance_id"]},
+            {"$set": {"completed": completed, "status": new_status}}
+        )
+    
+    xp_earned = 0
+    new_xp = user.xp
+    new_rank = user.rank
+    
+    if completed and not was_completed:
+        new_xp = user.xp + task['xp_reward']
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        xp_earned = task['xp_reward']
+    elif not completed and was_completed:
+        new_xp = max(0, user.xp - task['xp_reward'])
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        xp_earned = -task['xp_reward']
+    
+    return {"message": "Status updated", "status": new_status, "xp_earned": xp_earned, "new_xp": new_xp, "new_rank": new_rank}
+
+
+
 @api_router.get("/habits")
 async def get_habits(request: Request, session_token: Optional[str] = Cookie(None)):
     auth_header = request.headers.get("Authorization")
@@ -10988,6 +11048,139 @@ async def toggle_shopping_item(request: Request, list_id: str, item_idx: int, se
         await db.shopping_lists.update_one({"list_id": list_id}, {"$set": {"items": items}})
     
     return {"success": True, "items": items}
+
+
+# ========== UNIFIED CALENDAR ==========
+@api_router.get("/calendar/events")
+async def get_calendar_events(request: Request, start: str = None, end: str = None, session_token: Optional[str] = Cookie(None)):
+    """Get all events across modules for calendar view"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not start:
+        today = datetime.now(timezone.utc)
+        start = (today.replace(day=1)).strftime("%Y-%m-%d")
+    if not end:
+        today = datetime.now(timezone.utc)
+        next_month = today.replace(day=28) + timedelta(days=4)
+        end = next_month.replace(day=1).strftime("%Y-%m-%d")
+    
+    events = []
+    
+    # Tasks
+    task_templates = await db.tasks.find({"user_id": user.user_id, "is_template": True}, {"_id": 0}).to_list(500)
+    task_instances = await db.task_instances.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start, "$lte": end}
+    }, {"_id": 0}).to_list(5000)
+    
+    instance_map = {}
+    for inst in task_instances:
+        key = f"{inst['task_id']}_{inst['date']}"
+        instance_map[key] = inst
+    
+    for t in task_templates:
+        rec = t.get("recurrence", "once")
+        if rec == "daily":
+            d = datetime.strptime(start, "%Y-%m-%d")
+            end_d = datetime.strptime(end, "%Y-%m-%d")
+            while d <= end_d:
+                ds = d.strftime("%Y-%m-%d")
+                inst = instance_map.get(f"{t['task_id']}_{ds}")
+                events.append({
+                    "id": f"task_{t['task_id']}_{ds}",
+                    "title": t["title"],
+                    "date": ds,
+                    "type": "task",
+                    "color": "#007AFF",
+                    "completed": inst.get("completed", False) if inst else False,
+                    "priority": t.get("priority", "medium"),
+                    "ref_id": t["task_id"]
+                })
+                d += timedelta(days=1)
+        elif rec == "once":
+            created = t.get("created_at", "")[:10]
+            if start <= created <= end:
+                inst = instance_map.get(f"{t['task_id']}_{created}")
+                events.append({
+                    "id": f"task_{t['task_id']}",
+                    "title": t["title"],
+                    "date": created,
+                    "type": "task",
+                    "color": "#007AFF",
+                    "completed": inst.get("completed", False) if inst else False,
+                    "priority": t.get("priority", "medium"),
+                    "ref_id": t["task_id"]
+                })
+    
+    # Habits
+    habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0}).to_list(500)
+    for h in habits:
+        for comp_date in h.get("completions", []):
+            if start <= comp_date <= end:
+                events.append({
+                    "id": f"habit_{h['habit_id']}_{comp_date}",
+                    "title": h["name"],
+                    "date": comp_date,
+                    "type": "habit",
+                    "color": "#39FF14",
+                    "completed": True,
+                    "ref_id": h["habit_id"]
+                })
+    
+    # Study sessions
+    sessions = await db.study_sessions.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start, "$lte": end}
+    }, {"_id": 0}).to_list(5000)
+    for s in sessions:
+        events.append({
+            "id": f"study_{s.get('session_id', '')}",
+            "title": f"Estudo: {s.get('notebook_name', 'Sessão')}",
+            "date": s["date"],
+            "type": "study",
+            "color": "#A855F7",
+            "completed": True,
+            "duration_minutes": s.get("duration_minutes", 0),
+            "ref_id": s.get("session_id", "")
+        })
+    
+    # Workouts
+    workouts = await db.workout_logs.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start, "$lte": end}
+    }, {"_id": 0}).to_list(1000)
+    for w in workouts:
+        events.append({
+            "id": f"workout_{w.get('log_id', '')}",
+            "title": f"Treino: {w.get('plan_name', 'Sessão')}",
+            "date": w["date"],
+            "type": "workout",
+            "color": "#EF4444",
+            "completed": w.get("completed", False),
+            "duration_minutes": w.get("duration_minutes", 0),
+            "ref_id": w.get("log_id", "")
+        })
+    
+    # Meals
+    meals = await db.meals.find({
+        "user_id": user.user_id,
+        "date": {"$gte": start, "$lte": end}
+    }, {"_id": 0}).to_list(5000)
+    for m in meals:
+        events.append({
+            "id": f"meal_{m.get('meal_id', '')}",
+            "title": f"{m.get('meal_type', 'Refeição').capitalize()}",
+            "date": m["date"],
+            "type": "meal",
+            "color": "#22C55E",
+            "completed": True,
+            "calories": m.get("total_calories", 0),
+            "ref_id": m.get("meal_id", "")
+        })
+    
+    return {"events": events, "start": start, "end": end}
+
 
 
 # ========== CROSS-MODULE SUGGESTIONS ==========

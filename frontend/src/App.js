@@ -23,6 +23,7 @@ const Notifications = React.lazy(() => import("@/pages/Notifications"));
 const Nutrition = React.lazy(() => import("@/pages/Nutrition"));
 const Studies = React.lazy(() => import("@/pages/Studies"));
 const Achievements = React.lazy(() => import("@/pages/Achievements"));
+const CalendarPage = React.lazy(() => import("@/pages/CalendarPage"));
 
 // Loading fallback for lazy pages
 function PageLoader() {
@@ -64,6 +65,7 @@ function AppRouter() {
         <Route path="/nutrition" element={<ProtectedRoute><ErrorBoundary><Nutrition /></ErrorBoundary></ProtectedRoute>} />
         <Route path="/studies" element={<ProtectedRoute><ErrorBoundary><Studies /></ErrorBoundary></ProtectedRoute>} />
         <Route path="/achievements" element={<ProtectedRoute><ErrorBoundary><Achievements /></ErrorBoundary></ProtectedRoute>} />
+        <Route path="/calendar" element={<ProtectedRoute><ErrorBoundary><CalendarPage /></ErrorBoundary></ProtectedRoute>} />
       </Routes>
     </Suspense>
   );
