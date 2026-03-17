@@ -36,23 +36,38 @@ if GOOGLE_GEMINI_API_KEY:
 # Model to use - can be changed if quota issues occur
 GEMINI_MODEL = "gemini-2.5-flash"
 
-async def call_llm(prompt: str, session_id: str = "default", system_message: str = "Você é um assistente financeiro inteligente.") -> str:
-    """Helper function to call LLM using Google Gemini"""
+GEMINI_FALLBACK_MODEL = "gemini-2.0-flash-lite"
+
+async def call_llm(prompt: str, session_id: str = "default", system_message: str = "Você é um assistente financeiro inteligente.", raise_on_error: bool = False) -> str:
+    """Helper function to call LLM using Google Gemini with retry and fallback model"""
     if not gemini_client:
         logging.warning("Gemini client not initialized - API key may be missing")
+        if raise_on_error:
+            raise Exception("Gemini client not initialized")
         return "⚠️ Serviço de IA indisponível no momento. Por favor, configure a API key do Google Gemini."
-    try:
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_message
+    
+    models_to_try = [GEMINI_MODEL, GEMINI_FALLBACK_MODEL]
+    last_error = None
+    
+    for model_name in models_to_try:
+        try:
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_message
+                )
             )
-        )
-        return response.text
-    except Exception as e:
-        logging.error(f"LLM call failed: {e}")
-        return f"⚠️ Erro ao processar sua solicitação: {str(e)}"
+            return response.text
+        except Exception as e:
+            last_error = e
+            logging.warning(f"LLM call failed with model {model_name}: {e}")
+            continue
+    
+    logging.error(f"All LLM models failed. Last error: {last_error}")
+    if raise_on_error:
+        raise last_error
+    return f"⚠️ Erro ao processar sua solicitação: {str(last_error)}"
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -1966,7 +1981,7 @@ Se não conseguir identificar gastos na imagem, retorne:
                     "expenses": [],
                     "total": 0,
                     "establishment": None,
-                    "summary": f"Não foi possível analisar a imagem. Por favor, tente com outra imagem ou formato diferente (JPEG/PNG)."
+                    "summary": "Não foi possível analisar a imagem. Por favor, tente com outra imagem ou formato diferente (JPEG/PNG)."
                 })
         
         # Try to parse JSON from response
@@ -4784,7 +4799,8 @@ Responda APENAS com a frase, sem explicações."""
         response = await call_llm(
             prompt=prompt,
             session_id=f"motivation_{user.user_id}_{motivational_date}",
-            system_message="Você é um mestre motivacional que combina sabedoria filosófica, mentalidade de elite atlética e coaching de alta performance. Suas frases são impactantes, únicas e memoráveis."
+            system_message="Você é um mestre motivacional que combina sabedoria filosófica, mentalidade de elite atlética e coaching de alta performance. Suas frases são impactantes, únicas e memoráveis.",
+            raise_on_error=True
         )
         
         quote_text = response.strip()
@@ -7896,14 +7912,14 @@ async def analyze_content_pdf(
         # Build generation instructions
         gen_parts = []
         if generate_notes:
-            gen_parts.append(f"""
-"review_notes": {{
+            gen_parts.append("""
+"review_notes": {
   "title": "Título da revisão",
   "summary": "Resumo completo e detalhado do conteúdo (mínimo 500 palavras), cobrindo TODOS os tópicos principais",
   "key_topics": ["Tópico 1", "Tópico 2", ...],
   "important_points": ["Ponto importante 1", "Ponto importante 2", ...],
   "study_tips": ["Dica de estudo 1", "Dica 2", ...]
-}}""")
+}""")
         
         if generate_flashcards:
             gen_parts.append(f"""
@@ -8809,8 +8825,8 @@ REGRAS:
             "message": f"Edital analisado! {'Encontrados ' + str(len(parsed.get('cargos', []))) + ' cargos.' if parsed.get('multiple_cargos') else 'Cargo único identificado.'}"
         }
         
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA. Tente novamente.")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Erro ao processar resposta da IA. Tente novamente.")
     except HTTPException:
         raise
     except Exception as e:
@@ -9075,8 +9091,8 @@ REGRAS CRÍTICAS:
             "message": f"Programa criado para cargo '{selected_cargo.get('nome', '')}' com {len(disciplinas)} disciplinas!"
         }
         
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao processar resposta da IA. Tente novamente.")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Erro ao processar resposta da IA. Tente novamente.")
     except HTTPException:
         raise
     except Exception as e:
@@ -10118,8 +10134,8 @@ Responda em português, de forma objetiva, amigável e útil. Use emojis moderad
             response = await call_llm(content, f"general_chat_{user.user_id}", system)
             ai_response_text = response
 
-    except Exception as e:
-        ai_response_text = f"Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente."
+    except Exception:
+        ai_response_text = "Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente."
 
     # Save AI response
     ai_msg_id = f"msg_{uuid.uuid4().hex[:12]}"
@@ -11121,7 +11137,7 @@ async def global_search(request: Request, q: str = "", session_token: Optional[s
             "type": "note",
             "icon": "📝",
             "title": n.get('title', ''),
-            "subtitle": f"Nota de estudo",
+            "subtitle": "Nota de estudo",
             "link": "/studies"
         })
     
@@ -11909,6 +11925,563 @@ async def export_nutrition(request: Request, format: str, session_token: Optiona
             })
     
     return {"suggestions": suggestions}
+
+
+# ========== TELEGRAM BOT INTEGRATION ==========
+import httpx
+import secrets
+from telegram import Bot, Update
+
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+telegram_bot = None
+if TELEGRAM_BOT_TOKEN:
+    try:
+        telegram_bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    except Exception as e:
+        logging.error(f"Failed to initialize Telegram bot: {e}")
+
+@api_router.post("/telegram/setup-webhook")
+async def setup_telegram_webhook(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Setup Telegram webhook using the app's public URL"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    if not telegram_bot:
+        raise HTTPException(status_code=503, detail="Bot do Telegram não configurado")
+    
+    # Get the public URL from the request's origin or referer
+    origin = request.headers.get("origin", "")
+    if not origin:
+        referer = request.headers.get("referer", "")
+        if referer:
+            from urllib.parse import urlparse
+            parsed = urlparse(referer)
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+    
+    if not origin:
+        raise HTTPException(status_code=400, detail="Não foi possível detectar a URL pública")
+    
+    webhook_url = f"{origin}/api/telegram/webhook/{TELEGRAM_BOT_TOKEN}"
+    
+    try:
+        async with httpx.AsyncClient() as hclient:
+            resp = await hclient.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook",
+                json={"url": webhook_url, "allowed_updates": ["message"]}
+            )
+            result = resp.json()
+            if result.get("ok"):
+                return {"success": True, "webhook_url": webhook_url}
+            else:
+                raise HTTPException(status_code=500, detail=f"Falha ao configurar webhook: {result.get('description')}")
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=500, detail=f"Erro de conexão: {str(e)}")
+
+@api_router.post("/telegram/link")
+async def link_telegram(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Generate a link code for the user to send to the Telegram bot"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Check if already linked
+    existing = await db.telegram_links.find_one({"user_id": user.user_id, "status": "active"}, {"_id": 0})
+    if existing:
+        return {
+            "already_linked": True,
+            "chat_id": existing.get("chat_id"),
+            "linked_at": existing.get("linked_at")
+        }
+    
+    # Generate a 6-char code
+    code = secrets.token_hex(3).upper()
+    
+    await db.telegram_link_codes.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "user_id": user.user_id,
+            "code": code,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        }},
+        upsert=True
+    )
+    
+    bot_info = None
+    if telegram_bot:
+        try:
+            async with httpx.AsyncClient() as hclient:
+                resp = await hclient.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getMe")
+                bot_data = resp.json()
+                if bot_data.get("ok"):
+                    bot_info = bot_data["result"]
+        except:
+            pass
+    
+    bot_username = bot_info.get("username", "") if bot_info else ""
+    
+    return {
+        "code": code,
+        "expires_in_minutes": 10,
+        "bot_username": bot_username,
+        "bot_link": f"https://t.me/{bot_username}" if bot_username else "",
+        "instructions": f"Envie /vincular {code} para o bot @{bot_username} no Telegram"
+    }
+
+@api_router.post("/telegram/unlink")
+async def unlink_telegram(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Unlink Telegram account"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.telegram_links.update_one(
+        {"user_id": user.user_id, "status": "active"},
+        {"$set": {"status": "inactive", "unlinked_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"success": True, "was_linked": result.modified_count > 0}
+
+@api_router.get("/telegram/status")
+async def get_telegram_status(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Check Telegram link status"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    link = await db.telegram_links.find_one({"user_id": user.user_id, "status": "active"}, {"_id": 0})
+    
+    bot_username = ""
+    if telegram_bot:
+        try:
+            async with httpx.AsyncClient() as hclient:
+                resp = await hclient.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getMe")
+                bot_data = resp.json()
+                if bot_data.get("ok"):
+                    bot_username = bot_data["result"].get("username", "")
+        except:
+            pass
+    
+    return {
+        "linked": link is not None,
+        "chat_id": link.get("chat_id") if link else None,
+        "linked_at": link.get("linked_at") if link else None,
+        "telegram_name": link.get("telegram_name") if link else None,
+        "bot_username": bot_username,
+        "bot_configured": bool(TELEGRAM_BOT_TOKEN)
+    }
+
+async def handle_telegram_message(chat_id: int, text: str, telegram_name: str = ""):
+    """Process incoming Telegram messages"""
+    import random
+    
+    text = text.strip()
+    
+    # /start command
+    if text.startswith("/start"):
+        welcome = (
+            "🌟 *Bem-vindo ao Sirius Bot!*\n\n"
+            "Eu sou seu assistente pessoal do Sirius. Aqui você pode:\n\n"
+            "📝 *Registrar transações:*\n"
+            "• `Gastei 50 no mercado`\n"
+            "• `Recebi 3000 de salário`\n\n"
+            "📊 *Consultar dados:*\n"
+            "• /resumo - Resumo do dia\n"
+            "• /saldo - Saldo atual\n"
+            "• /metas - Progresso das metas\n\n"
+            "🔗 *Vincular conta:*\n"
+            "• /vincular CODIGO - Vincule com sua conta Sirius\n\n"
+            "❓ /ajuda - Ver todos os comandos"
+        )
+        await send_telegram_message(chat_id, welcome, parse_mode="Markdown")
+        return
+    
+    # /ajuda command
+    if text.startswith("/ajuda") or text.startswith("/help"):
+        help_text = (
+            "📋 *Comandos disponíveis:*\n\n"
+            "🔗 `/vincular CODIGO` - Vincular conta Sirius\n"
+            "💰 `/saldo` - Ver saldo atual\n"
+            "📊 `/resumo` - Resumo financeiro do dia\n"
+            "🎯 `/metas` - Progresso das metas\n"
+            "📅 `/mes` - Resumo do mês\n"
+            "💪 `/frase` - Frase motivacional\n"
+            "❓ `/ajuda` - Esta mensagem\n\n"
+            "💡 *Dica:* Envie mensagens naturais como:\n"
+            "• `Gastei 150 no supermercado`\n"
+            "• `Recebi 500 de freelance`\n"
+            "• `Paguei 200 de luz e 100 de água`"
+        )
+        await send_telegram_message(chat_id, help_text, parse_mode="Markdown")
+        return
+    
+    # /vincular command
+    if text.startswith("/vincular"):
+        parts = text.split()
+        if len(parts) < 2:
+            await send_telegram_message(chat_id, "⚠️ Use: /vincular CODIGO\n\nGere o código no app Sirius em Configurações > Telegram.")
+            return
+        
+        code = parts[1].upper()
+        link_code = await db.telegram_link_codes.find_one({"code": code}, {"_id": 0})
+        
+        if not link_code:
+            await send_telegram_message(chat_id, "❌ Código inválido ou expirado. Gere um novo código no app.")
+            return
+        
+        # Check expiration
+        expires_at = datetime.fromisoformat(link_code["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            await send_telegram_message(chat_id, "⏰ Código expirado. Gere um novo código no app.")
+            await db.telegram_link_codes.delete_one({"code": code})
+            return
+        
+        user_id = link_code["user_id"]
+        
+        # Deactivate any previous links
+        await db.telegram_links.update_many(
+            {"user_id": user_id, "status": "active"},
+            {"$set": {"status": "inactive"}}
+        )
+        await db.telegram_links.update_many(
+            {"chat_id": chat_id, "status": "active"},
+            {"$set": {"status": "inactive"}}
+        )
+        
+        # Create new link
+        await db.telegram_links.insert_one({
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "telegram_name": telegram_name,
+            "status": "active",
+            "linked_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Delete used code
+        await db.telegram_link_codes.delete_one({"code": code})
+        
+        # Get user info
+        user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        name = user_doc.get("name", "Usuário") if user_doc else "Usuário"
+        
+        await send_telegram_message(
+            chat_id,
+            f"✅ *Conta vinculada com sucesso!*\n\nOlá, {name}! 🎉\nAgora você pode registrar transações e consultar dados diretamente aqui no Telegram."
+            , parse_mode="Markdown"
+        )
+        return
+    
+    # For all other commands/messages, check if linked
+    link = await db.telegram_links.find_one({"chat_id": chat_id, "status": "active"}, {"_id": 0})
+    if not link:
+        await send_telegram_message(
+            chat_id,
+            "🔒 Você precisa vincular sua conta primeiro!\n\n"
+            "1️⃣ Abra o app Sirius\n"
+            "2️⃣ Vá em Configurações > Telegram\n"
+            "3️⃣ Clique em 'Vincular'\n"
+            "4️⃣ Envie aqui: /vincular CODIGO"
+        )
+        return
+    
+    user_id = link["user_id"]
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user_doc:
+        await send_telegram_message(chat_id, "❌ Erro: usuário não encontrado.")
+        return
+    
+    # /saldo command
+    if text.startswith("/saldo"):
+        today = datetime.now().strftime("%Y-%m-%d")
+        month_start = datetime.now().strftime("%Y-%m-01")
+        
+        all_txns = await db.transactions.find({"user_id": user_id}).to_list(10000)
+        total_income = sum(t.get("amount", 0) for t in all_txns if t.get("type") == "income")
+        total_expense = sum(t.get("amount", 0) for t in all_txns if t.get("type") == "expense")
+        balance = total_income - total_expense
+        
+        month_txns = [t for t in all_txns if t.get("date", "") >= month_start]
+        month_income = sum(t.get("amount", 0) for t in month_txns if t.get("type") == "income")
+        month_expense = sum(t.get("amount", 0) for t in month_txns if t.get("type") == "expense")
+        
+        emoji = "📈" if balance >= 0 else "📉"
+        msg = (
+            f"{emoji} *Seu Saldo*\n\n"
+            f"💰 Saldo total: R$ {balance:,.2f}\n\n"
+            f"📅 *Este mês:*\n"
+            f"   ↗️ Receitas: R$ {month_income:,.2f}\n"
+            f"   ↘️ Despesas: R$ {month_expense:,.2f}\n"
+            f"   📊 Balanço: R$ {month_income - month_expense:,.2f}"
+        )
+        await send_telegram_message(chat_id, msg, parse_mode="Markdown")
+        return
+    
+    # /resumo command
+    if text.startswith("/resumo"):
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_txns = await db.transactions.find({"user_id": user_id, "date": today}).to_list(100)
+        
+        if not today_txns:
+            await send_telegram_message(chat_id, "📋 Nenhuma transação registrada hoje.\n\nEnvie algo como `Gastei 50 no almoço` para começar!")
+            return
+        
+        incomes = [t for t in today_txns if t.get("type") == "income"]
+        expenses = [t for t in today_txns if t.get("type") == "expense"]
+        
+        msg = f"📊 *Resumo de Hoje ({today})*\n\n"
+        
+        if incomes:
+            total_in = sum(t.get("amount", 0) for t in incomes)
+            msg += f"↗️ *Receitas:* R$ {total_in:,.2f}\n"
+            for t in incomes:
+                msg += f"   • {t.get('description', 'Sem descrição')} - R$ {t.get('amount', 0):,.2f}\n"
+            msg += "\n"
+        
+        if expenses:
+            total_exp = sum(t.get("amount", 0) for t in expenses)
+            msg += f"↘️ *Despesas:* R$ {total_exp:,.2f}\n"
+            for t in expenses:
+                msg += f"   • {t.get('description', 'Sem descrição')} - R$ {t.get('amount', 0):,.2f}\n"
+        
+        await send_telegram_message(chat_id, msg, parse_mode="Markdown")
+        return
+    
+    # /metas command
+    if text.startswith("/metas"):
+        goals = await db.goals.find({"user_id": user_id}).to_list(20)
+        if not goals:
+            await send_telegram_message(chat_id, "🎯 Nenhuma meta cadastrada.\nCrie metas no app Sirius!")
+            return
+        
+        msg = "🎯 *Suas Metas*\n\n"
+        for g in goals:
+            progress = g.get("progress", 0)
+            bar_filled = int(progress / 10)
+            bar_empty = 10 - bar_filled
+            bar = "█" * bar_filled + "░" * bar_empty
+            msg += f"• {g.get('title', 'Meta')}\n  [{bar}] {progress}%\n\n"
+        
+        await send_telegram_message(chat_id, msg, parse_mode="Markdown")
+        return
+    
+    # /mes command
+    if text.startswith("/mes"):
+        month_start = datetime.now().strftime("%Y-%m-01")
+        month_txns = await db.transactions.find({
+            "user_id": user_id,
+            "date": {"$gte": month_start}
+        }).to_list(1000)
+        
+        income = sum(t.get("amount", 0) for t in month_txns if t.get("type") == "income")
+        expense = sum(t.get("amount", 0) for t in month_txns if t.get("type") == "expense")
+        
+        # Group expenses by category
+        cat_totals = {}
+        for t in month_txns:
+            if t.get("type") == "expense":
+                cat = t.get("category", "outros")
+                cat_totals[cat] = cat_totals.get(cat, 0) + t.get("amount", 0)
+        
+        sorted_cats = sorted(cat_totals.items(), key=lambda x: x[1], reverse=True)
+        
+        msg = "📅 *Resumo do Mês*\n\n"
+        msg += f"↗️ Receitas: R$ {income:,.2f}\n"
+        msg += f"↘️ Despesas: R$ {expense:,.2f}\n"
+        msg += f"📊 Balanço: R$ {income - expense:,.2f}\n\n"
+        
+        if sorted_cats:
+            msg += "*Top despesas por categoria:*\n"
+            for cat, total in sorted_cats[:5]:
+                pct = (total / expense * 100) if expense > 0 else 0
+                msg += f"   • {cat.title()}: R$ {total:,.2f} ({pct:.0f}%)\n"
+        
+        await send_telegram_message(chat_id, msg, parse_mode="Markdown")
+        return
+    
+    # /frase command
+    if text.startswith("/frase"):
+        fallback_quotes = [
+            "🔥 A dor do treino é temporária. A dor do arrependimento é permanente.",
+            "⚔️ Guerreiros não nascem. São forjados no fogo da disciplina diária.",
+            "🦁 Seja a pessoa que você precisava quando era mais novo.",
+            "💎 Diamantes são apenas pedras que não desistiram sob pressão.",
+            "🎯 Enquanto outros dormem, você constrói seu império.",
+            "⚡ Sua única competição é quem você era ontem.",
+            "🏆 Champions são feitos quando ninguém está olhando.",
+            "🚀 Conforto é a morte lenta dos seus sonhos. Acorde!",
+            "💪 Seu corpo pode quase tudo. É sua mente que você precisa convencer.",
+            "🌟 A excelência não é um ato, é um hábito."
+        ]
+        try:
+            quote_resp = await call_llm(
+                "Gere UMA frase motivacional curta, impactante e única. Use 1-2 emojis. Máximo 2 linhas. Responda APENAS com a frase.",
+                f"tg_motivation_{user_id}",
+                "Você é um mestre motivacional.",
+                raise_on_error=True
+            )
+            await send_telegram_message(chat_id, quote_resp.strip())
+        except:
+            await send_telegram_message(chat_id, random.choice(fallback_quotes))
+        return
+    
+    # Natural language transaction registration
+    # Check if it looks like a transaction
+    prompt = f"""Analise esta mensagem e determine se é um registro de transação financeira.
+Mensagem: "{text}"
+
+Se for uma ou mais transações, responda APENAS com um JSON array:
+[{{"type": "income" ou "expense", "amount": valor_numerico, "description": "descrição curta", "category": "categoria"}}]
+
+Categorias válidas: alimentação, transporte, moradia, saúde, educação, lazer, vestuário, investimentos, salário, freelance, outros
+
+Se NÃO for uma transação, responda EXATAMENTE: NOT_TRANSACTION
+
+Responda APENAS com o JSON array ou NOT_TRANSACTION, sem explicações."""
+
+    try:
+        ai_response = await call_llm(prompt, f"tg_parse_{user_id}", "Você é um parser de transações financeiras. Extraia dados com precisão.", raise_on_error=True)
+        ai_response = ai_response.strip()
+        
+        if "NOT_TRANSACTION" in ai_response:
+            # General chat response
+            chat_prompt = f"O usuário disse: '{text}'. Responda de forma breve e útil como assistente financeiro do Sirius. Máximo 3 linhas."
+            chat_resp = await call_llm(chat_prompt, f"tg_chat_{user_id}", "Você é o assistente do Sirius, focado em finanças, produtividade e saúde.", raise_on_error=True)
+            await send_telegram_message(chat_id, chat_resp.strip())
+            return
+        
+        # Parse JSON
+        clean = ai_response.replace("```json", "").replace("```", "").strip()
+        transactions = json.loads(clean)
+        if not isinstance(transactions, list):
+            transactions = [transactions]
+        
+        registered = []
+        today = datetime.now().strftime("%Y-%m-%d")
+        
+        for txn in transactions:
+            txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+            txn_doc = {
+                "transaction_id": txn_id,
+                "user_id": user_id,
+                "type": txn.get("type", "expense"),
+                "amount": float(txn.get("amount", 0)),
+                "description": txn.get("description", "Sem descrição"),
+                "category": txn.get("category", "outros"),
+                "date": today,
+                "source": "telegram",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.transactions.insert_one(txn_doc)
+            registered.append(txn_doc)
+        
+        if len(registered) == 1:
+            t = registered[0]
+            emoji = "↗️" if t["type"] == "income" else "↘️"
+            msg = f"✅ Registrado!\n\n{emoji} {t['description']}\n💰 R$ {t['amount']:,.2f}\n📂 {t['category'].title()}"
+        else:
+            total = sum(t["amount"] for t in registered)
+            msg = f"✅ {len(registered)} transações registradas!\n\n"
+            for i, t in enumerate(registered, 1):
+                emoji = "↗️" if t["type"] == "income" else "↘️"
+                msg += f"{i}. {emoji} {t['description']} - R$ {t['amount']:,.2f}\n"
+            msg += f"\n💰 Total: R$ {total:,.2f}"
+        
+        await send_telegram_message(chat_id, msg)
+    
+    except json.JSONDecodeError:
+        await send_telegram_message(chat_id, "🤖 Não consegui entender. Tente algo como:\n• `Gastei 50 no mercado`\n• `Recebi 3000 de salário`\n• /ajuda")
+    except Exception as e:
+        logging.error(f"Telegram message handling error: {e}")
+        await send_telegram_message(chat_id, "⚠️ Ocorreu um erro. Tente novamente em instantes.")
+
+async def send_telegram_message(chat_id: int, text: str, parse_mode: str = None):
+    """Send a message via Telegram Bot API"""
+    try:
+        payload = {"chat_id": chat_id, "text": text}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        
+        async with httpx.AsyncClient() as hclient:
+            resp = await hclient.post(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                json=payload,
+                timeout=10
+            )
+            result = resp.json()
+            if not result.get("ok"):
+                # Retry without parse_mode if Markdown failed
+                if parse_mode:
+                    payload.pop("parse_mode")
+                    await hclient.post(
+                        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                        json=payload,
+                        timeout=10
+                    )
+            return result
+    except Exception as e:
+        logging.error(f"Failed to send Telegram message: {e}")
+
+async def send_telegram_daily_summary(user_id: str, chat_id: int):
+    """Send daily summary to a linked Telegram user"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    txns = await db.transactions.find({"user_id": user_id, "date": today}).to_list(100)
+    
+    if not txns:
+        return
+    
+    incomes = sum(t.get("amount", 0) for t in txns if t.get("type") == "income")
+    expenses = sum(t.get("amount", 0) for t in txns if t.get("type") == "expense")
+    
+    msg = f"🌙 *Resumo do dia ({today})*\n\n"
+    msg += f"↗️ Receitas: R$ {incomes:,.2f}\n"
+    msg += f"↘️ Despesas: R$ {expenses:,.2f}\n"
+    msg += f"📊 Balanço do dia: R$ {incomes - expenses:,.2f}\n\n"
+    msg += f"📝 {len(txns)} transações registradas"
+    
+    await send_telegram_message(chat_id, msg, parse_mode="Markdown")
+
+# Telegram webhook endpoint (no auth required - Telegram calls this)
+@app.post("/api/telegram/webhook/{token}")
+async def telegram_webhook(token: str, request: Request):
+    """Receive updates from Telegram"""
+    if token != TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid token")
+    
+    try:
+        update_data = await request.json()
+        message = update_data.get("message", {})
+        
+        if not message:
+            return {"ok": True}
+        
+        chat_id = message.get("chat", {}).get("id")
+        text = message.get("text", "")
+        first_name = message.get("from", {}).get("first_name", "")
+        username = message.get("from", {}).get("username", "")
+        telegram_name = first_name or username
+        
+        if chat_id and text:
+            # Handle in background to respond quickly
+            import asyncio
+            asyncio.create_task(handle_telegram_message(chat_id, text, telegram_name))
+        
+        return {"ok": True}
+    except Exception as e:
+        logging.error(f"Telegram webhook error: {e}")
+        return {"ok": True}  # Always return 200 to Telegram
+
+@api_router.post("/telegram/send-daily-summaries")
+async def trigger_daily_summaries(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Trigger daily summaries to all linked Telegram users"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    links = await db.telegram_links.find({"status": "active"}).to_list(1000)
+    sent = 0
+    for link in links:
+        try:
+            await send_telegram_daily_summary(link["user_id"], link["chat_id"])
+            sent += 1
+        except Exception as e:
+            logging.error(f"Failed to send summary to {link.get('chat_id')}: {e}")
+    
+    return {"sent": sent, "total": len(links)}
 
 
 # Include router AFTER all endpoints are defined

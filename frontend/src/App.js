@@ -2,12 +2,15 @@ import React, { Suspense } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import { AnimatePresence } from "framer-motion";
+import PageTransition from "@/components/PageTransition";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import AuthCallback from "@/pages/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import NotificationManager from "@/components/NotificationManager";
 
 // Lazy-loaded pages — keeps initial bundle small
 const Dashboard = React.lazy(() => import("@/pages/Dashboard"));
@@ -40,34 +43,37 @@ function PageLoader() {
   );
 }
 
-function AppRouter() {
+function AnimatedRoutes() {
   const location = useLocation();
+
   if (location.hash?.includes('session_id=')) {
     return <AuthCallback />;
   }
-  
+
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<ProtectedRoute><ErrorBoundary><Dashboard /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/tasks" element={<ProtectedRoute><ErrorBoundary><Tasks /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/habits" element={<ProtectedRoute><ErrorBoundary><Habits /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/finance" element={<ProtectedRoute><ErrorBoundary><Finance /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/goals" element={<ProtectedRoute><ErrorBoundary><Goals /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/chat" element={<ProtectedRoute><ErrorBoundary><Chat /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/reports" element={<ProtectedRoute><ErrorBoundary><Reports /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><ErrorBoundary><Profile /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/workouts" element={<ProtectedRoute><ErrorBoundary><Workouts /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/notifications" element={<ProtectedRoute><ErrorBoundary><Notifications /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/nutrition" element={<ProtectedRoute><ErrorBoundary><Nutrition /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/studies" element={<ProtectedRoute><ErrorBoundary><Studies /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/achievements" element={<ProtectedRoute><ErrorBoundary><Achievements /></ErrorBoundary></ProtectedRoute>} />
-        <Route path="/calendar" element={<ProtectedRoute><ErrorBoundary><CalendarPage /></ErrorBoundary></ProtectedRoute>} />
-      </Routes>
-    </Suspense>
+    <AnimatePresence mode="wait">
+      <Suspense fallback={<PageLoader />}>
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<PageTransition><Login /></PageTransition>} />
+          <Route path="/register" element={<PageTransition><Register /></PageTransition>} />
+          <Route path="/dashboard" element={<ProtectedRoute><ErrorBoundary><PageTransition><Dashboard /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/tasks" element={<ProtectedRoute><ErrorBoundary><PageTransition><Tasks /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/habits" element={<ProtectedRoute><ErrorBoundary><PageTransition><Habits /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/finance" element={<ProtectedRoute><ErrorBoundary><PageTransition><Finance /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/goals" element={<ProtectedRoute><ErrorBoundary><PageTransition><Goals /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/chat" element={<ProtectedRoute><ErrorBoundary><PageTransition><Chat /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><ErrorBoundary><PageTransition><Reports /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><ErrorBoundary><PageTransition><Profile /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/workouts" element={<ProtectedRoute><ErrorBoundary><PageTransition><Workouts /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><ErrorBoundary><PageTransition><Notifications /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/nutrition" element={<ProtectedRoute><ErrorBoundary><PageTransition><Nutrition /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/studies" element={<ProtectedRoute><ErrorBoundary><PageTransition><Studies /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/achievements" element={<ProtectedRoute><ErrorBoundary><PageTransition><Achievements /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+          <Route path="/calendar" element={<ProtectedRoute><ErrorBoundary><PageTransition><CalendarPage /></PageTransition></ErrorBoundary></ProtectedRoute>} />
+        </Routes>
+      </Suspense>
+    </AnimatePresence>
   );
 }
 
@@ -75,7 +81,8 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <AppRouter />
+        <AnimatedRoutes />
+        <NotificationManager />
         <Toaster position="top-right" richColors />
       </BrowserRouter>
     </div>

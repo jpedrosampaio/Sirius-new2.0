@@ -44,14 +44,6 @@ export default function CalendarPage() {
   const month = currentDate.getMonth();
   const today = new Date().toISOString().split("T")[0];
 
-  useEffect(() => {
-    fetchUser();
-  }, []);
-
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
-
   const fetchUser = async () => {
     try {
       const res = await axios.get(`${API}/auth/me`, { withCredentials: true });
@@ -73,6 +65,14 @@ export default function CalendarPage() {
       setLoading(false);
     }
   }, [year, month]);
+
+  useEffect(() => {
+    fetchUser();
+  }, []);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
   const navigate = (dir) => {
     setCurrentDate(prev => {

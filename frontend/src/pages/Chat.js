@@ -6,6 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, Send, User, Bot, Loader2, Sparkles, ChefHat, Dumbbell, BookOpen, DollarSign, Save } from "lucide-react";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
+import { ChatSkeleton } from "@/components/SkeletonLoader";
+import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { toast } from "sonner";
 
@@ -107,14 +110,24 @@ export default function Chat() {
                 <p className="text-[10px] text-[#52525B] mt-3">💡 Receitas e treinos pedidos aqui são salvos automaticamente no app!</p>
               </Card>
             ) : (
-              messages.map((msg) => (
-                <div key={msg.message_id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              messages.map((msg, idx) => (
+                <motion.div
+                  key={msg.message_id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, delay: idx > messages.length - 3 ? 0.05 : 0 }}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
                   <div className={`flex items-start space-x-2 md:space-x-3 max-w-[90%] md:max-w-2xl ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
                     <div className={`w-7 h-7 md:w-8 md:h-8 rounded-sm flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-[#007AFF]' : 'bg-[#2C2C2E]'}`}>
                       {msg.role === 'user' ? <User className="w-4 h-4 md:w-5 md:h-5" /> : <Bot className="w-4 h-4 md:w-5 md:h-5" />}
                     </div>
                     <div className={`p-3 md:p-4 rounded-sm ${msg.role === 'user' ? 'bg-[#007AFF]/20 border border-[#007AFF]/30' : 'bg-[#0A0A0A] border border-[#27272A]'}`}>
-                      <p className="text-xs md:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                      {msg.role === 'user' ? (
+                        <p className="text-xs md:text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                      ) : (
+                        <MarkdownRenderer content={msg.content} className="text-xs md:text-sm break-words" />
+                      )}
                       {msg.saved_item && (
                         <div className="mt-2 pt-2 border-t border-[#27272A] flex items-center gap-2">
                           <Save className="w-3 h-3 text-green-400" />
@@ -130,7 +143,7 @@ export default function Chat() {
                       )}
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))
             )}
             {loading && (

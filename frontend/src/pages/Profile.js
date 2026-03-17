@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Award, Trophy, Star, Shield, Target, TrendingUp, CheckSquare, Camera, Trash2, Upload, Cake, Edit3, Save, X } from "lucide-react";
+import { Award, Trophy, Star, Shield, Target, TrendingUp, CheckSquare, Camera, Trash2, Upload, Cake, Edit3, Save, X, MessageCircle, Link2, Unlink, Copy, ExternalLink, CheckCircle2, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 import axios from "axios";
 import { toast } from "sonner";
 import { clearToken } from "@/lib/api";
@@ -26,11 +27,18 @@ export default function Profile() {
   const [savingProfile, setSavingProfile] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Telegram states
+  const [telegramStatus, setTelegramStatus] = useState(null);
+  const [telegramCode, setTelegramCode] = useState(null);
+  const [telegramLoading, setTelegramLoading] = useState(false);
+  const [webhookSetup, setWebhookSetup] = useState(false);
+
   useEffect(() => {
     fetchUser();
     fetchAchievements();
     fetchStats();
     checkBirthday();
+    fetchTelegramStatus();
   }, []);
 
   const fetchUser = async () => {
@@ -95,6 +103,60 @@ export default function Profile() {
       navigate('/login');
     }
   };
+
+  // Telegram functions
+  const fetchTelegramStatus = async () => {
+    try {
+      const res = await axios.get(`${API}/telegram/status`, { withCredentials: true });
+      setTelegramStatus(res.data);
+    } catch (error) {
+      console.error("Erro ao verificar Telegram:", error);
+    }
+  };
+
+  const handleTelegramLink = async () => {
+    setTelegramLoading(true);
+    try {
+      // Setup webhook first (only once)
+      if (!webhookSetup) {
+        try {
+          await axios.post(`${API}/telegram/setup-webhook`, {}, { withCredentials: true });
+          setWebhookSetup(true);
+        } catch (e) {
+          console.warn("Webhook setup failed (may already be set):", e);
+        }
+      }
+      const res = await axios.post(`${API}/telegram/link`, {}, { withCredentials: true });
+      if (res.data.already_linked) {
+        toast.info("Telegram já está vinculado!");
+        fetchTelegramStatus();
+      } else {
+        setTelegramCode(res.data);
+        toast.success("Código gerado! Envie para o bot no Telegram.");
+      }
+    } catch (error) {
+      toast.error("Erro ao gerar código do Telegram");
+    } finally {
+      setTelegramLoading(false);
+    }
+  };
+
+  const handleTelegramUnlink = async () => {
+    try {
+      await axios.post(`${API}/telegram/unlink`, {}, { withCredentials: true });
+      setTelegramStatus({ ...telegramStatus, linked: false });
+      setTelegramCode(null);
+      toast.success("Telegram desvinculado!");
+    } catch (error) {
+      toast.error("Erro ao desvincular Telegram");
+    }
+  };
+
+  const copyCode = (code) => {
+    navigator.clipboard.writeText(`/vincular ${code}`);
+    toast.success("Comando copiado!");
+  };
+
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
@@ -410,6 +472,116 @@ export default function Profile() {
               </div>
             </Card>
           )}
+
+          {/* Telegram Integration */}
+          <Card className="bg-[#0A0A0A] border-[#27272A] p-6 mb-8">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-10 h-10 bg-[#0088cc]/20 rounded-sm flex items-center justify-center">
+                <MessageCircle className="w-6 h-6 text-[#0088cc]" />
+              </div>
+              <div>
+                <h3 className="font-heading text-lg uppercase">Telegram</h3>
+                <p className="text-xs text-[#A1A1AA]">Registre transações e receba resumos direto no Telegram</p>
+              </div>
+            </div>
+
+            {telegramStatus?.linked ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                <div className="flex items-center space-x-2 bg-[#121212] border border-[#27272A] p-3 rounded-sm">
+                  <CheckCircle2 className="w-5 h-5 text-green-400" />
+                  <div className="flex-1">
+                    <p className="text-sm text-green-400 font-medium">Conta vinculada</p>
+                    <p className="text-xs text-[#A1A1AA]">
+                      {telegramStatus.telegram_name && `@${telegramStatus.telegram_name} · `}
+                      Vinculado em {new Date(telegramStatus.linked_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTelegramUnlink}
+                    className="border-[#FF3B30]/30 text-[#FF3B30] hover:bg-[#FF3B30]/10 text-xs"
+                  >
+                    <Unlink className="w-3 h-3 mr-1" /> Desvincular
+                  </Button>
+                </div>
+                <div className="bg-[#121212] border border-[#27272A] p-3 rounded-sm">
+                  <p className="text-xs text-[#A1A1AA] mb-2">💡 Comandos disponíveis no bot:</p>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    <div className="text-[#52525B]"><span className="text-[#00F0FF] font-mono">/saldo</span> - Ver saldo</div>
+                    <div className="text-[#52525B]"><span className="text-[#00F0FF] font-mono">/resumo</span> - Resumo do dia</div>
+                    <div className="text-[#52525B]"><span className="text-[#00F0FF] font-mono">/mes</span> - Resumo mensal</div>
+                    <div className="text-[#52525B]"><span className="text-[#00F0FF] font-mono">/metas</span> - Suas metas</div>
+                    <div className="text-[#52525B]"><span className="text-[#00F0FF] font-mono">/frase</span> - Motivação</div>
+                    <div className="text-[#52525B]"><span className="text-[#00F0FF] font-mono">/ajuda</span> - Todos os comandos</div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : telegramCode ? (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                <div className="bg-[#121212] border border-[#0088cc]/30 p-4 rounded-sm text-center">
+                  <p className="text-xs text-[#A1A1AA] mb-2">Envie este comando para o bot:</p>
+                  <div className="flex items-center justify-center space-x-2 mb-3">
+                    <code className="bg-[#0A0A0A] border border-[#27272A] px-4 py-2 rounded text-lg font-mono text-[#00F0FF] tracking-wider">
+                      /vincular {telegramCode.code}
+                    </code>
+                    <Button variant="ghost" size="icon" onClick={() => copyCode(telegramCode.code)} className="hover:bg-[#27272A]">
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-[#52525B]">Código expira em {telegramCode.expires_in_minutes} minutos</p>
+                  {telegramCode.bot_link && (
+                    <a
+                      href={telegramCode.bot_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1 mt-3 px-4 py-2 bg-[#0088cc] hover:bg-[#006699] rounded text-sm text-white transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Abrir Bot no Telegram</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+                <div className="text-xs text-[#A1A1AA] space-y-1">
+                  <p>📋 <strong>Passo a passo:</strong></p>
+                  <p>1. Clique no botão acima para abrir o bot</p>
+                  <p>2. Envie <code className="text-[#00F0FF]">/start</code> para iniciar</p>
+                  <p>3. Cole o comando <code className="text-[#00F0FF]">/vincular {telegramCode.code}</code></p>
+                  <p>4. Pronto! Comece a registrar transações ✨</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => { setTelegramCode(null); fetchTelegramStatus(); }} className="text-xs border-[#27272A]">
+                  Verificar vinculação
+                </Button>
+              </motion.div>
+            ) : (
+              <div className="space-y-3">
+                <div className="bg-[#121212] border border-[#27272A] p-3 rounded-sm">
+                  <p className="text-xs text-[#A1A1AA] mb-2">Com o Telegram vinculado, você pode:</p>
+                  <ul className="text-xs text-[#52525B] space-y-1">
+                    <li>💬 Registrar gastos e receitas por mensagem</li>
+                    <li>📊 Consultar saldo e resumos financeiros</li>
+                    <li>🎯 Ver progresso das suas metas</li>
+                    <li>💪 Receber frases motivacionais</li>
+                  </ul>
+                </div>
+                <Button
+                  onClick={handleTelegramLink}
+                  disabled={telegramLoading || !telegramStatus?.bot_configured}
+                  className="bg-[#0088cc] hover:bg-[#006699] text-white text-sm"
+                >
+                  {telegramLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando código...</>
+                  ) : (
+                    <><Link2 className="w-4 h-4 mr-2" /> Vincular Telegram</>
+                  )}
+                </Button>
+                {telegramStatus && !telegramStatus.bot_configured && (
+                  <p className="text-xs text-[#FF3B30]">⚠️ Bot do Telegram não configurado no servidor.</p>
+                )}
+              </div>
+            )}
+          </Card>
 
           <div className="flex justify-center">
             <Button
