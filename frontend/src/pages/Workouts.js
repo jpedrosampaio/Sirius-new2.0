@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle } from "lucide-react";
+import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle, Zap, Video, BookOpenCheck, Star, Pause, RotateCcw, Square, ExternalLink, Clock, Trophy, ChevronRight } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
@@ -62,6 +62,27 @@ export default function Workouts() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [savedInsights, setSavedInsights] = useState([]);
   const [showInsightsDialog, setShowInsightsDialog] = useState(false);
+
+  // AI Generation
+  const [openAiGenerate, setOpenAiGenerate] = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [aiGenForm, setAiGenForm] = useState({
+    objective: "hipertrofia",
+    level: "intermediario",
+    muscle_groups: [],
+    duration: "dia"
+  });
+
+  // Workout Session
+  const [activeSession, setActiveSession] = useState(null);
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const [restTimer, setRestTimer] = useState(0);
+  const [isResting, setIsResting] = useState(false);
+  const [restDuration, setRestDuration] = useState(60);
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [feedbackData, setFeedbackData] = useState({ difficulty: 3, feeling: "bom", notes: "" });
+  const [expandedTutorials, setExpandedTutorials] = useState({});
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
 
   const today = new Date().toISOString().split('T')[0];
   
@@ -503,6 +524,223 @@ export default function Workouts() {
     } catch { toast.error("Erro ao remover"); }
   };
 
+  // === AI GENERATION ===
+  const handleGenerateWithAI = async () => {
+    setGeneratingPlan(true);
+    try {
+      const res = await axios.post(`${API}/workout-plans/generate`, aiGenForm, { withCredentials: true, timeout: 120000 });
+      if (res.data.success) {
+        toast.success(`Treino gerado com IA! +${res.data.xp_earned} XP`);
+        setOpenAiGenerate(false);
+        setAiGenForm({ objective: "hipertrofia", level: "intermediario", muscle_groups: [], duration: "dia" });
+        loadData();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao gerar treino com IA");
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
+  const toggleMuscleGroup = (group) => {
+    setAiGenForm(prev => ({
+      ...prev,
+      muscle_groups: prev.muscle_groups.includes(group)
+        ? prev.muscle_groups.filter(g => g !== group)
+        : [...prev.muscle_groups, group]
+    }));
+  };
+
+  // === WORKOUT SESSION ===
+  const checkActiveSession = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/workout-sessions/active`, { withCredentials: true });
+      if (res.data.active) {
+        setActiveSession(res.data.session);
+        // Calculate elapsed time
+        const started = new Date(res.data.session.started_at);
+        const elapsed = Math.floor((Date.now() - started.getTime()) / 1000);
+        setSessionElapsed(elapsed);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    checkActiveSession();
+  }, [checkActiveSession]);
+
+  // Session timer
+  useEffect(() => {
+    let interval;
+    if (activeSession && activeSession.status === "active") {
+      interval = setInterval(() => {
+        setSessionElapsed(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [activeSession]);
+
+  // Rest timer
+  useEffect(() => {
+    let interval;
+    if (isResting && restTimer > 0) {
+      interval = setInterval(() => {
+        setRestTimer(prev => {
+          if (prev <= 1) {
+            setIsResting(false);
+            // Play beep sound
+            try {
+              const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+              const oscillator = audioCtx.createOscillator();
+              oscillator.type = 'sine';
+              oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+              oscillator.connect(audioCtx.destination);
+              oscillator.start();
+              oscillator.stop(audioCtx.currentTime + 0.3);
+            } catch {}
+            toast.success("Descanso finalizado! Próxima série 💪");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isResting, restTimer]);
+
+  const handleStartWorkout = async (plan, dayIdx = 0) => {
+    try {
+      const res = await axios.post(`${API}/workout-sessions/start`, {
+        plan_id: plan.plan_id,
+        day_index: dayIdx,
+        rest_timer_seconds: restDuration
+      }, { withCredentials: true });
+      setActiveSession(res.data);
+      setSessionElapsed(0);
+      setActiveTab("session");
+      toast.success("Treino iniciado! Bora! 💪");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao iniciar treino");
+    }
+  };
+
+  const handleToggleSessionExercise = async (idx) => {
+    if (!activeSession) return;
+    const ex = activeSession.exercises[idx];
+    const newCompleted = !ex.completed;
+    const newSetsCompleted = newCompleted ? ex.sets : 0;
+    
+    try {
+      const res = await axios.patch(
+        `${API}/workout-sessions/${activeSession.session_id}/exercise/${idx}`,
+        { completed: newCompleted, sets_completed: newSetsCompleted, current_exercise_idx: idx },
+        { withCredentials: true }
+      );
+      setActiveSession(res.data);
+      
+      if (newCompleted) {
+        toast.success(`${ex.name} concluído! ✅`);
+        // Auto-start rest timer for next exercise
+        const nextIdx = activeSession.exercises.findIndex((e, i) => i > idx && !e.completed);
+        if (nextIdx >= 0) {
+          setRestTimer(ex.rest_seconds || restDuration);
+          setIsResting(true);
+        }
+      }
+    } catch (error) {
+      toast.error("Erro ao atualizar exercício");
+    }
+  };
+
+  const handleIncrementSets = async (idx) => {
+    if (!activeSession) return;
+    const ex = activeSession.exercises[idx];
+    const newSetsCompleted = Math.min((ex.sets_completed || 0) + 1, ex.sets);
+    const allSetsCompleted = newSetsCompleted >= ex.sets;
+    
+    try {
+      const res = await axios.patch(
+        `${API}/workout-sessions/${activeSession.session_id}/exercise/${idx}`,
+        { sets_completed: newSetsCompleted, completed: allSetsCompleted },
+        { withCredentials: true }
+      );
+      setActiveSession(res.data);
+      
+      if (allSetsCompleted) {
+        toast.success(`${ex.name} - Todas as séries concluídas! ✅`);
+      } else {
+        // Start rest timer between sets
+        setRestTimer(ex.rest_seconds || restDuration);
+        setIsResting(true);
+        toast.info(`Série ${newSetsCompleted}/${ex.sets} concluída. Descanse!`);
+      }
+    } catch (error) {
+      toast.error("Erro ao atualizar série");
+    }
+  };
+
+  const startRestManual = (seconds) => {
+    setRestTimer(seconds || restDuration);
+    setIsResting(true);
+  };
+
+  const stopRest = () => {
+    setRestTimer(0);
+    setIsResting(false);
+  };
+
+  const handleCompleteSession = async () => {
+    if (!activeSession) return;
+    try {
+      const res = await axios.post(
+        `${API}/workout-sessions/${activeSession.session_id}/complete`,
+        feedbackData,
+        { withCredentials: true }
+      );
+      toast.success(`Treino concluído! +${res.data.xp_earned} XP 🏆`);
+      setShowFeedbackDialog(false);
+      setActiveSession(null);
+      setSessionElapsed(0);
+      setFeedbackData({ difficulty: 3, feeling: "bom", notes: "" });
+      setActiveTab("log");
+      loadData();
+    } catch (error) {
+      toast.error("Erro ao finalizar treino");
+    }
+  };
+
+  const handleAbandonSession = async () => {
+    if (!activeSession) return;
+    try {
+      await axios.post(`${API}/workout-sessions/${activeSession.session_id}/abandon`, {}, { withCredentials: true });
+      toast.info("Sessão abandonada");
+      setActiveSession(null);
+      setSessionElapsed(0);
+      setActiveTab("plans");
+    } catch (error) {
+      toast.error("Erro ao abandonar sessão");
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const toggleTutorial = (key) => {
+    setExpandedTutorials(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const getSessionProgress = () => {
+    if (!activeSession) return { completed: 0, total: 0, percent: 0 };
+    const exercises = activeSession.exercises || [];
+    const completed = exercises.filter(e => e.completed).length;
+    return { completed, total: exercises.length, percent: exercises.length > 0 ? Math.round((completed / exercises.length) * 100) : 0 };
+  };
+
 
   const loadRecommendations = async () => {
     setLoadingRecommendations(true);
@@ -721,6 +959,20 @@ export default function Workouts() {
                       <Input value={newPlan.name} onChange={(e) => setNewPlan({...newPlan, name: e.target.value})} placeholder="Ex: Treino A - Peito e Tríceps" className="bg-[#121212] border-[#27272A] text-white mt-1" />
                     </div>
                     <div>
+                      <Label className="text-xs uppercase tracking-wider">Duração do Plano</Label>
+                      <Select value={newPlan.plan_duration || "dia"} onValueChange={(v) => setNewPlan({...newPlan, plan_duration: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white">
+                          <SelectItem value="dia">📅 Dia (treino único)</SelectItem>
+                          <SelectItem value="semana">📆 Semana (seg-sex)</SelectItem>
+                          <SelectItem value="mes">🗓️ Mês (4 semanas)</SelectItem>
+                          <SelectItem value="ciclo">🔄 Ciclo (periodizado)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
                       <Label className="text-xs uppercase tracking-wider">Descrição</Label>
                       <Textarea value={newPlan.description} onChange={(e) => setNewPlan({...newPlan, description: e.target.value})} className="bg-[#121212] border-[#27272A] text-white mt-1" />
                     </div>
@@ -763,6 +1015,124 @@ export default function Workouts() {
                       </div>
                     )}
                     <Button onClick={handleCreatePlan} className="w-full bg-[#00F0FF] hover:bg-[#00D4E5] text-black">Criar Ficha</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              {/* Gerar com IA Button */}
+              <Dialog open={openAiGenerate} onOpenChange={setOpenAiGenerate}>
+                <DialogTrigger asChild>
+                  <Button className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white">
+                    <Sparkles className="w-4 h-4 mr-2" /> Gerar com IA
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-lg max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="font-heading text-xl flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-[#A855F7]" /> GERAR TREINO COM IA
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 mt-4">
+                    <div>
+                      <Label className="text-xs uppercase tracking-wider">Objetivo</Label>
+                      <Select value={aiGenForm.objective} onValueChange={(v) => setAiGenForm({...aiGenForm, objective: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white">
+                          <SelectItem value="hipertrofia">💪 Hipertrofia (ganho muscular)</SelectItem>
+                          <SelectItem value="emagrecimento">🔥 Emagrecimento</SelectItem>
+                          <SelectItem value="condicionamento">❤️ Condicionamento físico</SelectItem>
+                          <SelectItem value="forca">🏋️ Força máxima</SelectItem>
+                          <SelectItem value="flexibilidade">🧘 Flexibilidade e mobilidade</SelectItem>
+                          <SelectItem value="resistencia">🏃 Resistência</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-xs uppercase tracking-wider">Nível</Label>
+                      <Select value={aiGenForm.level} onValueChange={(v) => setAiGenForm({...aiGenForm, level: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white">
+                          <SelectItem value="iniciante">🟢 Iniciante (0-6 meses)</SelectItem>
+                          <SelectItem value="intermediario">🟡 Intermediário (6-24 meses)</SelectItem>
+                          <SelectItem value="avancado">🔴 Avançado (2+ anos)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs uppercase tracking-wider">Duração do Plano</Label>
+                      <Select value={aiGenForm.duration} onValueChange={(v) => setAiGenForm({...aiGenForm, duration: v})}>
+                        <SelectTrigger className="bg-[#121212] border-[#27272A] text-white mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#121212] border-[#27272A] text-white">
+                          <SelectItem value="dia">📅 Dia (treino único)</SelectItem>
+                          <SelectItem value="semana">📆 Semana (seg-sex)</SelectItem>
+                          <SelectItem value="mes">🗓️ Mês (4 semanas)</SelectItem>
+                          <SelectItem value="ciclo">🔄 Ciclo (8-12 semanas)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs uppercase tracking-wider mb-2 block">Grupos Musculares (opcional)</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: "peito", label: "Peito", emoji: "🫁" },
+                          { value: "costas", label: "Costas", emoji: "🔙" },
+                          { value: "pernas", label: "Pernas", emoji: "🦵" },
+                          { value: "ombros", label: "Ombros", emoji: "🤷" },
+                          { value: "biceps", label: "Bíceps", emoji: "💪" },
+                          { value: "triceps", label: "Tríceps", emoji: "💪" },
+                          { value: "abdomen", label: "Abdômen", emoji: "🧱" },
+                          { value: "gluteos", label: "Glúteos", emoji: "🍑" }
+                        ].map(mg => (
+                          <button
+                            key={mg.value}
+                            onClick={() => toggleMuscleGroup(mg.value)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              aiGenForm.muscle_groups.includes(mg.value)
+                                ? 'bg-[#A855F7] text-white'
+                                : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#A855F7]'
+                            }`}
+                          >
+                            {mg.emoji} {mg.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-[#52525B] mt-2">Deixe vazio para um treino completo</p>
+                    </div>
+
+                    <div className="bg-[#121212] border border-[#27272A] rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Zap className="w-4 h-4 text-[#A855F7]" />
+                        <span className="text-sm font-medium">O que a IA vai gerar:</span>
+                      </div>
+                      <ul className="text-xs text-[#A1A1AA] space-y-1">
+                        <li>• Exercícios personalizados para seu nível e objetivo</li>
+                        <li>• Tutorial detalhado de execução de cada exercício</li>
+                        <li>• Links de vídeo do YouTube com demonstração</li>
+                        <li>• Séries, repetições e tempo de descanso adequados</li>
+                        {aiGenForm.duration !== "dia" && <li>• Organização por dias com alternância de grupos</li>}
+                      </ul>
+                    </div>
+
+                    <Button 
+                      onClick={handleGenerateWithAI} 
+                      disabled={generatingPlan}
+                      className="w-full bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white"
+                    >
+                      {generatingPlan ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando treino com IA...</>
+                      ) : (
+                        <><Sparkles className="w-4 h-4 mr-2" /> Gerar Treino</>
+                      )}
+                    </Button>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -1017,6 +1387,11 @@ export default function Workouts() {
               <TabsTrigger value="saved_insights" className="data-[state=active]:bg-[#27272A]" onClick={fetchSavedInsights}>
                 <BookOpen className="w-4 h-4 mr-2" /> Insights
               </TabsTrigger>
+              {activeSession && (
+                <TabsTrigger value="session" className="data-[state=active]:bg-[#27272A] text-green-400 animate-pulse">
+                  <Zap className="w-4 h-4 mr-2" /> Sessão Ativa
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="log">
@@ -1056,25 +1431,35 @@ export default function Workouts() {
                     const isCompleted = status.completed;
                     
                     return (
-                      <Card key={plan.plan_id} className={`bg-[#0A0A0A] border-[#27272A] p-4 ${isCompleted ? 'border-green-900 bg-[#0a1a0a]' : ''}`}>
+                      <Card key={plan.plan_id} className={`bg-[#0A0A0A] border-[#27272A] p-4 ${isCompleted ? 'border-green-900 bg-[#0a1a0a]' : ''} ${plan.generated_by_ai ? 'border-l-2 border-l-[#A855F7]' : ''}`}>
                         <div 
                           className="cursor-pointer"
                           onClick={() => togglePlanExpanded(plan.plan_id)}
                         >
                           <div className="flex justify-between items-start">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <h3 className="font-heading text-lg">{plan.name}</h3>
                                 {isCompleted && <Check className="w-5 h-5 text-green-500" />}
+                                {plan.generated_by_ai && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#A855F7]/20 text-[#A855F7] border border-[#A855F7]/30">
+                                    <Sparkles className="w-3 h-3 inline mr-1" />IA
+                                  </span>
+                                )}
+                                {plan.plan_duration && plan.plan_duration !== "dia" && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#00F0FF]/10 text-[#00F0FF] border border-[#00F0FF]/30">
+                                    {plan.plan_duration === "semana" ? "📆 Semana" : plan.plan_duration === "mes" ? "🗓️ Mês" : plan.plan_duration === "ciclo" ? "🔄 Ciclo" : "📅 Dia"}
+                                  </span>
+                                )}
                                 {isExpanded ? (
                                   <ChevronUp className="w-4 h-4 text-[#A1A1AA]" />
                                 ) : (
                                   <ChevronDown className="w-4 h-4 text-[#A1A1AA]" />
                                 )}
                               </div>
-                              {plan.description && <p className="text-sm text-[#A1A1AA]">{plan.description}</p>}
+                              {plan.description && <p className="text-sm text-[#A1A1AA] mt-1">{plan.description}</p>}
                               <p className="text-xs text-[#52525B] mt-1">
-                                {(plan.exercises || []).length} exercícios
+                                {(plan.days && plan.days.length > 0) ? `${plan.days.length} dias · ` : ''}{(plan.exercises || []).length} exercícios
                                 {total > 0 && (
                                   <span className={`ml-2 ${isCompleted ? 'text-green-500' : 'text-[#00F0FF]'}`}>
                                     ({completed}/{total} hoje)
@@ -1083,6 +1468,15 @@ export default function Workouts() {
                               </p>
                             </div>
                             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button 
+                                variant="ghost" size="sm" 
+                                onClick={() => handleStartWorkout(plan, selectedDayIndex)} 
+                                className="text-green-400 h-8 w-8 p-0"
+                                title="Iniciar treino com timer"
+                                disabled={!!activeSession}
+                              >
+                                <Play className="w-4 h-4" />
+                              </Button>
                               <Button variant="ghost" size="sm" onClick={() => openEditDialog(plan)} className="text-[#00F0FF] h-8 w-8 p-0">
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -1095,8 +1489,46 @@ export default function Workouts() {
                         
                         {isExpanded && (
                           <div className="mt-4 border-t border-[#27272A] pt-4">
+                            {/* Day selector for multi-day plans */}
+                            {plan.days && plan.days.length > 1 && (
+                              <div className="mb-4">
+                                <Label className="text-xs uppercase tracking-wider text-[#A1A1AA] mb-2 block">Selecione o dia</Label>
+                                <div className="flex gap-1 flex-wrap">
+                                  {plan.days.map((day, dIdx) => (
+                                    <button
+                                      key={dIdx}
+                                      onClick={() => setSelectedDayIndex(dIdx)}
+                                      className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                                        selectedDayIndex === dIdx 
+                                          ? 'bg-[#00F0FF] text-black font-medium' 
+                                          : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#00F0FF]'
+                                      }`}
+                                    >
+                                      {day.day_label || `Dia ${dIdx + 1}`}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Start Workout Button */}
+                            <div className="mb-4">
+                              <Button 
+                                onClick={() => handleStartWorkout(plan, plan.days && plan.days.length > 1 ? selectedDayIndex : 0)} 
+                                className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:opacity-90 text-white"
+                                disabled={!!activeSession}
+                              >
+                                <Play className="w-4 h-4 mr-2" /> Iniciar Treino com Timer
+                              </Button>
+                            </div>
+
                             <div className="flex justify-between items-center mb-3">
-                              <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">Treino de Hoje</Label>
+                              <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">
+                                {plan.days && plan.days.length > 1 
+                                  ? (plan.days[selectedDayIndex]?.day_label || 'Exercícios')
+                                  : 'Treino de Hoje'
+                                }
+                              </Label>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
@@ -1107,32 +1539,85 @@ export default function Workouts() {
                               </Button>
                             </div>
                             <div className="space-y-2">
-                              {(plan.exercises || []).map((ex, idx) => {
-                                const isChecked = status.exercises_status?.[idx] || false;
-                                return (
-                                  <div 
-                                    key={idx} 
-                                    onClick={() => !isCompleted && toggleDailyExercise(plan.plan_id, idx)}
-                                    className={`flex items-center gap-3 p-3 rounded cursor-pointer transition-all ${
-                                      isChecked 
-                                        ? 'bg-[#1a2f1a] border border-green-900' 
-                                        : 'bg-[#121212] border border-[#27272A] hover:border-[#3f3f46]'
-                                    } ${isCompleted ? 'cursor-default' : ''}`}
-                                  >
-                                    <Checkbox 
-                                      checked={isChecked}
-                                      disabled={isCompleted}
-                                      onCheckedChange={() => !isCompleted && toggleDailyExercise(plan.plan_id, idx)}
-                                      className="border-[#52525B] data-[state=checked]:bg-[#00F0FF] data-[state=checked]:border-[#00F0FF]"
-                                    />
-                                    <span className="text-[#52525B] font-mono text-sm">{idx + 1}.</span>
-                                    <span className={`font-mono text-sm flex-1 ${isChecked ? 'text-green-400 line-through' : 'text-white'}`}>
-                                      {ex.name} - {ex.sets}x{ex.reps} {ex.weight && `@ ${ex.weight}`}
-                                    </span>
-                                    {isChecked && <Check className="w-4 h-4 text-green-500" />}
-                                  </div>
-                                );
-                              })}
+                              {(() => {
+                                const dayExercises = plan.days && plan.days.length > 0 
+                                  ? (plan.days[selectedDayIndex]?.exercises || [])
+                                  : (plan.exercises || []);
+                                return dayExercises.map((ex, idx) => {
+                                  const isChecked = status.exercises_status?.[idx] || false;
+                                  const tutorialKey = `${plan.plan_id}_${selectedDayIndex}_${idx}`;
+                                  const hasTutorial = ex.tutorial || ex.video_url;
+                                  return (
+                                    <div key={idx} className="space-y-0">
+                                      <div 
+                                        className={`flex items-center gap-3 p-3 rounded-t ${hasTutorial && expandedTutorials[tutorialKey] ? '' : 'rounded-b'} cursor-pointer transition-all ${
+                                          isChecked 
+                                            ? 'bg-[#1a2f1a] border border-green-900' 
+                                            : 'bg-[#121212] border border-[#27272A] hover:border-[#3f3f46]'
+                                        } ${isCompleted ? 'cursor-default' : ''}`}
+                                      >
+                                        <div onClick={() => !isCompleted && toggleDailyExercise(plan.plan_id, idx)} className="flex items-center gap-3 flex-1">
+                                          <Checkbox 
+                                            checked={isChecked}
+                                            disabled={isCompleted}
+                                            onCheckedChange={() => !isCompleted && toggleDailyExercise(plan.plan_id, idx)}
+                                            className="border-[#52525B] data-[state=checked]:bg-[#00F0FF] data-[state=checked]:border-[#00F0FF]"
+                                          />
+                                          <span className="text-[#52525B] font-mono text-sm">{idx + 1}.</span>
+                                          <div className="flex-1">
+                                            <span className={`font-mono text-sm ${isChecked ? 'text-green-400 line-through' : 'text-white'}`}>
+                                              {ex.name} - {ex.sets}x{ex.reps} {ex.weight && `@ ${ex.weight}`}
+                                            </span>
+                                            {ex.muscle_group && (
+                                              <span className="text-[10px] ml-2 px-1.5 py-0.5 rounded bg-[#27272A] text-[#A1A1AA]">{ex.muscle_group}</span>
+                                            )}
+                                            {ex.rest_seconds && (
+                                              <span className="text-[10px] ml-1 text-[#52525B]">⏱ {ex.rest_seconds}s</span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {hasTutorial && (
+                                          <Button 
+                                            variant="ghost" size="sm" 
+                                            onClick={(e) => { e.stopPropagation(); toggleTutorial(tutorialKey); }}
+                                            className={`h-7 w-7 p-0 ${expandedTutorials[tutorialKey] ? 'text-[#A855F7]' : 'text-[#52525B]'}`}
+                                            title="Ver tutorial"
+                                          >
+                                            <BookOpenCheck className="w-4 h-4" />
+                                          </Button>
+                                        )}
+                                        {isChecked && <Check className="w-4 h-4 text-green-500" />}
+                                      </div>
+                                      
+                                      {/* Tutorial Expandable */}
+                                      {hasTutorial && expandedTutorials[tutorialKey] && (
+                                        <div className="bg-[#0a0a1a] border border-[#27272A] border-t-0 rounded-b p-3 space-y-2">
+                                          {ex.tutorial && (
+                                            <div>
+                                              <p className="text-xs text-[#A855F7] uppercase font-medium mb-1 flex items-center gap-1">
+                                                <BookOpenCheck className="w-3 h-3" /> Como executar
+                                              </p>
+                                              <p className="text-xs text-[#A1A1AA] leading-relaxed">{ex.tutorial}</p>
+                                            </div>
+                                          )}
+                                          {ex.video_url && (
+                                            <a 
+                                              href={ex.video_url} 
+                                              target="_blank" 
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 transition-colors bg-red-500/10 p-2 rounded"
+                                            >
+                                              <Video className="w-4 h-4" />
+                                              <span>Assistir tutorial no YouTube</span>
+                                              <ExternalLink className="w-3 h-3 ml-auto" />
+                                            </a>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                });
+                              })()}
                             </div>
                             
                             {total > 0 && (
@@ -1690,7 +2175,318 @@ export default function Workouts() {
               </div>
             </TabsContent>
 
+            {/* ACTIVE SESSION TAB */}
+            <TabsContent value="session">
+              {activeSession ? (
+                <div className="space-y-4">
+                  {/* Session Header */}
+                  <Card className="bg-gradient-to-r from-[#0A0A0A] to-[#0a1a0a] border-green-900 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="font-heading text-2xl text-green-400">{activeSession.plan_name}</h2>
+                        <p className="text-sm text-[#A1A1AA]">Sessão ativa</p>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-data text-4xl text-[#00F0FF]">{formatTime(sessionElapsed)}</div>
+                        <p className="text-xs text-[#A1A1AA]">Tempo total</p>
+                      </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    {(() => {
+                      const { completed, total, percent } = getSessionProgress();
+                      return (
+                        <div>
+                          <div className="flex justify-between text-xs text-[#A1A1AA] mb-1">
+                            <span>{completed}/{total} exercícios</span>
+                            <span>{percent}%</span>
+                          </div>
+                          <div className="h-3 bg-[#121212] rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-green-500 to-[#00F0FF] transition-all duration-500"
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </Card>
+
+                  {/* Rest Timer */}
+                  {isResting && (
+                    <Card className="bg-[#0A0A0A] border-[#F59E0B] p-6 text-center animate-pulse">
+                      <Clock className="w-8 h-8 text-[#F59E0B] mx-auto mb-2" />
+                      <p className="text-xs text-[#F59E0B] uppercase font-medium mb-2">Tempo de Descanso</p>
+                      <div className="font-data text-6xl text-[#F59E0B]">{formatTime(restTimer)}</div>
+                      <div className="flex gap-2 justify-center mt-4">
+                        <Button variant="outline" size="sm" onClick={() => setRestTimer(prev => prev + 15)} className="border-[#F59E0B] text-[#F59E0B]">+15s</Button>
+                        <Button variant="outline" size="sm" onClick={stopRest} className="border-red-500 text-red-400">
+                          <Square className="w-3 h-3 mr-1" /> Pular
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* Rest Timer Presets */}
+                  <Card className="bg-[#0A0A0A] border-[#27272A] p-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">Timer de Descanso</Label>
+                      <div className="flex gap-1">
+                        {[30, 60, 90, 120].map(sec => (
+                          <button
+                            key={sec}
+                            onClick={() => { setRestDuration(sec); startRestManual(sec); }}
+                            className={`px-3 py-1 text-xs rounded ${
+                              restDuration === sec && !isResting
+                                ? 'bg-[#F59E0B] text-black'
+                                : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#F59E0B]'
+                            }`}
+                          >
+                            {sec}s
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Exercise List */}
+                  <div className="space-y-2">
+                    {(activeSession.exercises || []).map((ex, idx) => {
+                      const tutorialKey = `session_${idx}`;
+                      const hasTutorial = ex.tutorial || ex.video_url;
+                      const setsProgress = ex.sets_completed || 0;
+                      
+                      return (
+                        <Card key={idx} className={`border-[#27272A] p-0 overflow-hidden ${
+                          ex.completed ? 'bg-[#0a1a0a] border-green-900' : 'bg-[#0A0A0A]'
+                        }`}>
+                          <div className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div 
+                                onClick={() => handleToggleSessionExercise(idx)}
+                                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center cursor-pointer transition-all ${
+                                  ex.completed 
+                                    ? 'bg-green-500 border-green-500' 
+                                    : 'border-[#52525B] hover:border-[#00F0FF]'
+                                }`}
+                              >
+                                {ex.completed ? <Check className="w-4 h-4 text-white" /> : <span className="text-xs text-[#52525B]">{idx + 1}</span>}
+                              </div>
+                              
+                              <div className="flex-1">
+                                <p className={`font-medium text-sm ${ex.completed ? 'text-green-400 line-through' : 'text-white'}`}>{ex.name}</p>
+                                <p className="text-xs text-[#A1A1AA]">
+                                  {ex.sets}x{ex.reps} {ex.weight && `@ ${ex.weight}`}
+                                  {ex.muscle_group && <span className="ml-2 text-[#52525B]">· {ex.muscle_group}</span>}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                {/* Sets progress */}
+                                {!ex.completed && (
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-[#A1A1AA]">{setsProgress}/{ex.sets}</span>
+                                    <Button 
+                                      variant="outline" size="sm"
+                                      onClick={() => handleIncrementSets(idx)}
+                                      className="h-7 px-2 text-xs border-[#00F0FF] text-[#00F0FF] hover:bg-[#00F0FF] hover:text-black"
+                                    >
+                                      +1 série
+                                    </Button>
+                                  </div>
+                                )}
+                                
+                                {hasTutorial && (
+                                  <Button 
+                                    variant="ghost" size="sm" 
+                                    onClick={() => toggleTutorial(tutorialKey)}
+                                    className={`h-7 w-7 p-0 ${expandedTutorials[tutorialKey] ? 'text-[#A855F7]' : 'text-[#52525B]'}`}
+                                  >
+                                    <BookOpenCheck className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Sets indicator dots */}
+                            {!ex.completed && ex.sets > 1 && (
+                              <div className="flex gap-1 mt-2 ml-11">
+                                {Array.from({ length: ex.sets }).map((_, sIdx) => (
+                                  <div 
+                                    key={sIdx} 
+                                    className={`w-3 h-3 rounded-full transition-all ${
+                                      sIdx < setsProgress ? 'bg-[#00F0FF]' : 'bg-[#27272A]'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Tutorial */}
+                          {hasTutorial && expandedTutorials[tutorialKey] && (
+                            <div className="bg-[#0a0a1a] border-t border-[#27272A] p-4 space-y-2">
+                              {ex.tutorial && (
+                                <div>
+                                  <p className="text-xs text-[#A855F7] uppercase font-medium mb-1 flex items-center gap-1">
+                                    <BookOpenCheck className="w-3 h-3" /> Como executar
+                                  </p>
+                                  <p className="text-xs text-[#A1A1AA] leading-relaxed">{ex.tutorial}</p>
+                                </div>
+                              )}
+                              {ex.video_url && (
+                                <a 
+                                  href={ex.video_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 bg-red-500/10 p-2 rounded"
+                                >
+                                  <Video className="w-4 h-4" />
+                                  <span>Assistir tutorial no YouTube</span>
+                                  <ExternalLink className="w-3 h-3 ml-auto" />
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+
+                  {/* Session Actions */}
+                  <div className="flex gap-3">
+                    <Button 
+                      onClick={handleAbandonSession} 
+                      variant="outline" 
+                      className="flex-1 border-red-900 text-red-400 hover:bg-red-900/20"
+                    >
+                      <X className="w-4 h-4 mr-2" /> Abandonar
+                    </Button>
+                    <Button 
+                      onClick={() => setShowFeedbackDialog(true)} 
+                      className="flex-1 bg-gradient-to-r from-green-600 to-[#00F0FF] text-white hover:opacity-90"
+                    >
+                      <Trophy className="w-4 h-4 mr-2" /> Finalizar Treino
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Card className="bg-[#0A0A0A] border-[#27272A] p-8 text-center">
+                  <Dumbbell className="w-12 h-12 text-[#52525B] mx-auto mb-4" />
+                  <p className="text-[#A1A1AA]">Nenhuma sessão ativa</p>
+                  <p className="text-sm text-[#52525B] mt-2">Vá até a aba "Fichas" e clique em "Iniciar Treino"</p>
+                </Card>
+              )}
+            </TabsContent>
+
           </Tabs>
+
+          {/* FEEDBACK DIALOG */}
+          <Dialog open={showFeedbackDialog} onOpenChange={setShowFeedbackDialog}>
+            <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
+              <DialogHeader>
+                <DialogTitle className="font-heading text-xl flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-[#F59E0B]" /> TREINO CONCLUÍDO!
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-6 mt-4">
+                {/* Session Summary */}
+                {activeSession && (
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="bg-[#121212] rounded-lg p-3">
+                      <Clock className="w-5 h-5 text-[#00F0FF] mx-auto mb-1" />
+                      <p className="font-data text-xl text-[#00F0FF]">{formatTime(sessionElapsed)}</p>
+                      <p className="text-[10px] text-[#52525B] uppercase">Duração</p>
+                    </div>
+                    <div className="bg-[#121212] rounded-lg p-3">
+                      <Check className="w-5 h-5 text-green-400 mx-auto mb-1" />
+                      <p className="font-data text-xl text-green-400">{getSessionProgress().completed}/{getSessionProgress().total}</p>
+                      <p className="text-[10px] text-[#52525B] uppercase">Exercícios</p>
+                    </div>
+                    <div className="bg-[#121212] rounded-lg p-3">
+                      <Flame className="w-5 h-5 text-[#EF4444] mx-auto mb-1" />
+                      <p className="font-data text-xl text-[#EF4444]">{Math.round((sessionElapsed / 60) * 6)}</p>
+                      <p className="text-[10px] text-[#52525B] uppercase">Cal (est.)</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Difficulty Rating */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider mb-3 block">Intensidade / Dificuldade</Label>
+                  <div className="flex gap-2 justify-center">
+                    {[1, 2, 3, 4, 5].map(level => (
+                      <button
+                        key={level}
+                        onClick={() => setFeedbackData({...feedbackData, difficulty: level})}
+                        className={`w-12 h-12 rounded-lg flex items-center justify-center transition-all ${
+                          feedbackData.difficulty >= level 
+                            ? 'bg-[#F59E0B] text-black' 
+                            : 'bg-[#121212] border border-[#27272A] text-[#52525B]'
+                        }`}
+                      >
+                        <Star className={`w-5 h-5 ${feedbackData.difficulty >= level ? 'fill-current' : ''}`} />
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[#A1A1AA] text-center mt-2">
+                    {feedbackData.difficulty === 1 && "Muito fácil"}
+                    {feedbackData.difficulty === 2 && "Fácil"}
+                    {feedbackData.difficulty === 3 && "Moderado"}
+                    {feedbackData.difficulty === 4 && "Difícil"}
+                    {feedbackData.difficulty === 5 && "Muito difícil"}
+                  </p>
+                </div>
+
+                {/* Feeling */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider mb-2 block">Como você se sentiu?</Label>
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {[
+                      { value: "otimo", label: "Ótimo", emoji: "🔥" },
+                      { value: "bom", label: "Bom", emoji: "💪" },
+                      { value: "regular", label: "Regular", emoji: "😐" },
+                      { value: "cansado", label: "Cansado", emoji: "😮‍💨" },
+                      { value: "exausto", label: "Exausto", emoji: "😵" }
+                    ].map(f => (
+                      <button
+                        key={f.value}
+                        onClick={() => setFeedbackData({...feedbackData, feeling: f.value})}
+                        className={`px-4 py-2 rounded-lg text-sm transition-all ${
+                          feedbackData.feeling === f.value
+                            ? 'bg-[#00F0FF] text-black font-medium'
+                            : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#00F0FF]'
+                        }`}
+                      >
+                        {f.emoji} {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <Label className="text-xs uppercase tracking-wider">Observações</Label>
+                  <Textarea 
+                    value={feedbackData.notes} 
+                    onChange={(e) => setFeedbackData({...feedbackData, notes: e.target.value})}
+                    placeholder="Como foi o treino? Algo a melhorar?"
+                    className="bg-[#121212] border-[#27272A] text-white mt-1"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={() => setShowFeedbackDialog(false)} variant="outline" className="flex-1 border-[#27272A]">
+                    Voltar
+                  </Button>
+                  <Button onClick={handleCompleteSession} className="flex-1 bg-gradient-to-r from-green-600 to-[#00F0FF] text-white">
+                    <Trophy className="w-4 h-4 mr-2" /> Concluir
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {/* IMPORT WORKOUT DIALOG */}
           <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>

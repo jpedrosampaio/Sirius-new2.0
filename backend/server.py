@@ -220,13 +220,42 @@ class WorkoutPlan(BaseModel):
     user_id: str
     name: str
     description: Optional[str] = None
-    exercises: List[Dict[str, Any]] = []  # [{name, sets, reps, weight, notes}]
+    exercises: List[Dict[str, Any]] = []  # [{name, sets, reps, weight, notes, tutorial, video_url, muscle_group, rest_seconds}]
+    plan_duration: str = "dia"  # dia, semana, mes, ciclo
+    generated_by_ai: bool = False
+    days: Optional[List[Dict[str, Any]]] = None  # For multi-day plans: [{day_name, day_label, exercises}]
+    objective: Optional[str] = None
+    level: Optional[str] = None
     created_at: datetime
 
 class WorkoutPlanCreate(BaseModel):
     name: str
     description: Optional[str] = None
     exercises: List[Dict[str, Any]] = []
+    plan_duration: str = "dia"
+    days: Optional[List[Dict[str, Any]]] = None
+
+class WorkoutPlanGenerate(BaseModel):
+    objective: str  # hipertrofia, emagrecimento, condicionamento, forca, flexibilidade
+    level: str  # iniciante, intermediario, avancado
+    muscle_groups: Optional[List[str]] = None  # peito, costas, pernas, ombros, biceps, triceps, abdomen, gluteos
+    duration: str = "dia"  # dia, semana, mes, ciclo
+
+class WorkoutSession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    session_id: str
+    user_id: str
+    plan_id: str
+    plan_name: str
+    status: str = "active"  # active, completed, abandoned
+    started_at: str
+    completed_at: Optional[str] = None
+    total_duration_seconds: int = 0
+    exercises: List[Dict[str, Any]] = []  # [{name, sets, reps, weight, completed, time_spent_seconds, sets_completed}]
+    current_exercise_idx: int = 0
+    rest_timer_seconds: int = 60
+    feedback: Optional[Dict[str, Any]] = None  # {difficulty: 1-5, feeling: str, notes: str}
+    day_index: Optional[int] = None  # For multi-day plans
 
 class WorkoutLog(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -3032,6 +3061,9 @@ async def create_workout_plan(request: Request, plan_data: WorkoutPlanCreate, se
         "name": plan_data.name,
         "description": plan_data.description,
         "exercises": plan_data.exercises,
+        "plan_duration": plan_data.plan_duration or "dia",
+        "generated_by_ai": False,
+        "days": plan_data.days,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.workout_plans.insert_one(plan_doc)
@@ -3047,7 +3079,9 @@ async def update_workout_plan(request: Request, plan_id: str, plan_data: Workout
     update_data = {
         "name": plan_data.name,
         "description": plan_data.description,
-        "exercises": plan_data.exercises
+        "exercises": plan_data.exercises,
+        "plan_duration": plan_data.plan_duration or "dia",
+        "days": plan_data.days
     }
     
     result = await db.workout_plans.update_one(
@@ -3356,6 +3390,423 @@ Responda em português de forma prática e motivadora."""
     except Exception as e:
         logging.error(f"Workout suggestions failed: {e}")
         raise HTTPException(status_code=500, detail="Não foi possível gerar sugestões. Tente novamente.")
+
+# ========== AI WORKOUT GENERATION ==========
+@api_router.post("/workout-plans/generate")
+async def generate_workout_plan(request: Request, gen_data: WorkoutPlanGenerate, session_token: Optional[str] = Cookie(None)):
+    """Generate a workout plan with AI including tutorials and YouTube video links"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=503, detail="Serviço de IA indisponível")
+    
+    # Build the prompt based on duration
+    duration_instructions = {
+        "dia": "Crie um treino para UM DIA ÚNICO. Liste os exercícios em um único bloco.",
+        "semana": "Crie um treino para UMA SEMANA COMPLETA (segunda a sexta, 5 dias). Organize por dia da semana com exercícios diferentes para cada dia, alternando grupos musculares.",
+        "mes": "Crie um plano de treino para UM MÊS (4 semanas). Organize em 4 semanas com progressão de carga/volume. Cada semana deve ter 5 dias de treino.",
+        "ciclo": "Crie um ciclo de treino periodizado (8-12 semanas). Organize em fases: Adaptação (2 semanas), Hipertrofia (4 semanas), Força (3 semanas), Deload (1 semana). Cada fase com treinos específicos."
+    }
+    
+    muscle_groups_text = ""
+    if gen_data.muscle_groups and len(gen_data.muscle_groups) > 0:
+        muscle_groups_text = f"\nGrupos musculares prioritários: {', '.join(gen_data.muscle_groups)}"
+    
+    prompt = f"""Você é um personal trainer certificado. Gere um plano de treino completo em formato JSON.
+
+PARÂMETROS:
+- Objetivo: {gen_data.objective}
+- Nível: {gen_data.level}
+- Duração: {gen_data.duration}{muscle_groups_text}
+
+{duration_instructions.get(gen_data.duration, duration_instructions['dia'])}
+
+Para CADA exercício, inclua obrigatoriamente:
+1. Tutorial detalhado de execução (posição inicial, movimento, respiração, erros comuns)
+2. Link de vídeo do YouTube com tutorial real do exercício (use links reais e populares de canais conhecidos de fitness como Leandro Twin, Renato Cariani, ATHLEAN-X, Jeff Nippard, etc.)
+
+FORMATO JSON OBRIGATÓRIO:
+{{
+  "name": "Nome do plano de treino",
+  "description": "Descrição breve do objetivo",
+  "plan_duration": "{gen_data.duration}",
+  "days": [
+    {{
+      "day_name": "dia1",
+      "day_label": "Segunda - Peito e Tríceps",
+      "exercises": [
+        {{
+          "name": "Supino Reto com Barra",
+          "sets": 4,
+          "reps": 10,
+          "weight": "adequado ao nível",
+          "rest_seconds": 90,
+          "muscle_group": "peito",
+          "tutorial": "Deite-se no banco plano com os pés firmes no chão. Segure a barra com as mãos um pouco mais largas que a largura dos ombros. Desça a barra controladamente até tocar levemente o peito, na linha dos mamilos. Empurre a barra para cima até estender os braços completamente. Inspire ao descer e expire ao subir. Erros comuns: arquear excessivamente as costas, não descer completamente, subir rápido demais.",
+          "video_url": "https://www.youtube.com/watch?v=exemplo"
+        }}
+      ]
+    }}
+  ]
+}}
+
+{"Se duração for 'dia', retorne apenas 1 dia no array 'days'." if gen_data.duration == "dia" else ""}
+{"Se duração for 'semana', retorne 5 dias (segunda a sexta) no array 'days'." if gen_data.duration == "semana" else ""}
+{"Se duração for 'mes', retorne as semanas organizadas: dias como 'sem1_dia1', 'sem1_dia2', etc." if gen_data.duration == "mes" else ""}
+{"Se duração for 'ciclo', organize por fases: dias como 'fase1_sem1_dia1', etc." if gen_data.duration == "ciclo" else ""}
+
+IMPORTANTE: 
+- Retorne APENAS o JSON, sem markdown, sem ```json, sem texto adicional.
+- Os links do YouTube devem ser URLs reais de vídeos tutoriais de exercícios.
+- Adapte a complexidade, volume e carga ao nível ({gen_data.level}).
+- O tutorial deve ser detalhado e instrutivo para o nível do usuário.
+- rest_seconds deve variar: 60s para exercícios leves, 90s para moderados, 120s para compostos pesados."""
+
+    try:
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction="Você é um personal trainer profissional certificado. Sempre responda em JSON válido. Forneça tutoriais detalhados e links de YouTube reais para cada exercício."
+            )
+        )
+        
+        response_text = response.text.strip()
+        # Clean up response - remove markdown code blocks if present
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3].strip()
+        if response_text.startswith("json"):
+            response_text = response_text[4:].strip()
+            
+        plan_data = json.loads(response_text)
+        
+        # Create the plan document
+        plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+        
+        # Flatten exercises for backward compatibility (all exercises from all days)
+        all_exercises = []
+        days = plan_data.get("days", [])
+        for day in days:
+            for ex in day.get("exercises", []):
+                all_exercises.append(ex)
+        
+        plan_doc = {
+            "plan_id": plan_id,
+            "user_id": user.user_id,
+            "name": plan_data.get("name", f"Treino {gen_data.objective} - {gen_data.level}"),
+            "description": plan_data.get("description", ""),
+            "exercises": all_exercises,
+            "plan_duration": gen_data.duration,
+            "generated_by_ai": True,
+            "days": days,
+            "objective": gen_data.objective,
+            "level": gen_data.level,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.workout_plans.insert_one(plan_doc)
+        plan_doc.pop('_id', None)
+        
+        # Award XP for generating a plan
+        xp_earned = 5
+        new_xp = user.xp + xp_earned
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        
+        plan_doc['created_at'] = datetime.fromisoformat(plan_doc['created_at'])
+        
+        return {
+            "success": True,
+            "plan": plan_doc,
+            "xp_earned": xp_earned,
+            "new_xp": new_xp,
+            "new_rank": new_rank
+        }
+        
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse AI workout response: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao processar resposta da IA. Tente novamente.")
+    except Exception as e:
+        logging.error(f"Workout generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar treino: {str(e)[:100]}")
+
+
+# ========== WORKOUT SESSION ENDPOINTS ==========
+@api_router.post("/workout-sessions/start")
+async def start_workout_session(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Start an active workout session from a plan"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    plan_id = body.get("plan_id")
+    day_index = body.get("day_index", 0)
+    rest_timer_seconds = body.get("rest_timer_seconds", 60)
+    
+    if not plan_id:
+        raise HTTPException(status_code=400, detail="plan_id é obrigatório")
+    
+    # Check for existing active session
+    active = await db.workout_sessions.find_one({
+        "user_id": user.user_id, 
+        "status": "active"
+    }, {"_id": 0})
+    if active:
+        raise HTTPException(status_code=409, detail="Já existe uma sessão de treino ativa. Finalize ou abandone a sessão atual.")
+    
+    # Get the plan
+    plan = await db.workout_plans.find_one({"plan_id": plan_id, "user_id": user.user_id}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano de treino não encontrado")
+    
+    # Get exercises for the session (either from specific day or all exercises)
+    days = plan.get("days") or []
+    if days and day_index < len(days):
+        session_exercises = days[day_index].get("exercises", [])
+        day_label = days[day_index].get("day_label", f"Dia {day_index + 1}")
+    else:
+        session_exercises = plan.get("exercises", [])
+        day_label = plan.get("name", "Treino")
+    
+    # Prepare exercises with tracking fields
+    exercises = []
+    for ex in session_exercises:
+        exercises.append({
+            "name": ex.get("name", ""),
+            "sets": ex.get("sets", 3),
+            "reps": ex.get("reps", 12),
+            "weight": ex.get("weight", ""),
+            "rest_seconds": ex.get("rest_seconds", rest_timer_seconds),
+            "muscle_group": ex.get("muscle_group", ""),
+            "tutorial": ex.get("tutorial", ""),
+            "video_url": ex.get("video_url", ""),
+            "completed": False,
+            "sets_completed": 0,
+            "time_spent_seconds": 0
+        })
+    
+    session_id = f"session_{uuid.uuid4().hex[:12]}"
+    session_doc = {
+        "session_id": session_id,
+        "user_id": user.user_id,
+        "plan_id": plan_id,
+        "plan_name": f"{plan.get('name', 'Treino')} - {day_label}",
+        "status": "active",
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "total_duration_seconds": 0,
+        "exercises": exercises,
+        "current_exercise_idx": 0,
+        "rest_timer_seconds": rest_timer_seconds,
+        "feedback": None,
+        "day_index": day_index
+    }
+    
+    await db.workout_sessions.insert_one(session_doc)
+    session_doc.pop('_id', None)
+    
+    return session_doc
+
+
+@api_router.get("/workout-sessions/active")
+async def get_active_session(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Get current active workout session"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    session = await db.workout_sessions.find_one({
+        "user_id": user.user_id,
+        "status": "active"
+    }, {"_id": 0})
+    
+    if not session:
+        return {"active": False, "session": None}
+    
+    return {"active": True, "session": session}
+
+
+@api_router.patch("/workout-sessions/{session_id}/exercise/{exercise_idx}")
+async def update_session_exercise(request: Request, session_id: str, exercise_idx: int, session_token: Optional[str] = Cookie(None)):
+    """Update exercise progress in active session"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    
+    session = await db.workout_sessions.find_one({
+        "session_id": session_id, 
+        "user_id": user.user_id,
+        "status": "active"
+    }, {"_id": 0})
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada ou já finalizada")
+    
+    exercises = session.get("exercises", [])
+    if exercise_idx < 0 or exercise_idx >= len(exercises):
+        raise HTTPException(status_code=400, detail="Índice de exercício inválido")
+    
+    # Update exercise fields
+    if "completed" in body:
+        exercises[exercise_idx]["completed"] = body["completed"]
+    if "sets_completed" in body:
+        exercises[exercise_idx]["sets_completed"] = body["sets_completed"]
+    if "time_spent_seconds" in body:
+        exercises[exercise_idx]["time_spent_seconds"] = body["time_spent_seconds"]
+    if "weight" in body:
+        exercises[exercise_idx]["weight"] = body["weight"]
+    
+    update_fields = {"exercises": exercises}
+    if "current_exercise_idx" in body:
+        update_fields["current_exercise_idx"] = body["current_exercise_idx"]
+    
+    await db.workout_sessions.update_one(
+        {"session_id": session_id},
+        {"$set": update_fields}
+    )
+    
+    session["exercises"] = exercises
+    if "current_exercise_idx" in body:
+        session["current_exercise_idx"] = body["current_exercise_idx"]
+    
+    return session
+
+
+@api_router.post("/workout-sessions/{session_id}/complete")
+async def complete_workout_session(request: Request, session_id: str, session_token: Optional[str] = Cookie(None)):
+    """Complete a workout session with feedback"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    
+    session = await db.workout_sessions.find_one({
+        "session_id": session_id,
+        "user_id": user.user_id,
+        "status": "active"
+    }, {"_id": 0})
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada ou já finalizada")
+    
+    completed_at = datetime.now(timezone.utc).isoformat()
+    started_at = session.get("started_at", completed_at)
+    
+    # Calculate total duration
+    start_time = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+    end_time = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+    total_duration_seconds = int((end_time - start_time).total_seconds())
+    
+    # Count completed exercises
+    exercises = session.get("exercises", [])
+    completed_count = sum(1 for ex in exercises if ex.get("completed"))
+    total_count = len(exercises)
+    
+    # Build feedback
+    feedback = {
+        "difficulty": body.get("difficulty", 3),  # 1-5
+        "feeling": body.get("feeling", ""),  # ótimo, bom, regular, cansado, exausto
+        "notes": body.get("notes", ""),
+        "completed_exercises": completed_count,
+        "total_exercises": total_count
+    }
+    
+    # Calculate XP
+    base_xp = 10
+    exercise_bonus = completed_count * 2
+    duration_bonus = (total_duration_seconds // 900) * 5  # +5 XP every 15 min
+    xp_earned = base_xp + exercise_bonus + duration_bonus
+    
+    # Update session
+    await db.workout_sessions.update_one(
+        {"session_id": session_id},
+        {"$set": {
+            "status": "completed",
+            "completed_at": completed_at,
+            "total_duration_seconds": total_duration_seconds,
+            "feedback": feedback
+        }}
+    )
+    
+    # Also log as a workout
+    log_id = f"workout_{uuid.uuid4().hex[:12]}"
+    duration_minutes = max(1, total_duration_seconds // 60)
+    workout_doc = {
+        "log_id": log_id,
+        "user_id": user.user_id,
+        "plan_id": session.get("plan_id"),
+        "activity_type": "weightlifting",
+        "name": session.get("plan_name", "Treino"),
+        "duration_minutes": duration_minutes,
+        "calories": int(duration_minutes * 6),
+        "exercises_completed": [
+            {**ex, "completed": ex.get("completed", False)} 
+            for ex in exercises
+        ],
+        "notes": feedback.get("notes", ""),
+        "xp_earned": xp_earned,
+        "completed": True,
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "session_id": session_id,
+        "created_at": completed_at
+    }
+    await db.workout_logs.insert_one(workout_doc)
+    
+    # Award XP
+    new_xp = user.xp + xp_earned
+    new_rank = calculate_rank(new_xp)
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+    
+    return {
+        "success": True,
+        "session_id": session_id,
+        "total_duration_seconds": total_duration_seconds,
+        "total_duration_minutes": duration_minutes,
+        "completed_exercises": completed_count,
+        "total_exercises": total_count,
+        "xp_earned": xp_earned,
+        "new_xp": new_xp,
+        "new_rank": new_rank,
+        "feedback": feedback
+    }
+
+
+@api_router.post("/workout-sessions/{session_id}/abandon")
+async def abandon_workout_session(request: Request, session_id: str, session_token: Optional[str] = Cookie(None)):
+    """Abandon an active workout session"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    result = await db.workout_sessions.update_one(
+        {"session_id": session_id, "user_id": user.user_id, "status": "active"},
+        {"$set": {
+            "status": "abandoned",
+            "completed_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    
+    return {"message": "Sessão abandonada"}
+
+
+@api_router.get("/workout-sessions")
+async def get_workout_sessions(request: Request, limit: int = 20, session_token: Optional[str] = Cookie(None)):
+    """Get workout session history"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    sessions = await db.workout_sessions.find(
+        {"user_id": user.user_id, "status": {"$in": ["completed", "abandoned"]}},
+        {"_id": 0}
+    ).sort("started_at", -1).to_list(limit)
+    
+    return sessions
+
 
 # ========== NOTIFICATION ENDPOINTS ==========
 @api_router.get("/notifications")
