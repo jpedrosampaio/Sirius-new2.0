@@ -528,115 +528,6 @@ export default function Nutrition() {
                         Registrar Refeição
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Nova Refeição</DialogTitle>
-                        <DialogDescription>Registre sua refeição com os alimentos consumidos</DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label>Nome da Refeição</Label>
-                            <Input
-                              value={mealForm.name}
-                              onChange={(e) => setMealForm({...mealForm, name: e.target.value})}
-                              placeholder="Ex: Almoço completo"
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                          </div>
-                          <div>
-                            <Label>Tipo</Label>
-                            <Select value={mealForm.meal_type} onValueChange={(v) => setMealForm({...mealForm, meal_type: v})}>
-                              <SelectTrigger className="bg-[#121212] border-[#27272A]">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="breakfast">Café da Manhã</SelectItem>
-                                <SelectItem value="lunch">Almoço</SelectItem>
-                                <SelectItem value="dinner">Jantar</SelectItem>
-                                <SelectItem value="snack">Lanche</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {/* Add Food Section */}
-                        <div className="border border-[#27272A] rounded-lg p-4">
-                          <h4 className="font-medium mb-3">Adicionar Alimento</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-                            <Input
-                              placeholder="Nome do alimento"
-                              value={newFood.name}
-                              onChange={(e) => setNewFood({...newFood, name: e.target.value})}
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Calorias"
-                              value={newFood.calories || ""}
-                              onChange={(e) => setNewFood({...newFood, calories: Number(e.target.value)})}
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Proteína (g)"
-                              value={newFood.protein || ""}
-                              onChange={(e) => setNewFood({...newFood, protein: Number(e.target.value)})}
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Carboidratos (g)"
-                              value={newFood.carbs || ""}
-                              onChange={(e) => setNewFood({...newFood, carbs: Number(e.target.value)})}
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Gordura (g)"
-                              value={newFood.fat || ""}
-                              onChange={(e) => setNewFood({...newFood, fat: Number(e.target.value)})}
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="Quantidade"
-                              value={newFood.quantity}
-                              onChange={(e) => setNewFood({...newFood, quantity: Number(e.target.value)})}
-                              className="bg-[#121212] border-[#27272A]"
-                            />
-                          </div>
-                          <Button onClick={handleAddFood} variant="outline" className="w-full">
-                            <Plus className="w-4 h-4 mr-2" />
-                            Adicionar Alimento
-                          </Button>
-                        </div>
-
-                        {/* Foods List */}
-                        {mealForm.foods.length > 0 && (
-                          <div className="space-y-2">
-                            <h4 className="font-medium">Alimentos Adicionados</h4>
-                            {mealForm.foods.map((food, idx) => (
-                              <div key={idx} className="flex items-center justify-between bg-[#121212] p-3 rounded-lg">
-                                <div>
-                                  <span className="font-medium">{food.name}</span>
-                                  <span className="text-sm text-[#A1A1AA] ml-2">
-                                    x{food.quantity} | {food.calories * food.quantity}kcal
-                                  </span>
-                                </div>
-                                <Button variant="ghost" size="icon" onClick={() => handleRemoveFood(idx)}>
-                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <Button onClick={handleCreateMeal} className="w-full bg-[#007AFF]" disabled={mealForm.foods.length === 0}>
-                          Salvar Refeição
-                        </Button>
-                      </div>
-                    </DialogContent>
                   </Dialog>
 
                   <Dialog open={showGoalsDialog} onOpenChange={setShowGoalsDialog}>
@@ -1345,6 +1236,119 @@ export default function Nutrition() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Meal Dialog - Outside Tabs so it works from any tab */}
+        <Dialog open={showMealDialog} onOpenChange={setShowMealDialog}>
+          <DialogContent className="bg-[#0A0A0A] border-[#27272A] max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Nova Refeição</DialogTitle>
+              <DialogDescription>Registre sua refeição com os alimentos consumidos</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Nome da Refeição</Label>
+                  <Input
+                    value={mealForm.name}
+                    onChange={(e) => setMealForm({...mealForm, name: e.target.value})}
+                    placeholder="Ex: Almoço completo"
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                </div>
+                <div>
+                  <Label>Tipo</Label>
+                  <Select value={mealForm.meal_type} onValueChange={(v) => setMealForm({...mealForm, meal_type: v})}>
+                    <SelectTrigger className="bg-[#121212] border-[#27272A]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="breakfast">Café da Manhã</SelectItem>
+                      <SelectItem value="lunch">Almoço</SelectItem>
+                      <SelectItem value="dinner">Jantar</SelectItem>
+                      <SelectItem value="snack">Lanche</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Add Food Section */}
+              <div className="border border-[#27272A] rounded-lg p-4">
+                <h4 className="font-medium mb-3">Adicionar Alimento</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                  <Input
+                    placeholder="Nome do alimento"
+                    value={newFood.name}
+                    onChange={(e) => setNewFood({...newFood, name: e.target.value})}
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Calorias"
+                    value={newFood.calories || ""}
+                    onChange={(e) => setNewFood({...newFood, calories: Number(e.target.value)})}
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Proteína (g)"
+                    value={newFood.protein || ""}
+                    onChange={(e) => setNewFood({...newFood, protein: Number(e.target.value)})}
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Carboidratos (g)"
+                    value={newFood.carbs || ""}
+                    onChange={(e) => setNewFood({...newFood, carbs: Number(e.target.value)})}
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Gordura (g)"
+                    value={newFood.fat || ""}
+                    onChange={(e) => setNewFood({...newFood, fat: Number(e.target.value)})}
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Quantidade"
+                    value={newFood.quantity}
+                    onChange={(e) => setNewFood({...newFood, quantity: Number(e.target.value)})}
+                    className="bg-[#121212] border-[#27272A]"
+                  />
+                </div>
+                <Button onClick={handleAddFood} variant="outline" className="w-full">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Alimento
+                </Button>
+              </div>
+
+              {/* Foods List */}
+              {mealForm.foods.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium">Alimentos Adicionados</h4>
+                  {mealForm.foods.map((food, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-[#121212] p-3 rounded-lg">
+                      <div>
+                        <span className="font-medium">{food.name}</span>
+                        <span className="text-sm text-[#A1A1AA] ml-2">
+                          x{food.quantity} | {food.calories * food.quantity}kcal
+                        </span>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleRemoveFood(idx)}>
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button onClick={handleCreateMeal} className="w-full bg-[#007AFF]" disabled={mealForm.foods.length === 0}>
+                Salvar Refeição
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Recipe Dialog - Outside Tabs so it works from any tab */}
         <Dialog open={showRecipeDialog} onOpenChange={(open) => { setShowRecipeDialog(open); if (!open) setSuggestedRecipe(null); }}>

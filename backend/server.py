@@ -12501,6 +12501,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def startup_setup():
+    """Auto-setup Telegram webhook on startup"""
+    if TELEGRAM_BOT_TOKEN:
+        try:
+            cors_origins = os.environ.get('CORS_ORIGINS', '')
+            # Use the first CORS origin that looks like a public URL (has domain, not localhost)
+            public_url = ''
+            for origin in cors_origins.split(','):
+                origin = origin.strip()
+                if origin and 'localhost' not in origin and '127.0.0.1' not in origin:
+                    public_url = origin
+                    break
+            
+            if public_url:
+                webhook_url = f"{public_url}/api/telegram/webhook/{TELEGRAM_BOT_TOKEN}"
+                async with httpx.AsyncClient() as hclient:
+                    resp = await hclient.post(
+                        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook",
+                        json={"url": webhook_url, "allowed_updates": ["message"]},
+                        timeout=10
+                    )
+                    result = resp.json()
+                    if result.get("ok"):
+                        logging.info(f"Telegram webhook set to: {webhook_url}")
+                    else:
+                        logging.warning(f"Telegram webhook setup failed: {result}")
+            else:
+                logging.warning("No public URL found in CORS_ORIGINS for Telegram webhook")
+        except Exception as e:
+            logging.warning(f"Telegram webhook auto-setup failed: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()

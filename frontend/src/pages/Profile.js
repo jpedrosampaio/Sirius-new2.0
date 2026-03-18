@@ -109,8 +109,10 @@ export default function Profile() {
     try {
       const res = await axios.get(`${API}/telegram/status`, { withCredentials: true });
       setTelegramStatus(res.data);
+      return res.data;
     } catch (error) {
       console.error("Erro ao verificar Telegram:", error);
+      return null;
     }
   };
 
@@ -550,8 +552,18 @@ export default function Profile() {
                   <p>3. Cole o comando <code className="text-[#00F0FF]">/vincular {telegramCode.code}</code></p>
                   <p>4. Pronto! Comece a registrar transações ✨</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => { setTelegramCode(null); fetchTelegramStatus(); }} className="text-xs border-[#27272A]">
-                  Verificar vinculação
+                <Button variant="outline" size="sm" onClick={async () => {
+                  setTelegramLoading(true);
+                  const status = await fetchTelegramStatus();
+                  setTelegramLoading(false);
+                  if (status?.linked) {
+                    setTelegramCode(null);
+                    toast.success("Telegram vinculado com sucesso! 🎉");
+                  } else {
+                    toast.info("Ainda não vinculado. Envie o comando no bot e tente novamente.");
+                  }
+                }} disabled={telegramLoading} className="text-xs border-[#27272A]">
+                  {telegramLoading ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Verificando...</> : "Verificar vinculação"}
                 </Button>
               </motion.div>
             ) : (
