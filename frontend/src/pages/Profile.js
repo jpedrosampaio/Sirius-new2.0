@@ -122,7 +122,7 @@ export default function Profile() {
       // Setup webhook first (only once)
       if (!webhookSetup) {
         try {
-          await axios.post(`${API}/telegram/setup-webhook`, {}, { withCredentials: true });
+          await axios.post(`${API}/telegram/setup-webhook`, { backend_url: API.replace('/api', '') }, { withCredentials: true });
           setWebhookSetup(true);
         } catch (e) {
           console.warn("Webhook setup failed (may already be set):", e);

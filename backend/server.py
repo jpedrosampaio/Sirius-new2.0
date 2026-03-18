@@ -11942,25 +11942,39 @@ if TELEGRAM_BOT_TOKEN:
 
 @api_router.post("/telegram/setup-webhook")
 async def setup_telegram_webhook(request: Request, session_token: Optional[str] = Cookie(None)):
-    """Setup Telegram webhook using the app's public URL"""
+    """Setup Telegram webhook - accepts backend_url in body or detects from request"""
     auth_header = request.headers.get("Authorization")
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     if not telegram_bot:
         raise HTTPException(status_code=503, detail="Bot do Telegram não configurado")
     
-    # Get the public URL from the request's origin or referer
-    origin = request.headers.get("origin", "")
-    if not origin:
-        referer = request.headers.get("referer", "")
-        if referer:
-            from urllib.parse import urlparse
-            parsed = urlparse(referer)
-            origin = f"{parsed.scheme}://{parsed.netloc}"
+    # Try to get backend URL from request body first
+    backend_url = ''
+    try:
+        body = await request.json()
+        backend_url = body.get("backend_url", "").rstrip("/")
+    except:
+        pass
     
-    if not origin:
-        raise HTTPException(status_code=400, detail="Não foi possível detectar a URL pública")
+    # Fallback: use BACKEND_PUBLIC_URL env var
+    if not backend_url:
+        backend_url = os.environ.get('BACKEND_PUBLIC_URL', '')
     
-    webhook_url = f"{origin}/api/telegram/webhook/{TELEGRAM_BOT_TOKEN}"
+    # Fallback: try to detect from referer/origin (works when frontend proxies to backend)
+    if not backend_url:
+        origin = request.headers.get("origin", "")
+        if not origin:
+            referer = request.headers.get("referer", "")
+            if referer:
+                from urllib.parse import urlparse
+                parsed = urlparse(referer)
+                origin = f"{parsed.scheme}://{parsed.netloc}"
+        backend_url = origin
+    
+    if not backend_url:
+        raise HTTPException(status_code=400, detail="Não foi possível detectar a URL do backend. Configure BACKEND_PUBLIC_URL no servidor.")
+    
+    webhook_url = f"{backend_url}/api/telegram/webhook/{TELEGRAM_BOT_TOKEN}"
     
     try:
         async with httpx.AsyncClient() as hclient:
@@ -12506,17 +12520,21 @@ async def startup_setup():
     """Auto-setup Telegram webhook on startup"""
     if TELEGRAM_BOT_TOKEN:
         try:
-            cors_origins = os.environ.get('CORS_ORIGINS', '')
-            # Use the first CORS origin that looks like a public URL (has domain, not localhost)
-            public_url = ''
-            for origin in cors_origins.split(','):
-                origin = origin.strip()
-                if origin and 'localhost' not in origin and '127.0.0.1' not in origin:
-                    public_url = origin
-                    break
+            # Priority: BACKEND_PUBLIC_URL > construct from REACT_APP_BACKEND_URL
+            # On Railway, frontend and backend are separate services
+            backend_url = os.environ.get('BACKEND_PUBLIC_URL', '')
             
-            if public_url:
-                webhook_url = f"{public_url}/api/telegram/webhook/{TELEGRAM_BOT_TOKEN}"
+            if not backend_url:
+                # Try to detect from CORS_ORIGINS + common patterns
+                cors_origins = os.environ.get('CORS_ORIGINS', '')
+                for origin in cors_origins.split(','):
+                    origin = origin.strip()
+                    if origin and 'localhost' not in origin and '127.0.0.1' not in origin:
+                        backend_url = origin
+                        break
+            
+            if backend_url:
+                webhook_url = f"{backend_url}/api/telegram/webhook/{TELEGRAM_BOT_TOKEN}"
                 async with httpx.AsyncClient() as hclient:
                     resp = await hclient.post(
                         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook",
@@ -12529,7 +12547,7 @@ async def startup_setup():
                     else:
                         logging.warning(f"Telegram webhook setup failed: {result}")
             else:
-                logging.warning("No public URL found in CORS_ORIGINS for Telegram webhook")
+                logging.warning("No public URL found for Telegram webhook. Set BACKEND_PUBLIC_URL env var.")
         except Exception as e:
             logging.warning(f"Telegram webhook auto-setup failed: {e}")
 
