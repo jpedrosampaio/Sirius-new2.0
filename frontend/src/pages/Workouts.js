@@ -1148,7 +1148,7 @@ export default function Workouts() {
               {/* Gerar com IA Button */}
               <Dialog open={openAiGenerate} onOpenChange={setOpenAiGenerate}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white">
+                  <Button data-testid="open-ai-generate-btn" className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white">
                     <Sparkles className="w-4 h-4 mr-2" /> Gerar com IA
                   </Button>
                 </DialogTrigger>
@@ -1162,6 +1162,7 @@ export default function Workouts() {
                     {/* Mode Selector Tabs */}
                     <div className="flex gap-2 p-1 bg-[#121212] rounded-lg border border-[#27272A]">
                       <button
+                        data-testid="tab-tipo-treino"
                         onClick={() => { setAiGenMode("tipo_treino"); setAiGenForm(prev => ({...prev, generation_mode: "tipo_treino"})); }}
                         className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                           aiGenMode === "tipo_treino" 
@@ -1172,6 +1173,7 @@ export default function Workouts() {
                         <Dumbbell className="w-4 h-4" /> Por Tipo de Treino
                       </button>
                       <button
+                        data-testid="tab-periodo"
                         onClick={() => { setAiGenMode("periodo"); setAiGenForm(prev => ({...prev, generation_mode: "periodo"})); }}
                         className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
                           aiGenMode === "periodo" 
@@ -1416,6 +1418,7 @@ export default function Workouts() {
                     )}
 
                     <Button 
+                      data-testid="generate-ai-workout-btn"
                       onClick={handleGenerateWithAI} 
                       disabled={generatingPlan}
                       className="w-full bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white h-11"
@@ -1744,6 +1747,11 @@ export default function Workouts() {
                                     {plan.plan_duration === "semana" ? "📆 Semana" : plan.plan_duration === "mes" ? "🗓️ Mês" : plan.plan_duration === "ciclo" ? "🔄 Ciclo" : "📅 Dia"}
                                   </span>
                                 )}
+                                {plan.generation_mode === "tipo_treino" && plan.split_type && (
+                                  <span data-testid={`plan-split-badge-${plan.plan_id}`} className="text-[10px] px-2 py-0.5 rounded-full bg-[#A855F7]/10 text-[#C084FC] border border-[#A855F7]/30 font-bold">
+                                    <Dumbbell className="w-3 h-3 inline mr-1" />Treino {plan.split_type}
+                                  </span>
+                                )}
                                 {isExpanded ? (
                                   <ChevronUp className="w-4 h-4 text-[#A1A1AA]" />
                                 ) : (
@@ -1751,6 +1759,17 @@ export default function Workouts() {
                                 )}
                               </div>
                               {plan.description && <p className="text-sm text-[#A1A1AA] mt-1">{plan.description}</p>}
+                              {plan.generation_mode === "tipo_treino" && plan.split_config && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {plan.split_config.map((s) => (
+                                    <span key={s.label} className="text-[10px] px-1.5 py-0.5 rounded bg-[#1A1A2E] text-[#A1A1AA] border border-[#27272A]">
+                                      <span className="text-[#A855F7] font-bold">{s.label}</span> {s.name}
+                                    </span>
+                                  ))}
+                                  {plan.training_days_per_week && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1A1A2E] text-[#71717A]">{plan.training_days_per_week}x/sem</span>}
+                                  {plan.cycle_weeks && <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#1A1A2E] text-[#71717A]">{plan.cycle_weeks} sem</span>}
+                                </div>
+                              )}
                               <p className="text-xs text-[#52525B] mt-1">
                                 {(plan.days && plan.days.length > 0) ? `${plan.days.length} dias · ` : ''}{(plan.exercises || []).length} exercícios
                                 {total > 0 && (

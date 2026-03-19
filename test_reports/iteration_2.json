@@ -1,0 +1,54 @@
+{
+  "summary": "Completed e2e testing of dual-mode AI workout generation feature. All features working correctly: 1) Two generation modes (tipo_treino/periodo) in AI dialog, 2) Split badges on plan cards, 3) Backend API for periodo-mode generation, 4) GET /api/workout-plans returns plans with split_type and generation_mode fields",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AI Generate Dialog", "issues": ["Console warning: Missing Description or aria-describedby for DialogContent - accessibility improvement recommended"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_workout_generation.py",
+    "/app/test_reports/pytest/pytest_workout_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor accessibility warning in AI dialog - DialogContent missing Description/aria-describedby"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_workout_generation.py"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": {
+    "email": "testsirius@test.com",
+    "password": "Test123!"
+  },
+  "seed_data_creation": "None - used existing test user and existing workout plans with split data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Dual-mode AI workout generation feature fully tested. Key test points: 1) Login at /login, 2) Navigate to /workouts, 3) Click Fichas tab to see plan cards with split badges (Treino AB, A Superior/B Inferior, 4x/sem, 1 sem), 4) Open 'Gerar com IA' dialog - has two tabs: 'Por Tipo de Treino' (split selector AB/ABC/ABCD/ABCDE, muscle group config, days/week, cycle weeks, cardio toggle) and 'Por Período' (duration selector, muscle groups, AI info box). Backend periodo-mode generation takes ~15-20s, tipo_treino mode takes 60-90s (avoid testing in automation).",
+  "features_tested": {
+    "login_flow": "PASS - testsirius@test.com / Test123! at /login",
+    "workouts_page_load": "PASS - /workouts loads correctly",
+    "fichas_tab": "PASS - Shows workout plan cards",
+    "ai_dialog_tabs": "PASS - 'Por Tipo de Treino' and 'Por Período' tabs present and switchable",
+    "tipo_treino_tab_elements": "PASS - Split type selector (AB/ABC/ABCD/ABCDE), muscle group config per division, training days per week, cycle weeks, cardio toggle all present",
+    "periodo_tab_elements": "PASS - Duration selector, muscle groups selector, AI info box all present",
+    "split_badges_on_cards": "PASS - Plans show 'Treino AB' badge with purple styling, split config summary (A Superior, B Inferior), training frequency (4x/sem), cycle duration (1 sem)",
+    "backend_periodo_generation": "PASS - POST /api/workout-plans/generate with generation_mode='periodo' returns success with plan data",
+    "backend_get_plans_with_split_fields": "PASS - GET /api/workout-plans returns plans with split_type, generation_mode, split_config, training_days_per_week, cycle_weeks fields"
+  },
+  "screenshots": [
+    ".screenshots/01_workouts_page.png",
+    ".screenshots/02_fichas_tab.png",
+    ".screenshots/03_ai_dialog_tipo_treino.png",
+    ".screenshots/04_ai_dialog_periodo.png"
+  ]
+}
