@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1157,6 +1157,7 @@ export default function Workouts() {
                     <DialogTitle className="font-heading text-xl flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-[#A855F7]" /> GERAR TREINO COM IA
                     </DialogTitle>
+                    <DialogDescription className="sr-only">Escolha o modo de geração de treino com IA</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 mt-4">
                     {/* Mode Selector Tabs */}

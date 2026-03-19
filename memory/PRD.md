@@ -11,6 +11,9 @@ Sistema de produtividade e finanças pessoais chamado "Sirius" com:
 - **Chat com IA:** Registrar transações financeiras via texto/conversa
 - **Interface:** Tema escuro (dark theme)
 - **Autenticação:** E-mail/senha e Google Auth
+- **Treinos:** Área de treinos com geração por IA, sessões com timer, estatísticas
+- **Alimentação:** Controle calórico, dietas, receitas com IA
+- **Estudos:** Área de estudos integrada com IA (flashcards, quizzes, simulados, repetição espaçada, importar edital)
 
 ## User Personas
 - Usuário que busca organização pessoal e controle financeiro
@@ -22,33 +25,38 @@ Sistema de produtividade e finanças pessoais chamado "Sirius" com:
 /app
 ├── backend/
 │   ├── server.py (FastAPI - monolithic)
-│   └── .env (MONGO_URL, DB_NAME, EMERGENT_LLM_KEY)
+│   └── .env (MONGO_URL, DB_NAME, GOOGLE_GEMINI_API_KEY)
 └── frontend/
     └── src/
-        ├── components/ (Sidebar, ProtectedRoute)
-        └── pages/ (Dashboard, Tasks, Habits, Finance, Goals, Chat, Reports, Profile)
+        ├── components/ (Sidebar, ProtectedRoute, ui/)
+        └── pages/ (Dashboard, Tasks, Habits, Finance, Goals, Chat, Reports, Profile, Workouts, Nutrition, Studies)
 ```
 
 ## Tech Stack
-- **Backend:** FastAPI, Motor (MongoDB async), Pydantic, emergentintegrations (LLM)
-- **Frontend:** React, Tailwind CSS, Recharts, Axios
+- **Backend:** FastAPI, Motor (MongoDB async), Pydantic, Google Gemini AI
+- **Frontend:** React, Tailwind CSS, Shadcn/UI, Recharts, Axios
 - **Database:** MongoDB
-- **AI:** OpenAI GPT-5.2 via Emergent LLM Key
+- **AI:** Google Gemini 2.5 Flash
 
-## What's Been Implemented ✅
+## What's Been Implemented
 - [x] Autenticação email/senha e Google Auth
 - [x] Dashboard com estatísticas
 - [x] Tarefas recorrentes (diárias, semanais, mensais)
 - [x] Sistema de hábitos com streaks
-- [x] Controle financeiro (transações, orçamentos)
+- [x] Controle financeiro (transações, orçamentos, cartões, projeções)
 - [x] Gráficos de gastos por categoria (PieChart)
-- [x] Gerenciamento de cartões de crédito
+- [x] Gerenciamento de cartões de crédito com parcelas
 - [x] Metas com checkboxes diários
 - [x] Gamificação (XP e ranks militares)
-- [x] Chat com IA para registro de transações
+- [x] Chat com IA para registro de transações (múltiplas de uma vez)
 - [x] Relatórios com IA
 - [x] Logo do lobo (Sirius)
 - [x] Desafios semanais
+- [x] Área de Alimentação (refeições, calorias, água, receitas IA)
+- [x] Área de Estudos (programas, cadernos, notas, flashcards, quizzes, simulados, pomodoro, importar edital)
+- [x] Área de Treinos (fichas, sessões com timer, estatísticas, evolução)
+- [x] Geração de treinos com IA - DUAL MODE (Por Tipo de Treino / Por Período) ✅ NEW
+- [x] Split badges e informações de divisão nos cards de treino ✅ NEW
 
 ## Key API Endpoints
 - `/api/auth/register`, `/api/auth/login`, `/api/auth/google-session`, `/api/auth/me`
@@ -61,6 +69,13 @@ Sistema de produtividade e finanças pessoais chamado "Sirius" com:
 - `/api/chat/send`, `/api/chat/messages`
 - `/api/reports/generate`, `/api/reports/{report_id}/download`
 - `/api/challenges/current`
+- `/api/workout-plans`, `/api/workout-plans/generate` (dual mode: tipo_treino/periodo)
+- `/api/workouts`, `/api/workout-stats`
+- `/api/nutrition/meals`, `/api/nutrition/goals`, `/api/nutrition/water`
+- `/api/study/areas`, `/api/study/notebooks`, `/api/study/notes`
+- `/api/study/flashcards`, `/api/study/simulados`
+- `/api/study/programs/import-edital`
+- `/api/notifications`
 
 ## Database Collections
 - users, user_sessions
@@ -71,6 +86,9 @@ Sistema de produtividade e finanças pessoais chamado "Sirius" com:
 - goals
 - chat_messages
 - reports, achievements, challenges
+- workout_plans, workout_logs, workout_sessions
+- meals, nutrition_goals, water_logs, diets, recipes
+- study_areas, notebooks, notes, study_tasks, flashcard_decks, simulados, study_programs
 
 ## Test Credentials
 - Email: testsirius@test.com
@@ -96,10 +114,5 @@ Sistema de produtividade e finanças pessoais chamado "Sirius" com:
 - [ ] Integração com bancos via Open Banking
 - [ ] Export para Excel/PDF mais elaborado
 
-## Bugs Fixed This Session
-1. ✅ Endpoints /api/credit-cards e /api/finance/stats retornavam 404 (estavam definidos após app.include_router)
-2. ✅ Chat retornava erro de ObjectId (MongoDB inseria _id no documento)
-3. ✅ Logo do lobo adicionada ao Sidebar
-
 ## Last Updated
-2026-02-02
+2026-03-19
