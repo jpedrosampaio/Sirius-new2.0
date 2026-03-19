@@ -255,6 +255,14 @@ class WorkoutPlanGenerate(BaseModel):
     level: str  # iniciante, intermediario, avancado
     muscle_groups: Optional[List[str]] = None  # peito, costas, pernas, ombros, biceps, triceps, abdomen, gluteos
     duration: str = "dia"  # dia, semana, mes, ciclo
+    # New fields for split-based generation
+    generation_mode: str = "periodo"  # "periodo" or "tipo_treino"
+    split_type: Optional[str] = None  # "AB", "ABC", "ABCD", "ABCDE"
+    split_config: Optional[List[Dict[str, Any]]] = None  # [{label: "A", name: "Peito e Tríceps", muscle_groups: ["peito", "triceps"]}]
+    training_days_per_week: Optional[int] = None  # 2-7
+    cycle_weeks: Optional[int] = None  # 1-12
+    include_cardio: bool = False
+    cardio_type: Optional[str] = None  # "corrida", "bike", "HIIT", "caminhada", "natacao", "pular_corda"
 
 class WorkoutSession(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -3828,19 +3836,125 @@ async def generate_workout_plan(request: Request, gen_data: WorkoutPlanGenerate,
     if not gemini_client:
         raise HTTPException(status_code=503, detail="Serviço de IA indisponível")
     
-    # Build the prompt based on duration
-    duration_instructions = {
-        "dia": "Crie um treino para UM DIA ÚNICO. Liste os exercícios em um único bloco.",
-        "semana": "Crie um treino para UMA SEMANA COMPLETA (segunda a sexta, 5 dias). Organize por dia da semana com exercícios diferentes para cada dia, alternando grupos musculares.",
-        "mes": "Crie um plano de treino para UM MÊS (4 semanas). Organize em 4 semanas com progressão de carga/volume. Cada semana deve ter 5 dias de treino.",
-        "ciclo": "Crie um ciclo de treino periodizado (8-12 semanas). Organize em fases: Adaptação (2 semanas), Hipertrofia (4 semanas), Força (3 semanas), Deload (1 semana). Cada fase com treinos específicos."
-    }
-    
-    muscle_groups_text = ""
-    if gen_data.muscle_groups and len(gen_data.muscle_groups) > 0:
-        muscle_groups_text = f"\nGrupos musculares prioritários: {', '.join(gen_data.muscle_groups)}"
-    
-    prompt = f"""Você é um personal trainer certificado. Gere um plano de treino completo em formato JSON.
+    # ===== BUILD PROMPT BASED ON GENERATION MODE =====
+    if gen_data.generation_mode == "tipo_treino" and gen_data.split_config:
+        # --- SPLIT-BASED GENERATION (Tipo de Treino) ---
+        split_description = []
+        for split in gen_data.split_config:
+            label = split.get("label", "?")
+            name = split.get("name", "")
+            groups = split.get("muscle_groups", [])
+            split_description.append(f"  Treino {label}: {name} (Grupos: {', '.join(groups)})")
+        split_text = "\n".join(split_description)
+        
+        days_per_week = gen_data.training_days_per_week or 5
+        cycle_weeks = gen_data.cycle_weeks or 4
+        split_type = gen_data.split_type or "ABC"
+        
+        cardio_text = ""
+        if gen_data.include_cardio:
+            cardio_name = gen_data.cardio_type or "corrida"
+            cardio_labels = {
+                "corrida": "Corrida", "bike": "Bike/Ciclismo", "HIIT": "HIIT",
+                "caminhada": "Caminhada", "natacao": "Natação", "pular_corda": "Pular Corda",
+                "eliptico": "Elíptico", "remo": "Remo"
+            }
+            cardio_display = cardio_labels.get(cardio_name, cardio_name)
+            cardio_text = f"""
+CARDIO INTERCALADO:
+- Inclua sessões de cardio ({cardio_display}) nos dias de descanso ou após os treinos de musculação.
+- Se houver mais dias de treino que divisões, preencha os dias extras com cardio.
+- Cada sessão de cardio deve ter: duração sugerida, intensidade, e dicas de execução.
+- No JSON, sessões de cardio devem ter muscle_group: "cardio" e incluir campo "cardio_type": "{cardio_name}".
+"""
+
+        # Build the day pattern for the cycle
+        split_labels = [s.get("label", "") for s in gen_data.split_config]
+        day_pattern_example = []
+        for i in range(days_per_week):
+            idx = i % len(split_labels)
+            day_pattern_example.append(f"Dia {i+1}: Treino {split_labels[idx]}")
+        pattern_text = ", ".join(day_pattern_example)
+
+        prompt = f"""Você é um personal trainer certificado. Gere um plano de treino completo em formato JSON baseado em DIVISÃO DE TREINO (tipo de treino).
+
+PARÂMETROS:
+- Objetivo: {gen_data.objective}
+- Nível: {gen_data.level}
+- Tipo de divisão: {split_type} ({len(split_labels)} divisões)
+- Dias de treino por semana: {days_per_week}
+- Duração do ciclo: {cycle_weeks} semana(s)
+
+DIVISÕES DEFINIDAS PELO USUÁRIO:
+{split_text}
+
+PADRÃO DE ROTAÇÃO SEMANAL (exemplo de 1 semana):
+{pattern_text}
+{"Se houver mais dias que divisões, repita o ciclo." if days_per_week > len(split_labels) else ""}
+{cardio_text}
+
+Gere o plano para {cycle_weeks} semana(s), com {days_per_week} dias de treino por semana.
+Total de dias: {days_per_week * cycle_weeks}.
+
+Para CADA exercício, inclua obrigatoriamente:
+1. Tutorial detalhado de execução (posição inicial, movimento, respiração, erros comuns)
+2. Link de vídeo do YouTube com tutorial real do exercício (use links reais e populares de canais conhecidos como Leandro Twin, Renato Cariani, ATHLEAN-X, Jeff Nippard, etc.)
+
+Se o ciclo for maior que 1 semana, aplique progressão de carga/volume entre as semanas.
+
+FORMATO JSON OBRIGATÓRIO:
+{{
+  "name": "Nome do plano (ex: Treino {split_type} - {gen_data.objective})",
+  "description": "Descrição do plano com objetivo e divisão",
+  "plan_duration": "ciclo",
+  "split_type": "{split_type}",
+  "cycle_weeks": {cycle_weeks},
+  "training_days_per_week": {days_per_week},
+  "days": [
+    {{
+      "day_name": "sem1_dia1",
+      "day_label": "Semana 1 - Dia 1: Treino A - Peito e Tríceps",
+      "split_label": "A",
+      "week": 1,
+      "exercises": [
+        {{
+          "name": "Supino Reto com Barra",
+          "sets": 4,
+          "reps": 10,
+          "weight": "adequado ao nível",
+          "rest_seconds": 90,
+          "muscle_group": "peito",
+          "tutorial": "Tutorial detalhado...",
+          "video_url": "https://www.youtube.com/watch?v=exemplo"
+        }}
+      ]
+    }}
+  ]
+}}
+
+IMPORTANTE:
+- Retorne APENAS o JSON, sem markdown, sem ```json, sem texto adicional.
+- Os links do YouTube devem ser URLs reais de vídeos tutoriais de exercícios.
+- Adapte a complexidade, volume e carga ao nível ({gen_data.level}).
+- O tutorial deve ser detalhado e instrutivo para o nível do usuário.
+- rest_seconds deve variar: 60s para exercícios leves, 90s para moderados, 120s para compostos pesados.
+- Cada dia DEVE respeitar os grupos musculares definidos para aquela divisão.
+- Use 4-6 exercícios por treino para iniciantes, 5-7 para intermediários, 6-8 para avançados."""
+
+    else:
+        # --- PERIOD-BASED GENERATION (existing flow) ---
+        duration_instructions = {
+            "dia": "Crie um treino para UM DIA ÚNICO. Liste os exercícios em um único bloco.",
+            "semana": "Crie um treino para UMA SEMANA COMPLETA (segunda a sexta, 5 dias). Organize por dia da semana com exercícios diferentes para cada dia, alternando grupos musculares.",
+            "mes": "Crie um plano de treino para UM MÊS (4 semanas). Organize em 4 semanas com progressão de carga/volume. Cada semana deve ter 5 dias de treino.",
+            "ciclo": "Crie um ciclo de treino periodizado (8-12 semanas). Organize em fases: Adaptação (2 semanas), Hipertrofia (4 semanas), Força (3 semanas), Deload (1 semana). Cada fase com treinos específicos."
+        }
+        
+        muscle_groups_text = ""
+        if gen_data.muscle_groups and len(gen_data.muscle_groups) > 0:
+            muscle_groups_text = f"\nGrupos musculares prioritários: {', '.join(gen_data.muscle_groups)}"
+        
+        prompt = f"""Você é um personal trainer certificado. Gere um plano de treino completo em formato JSON.
 
 PARÂMETROS:
 - Objetivo: {gen_data.objective}
@@ -3920,17 +4034,29 @@ IMPORTANTE:
             for ex in day.get("exercises", []):
                 all_exercises.append(ex)
         
+        # Determine plan_duration
+        plan_duration = gen_data.duration
+        if gen_data.generation_mode == "tipo_treino":
+            plan_duration = "ciclo"
+        
         plan_doc = {
             "plan_id": plan_id,
             "user_id": user.user_id,
             "name": plan_data.get("name", f"Treino {gen_data.objective} - {gen_data.level}"),
             "description": plan_data.get("description", ""),
             "exercises": all_exercises,
-            "plan_duration": gen_data.duration,
+            "plan_duration": plan_duration,
             "generated_by_ai": True,
             "days": days,
             "objective": gen_data.objective,
             "level": gen_data.level,
+            "generation_mode": gen_data.generation_mode,
+            "split_type": gen_data.split_type if gen_data.generation_mode == "tipo_treino" else None,
+            "split_config": gen_data.split_config if gen_data.generation_mode == "tipo_treino" else None,
+            "training_days_per_week": gen_data.training_days_per_week if gen_data.generation_mode == "tipo_treino" else None,
+            "cycle_weeks": gen_data.cycle_weeks if gen_data.generation_mode == "tipo_treino" else None,
+            "include_cardio": gen_data.include_cardio if gen_data.generation_mode == "tipo_treino" else False,
+            "cardio_type": gen_data.cardio_type if gen_data.generation_mode == "tipo_treino" and gen_data.include_cardio else None,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
