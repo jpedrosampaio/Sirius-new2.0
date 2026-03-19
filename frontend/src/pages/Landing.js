@@ -7,6 +7,7 @@ import {
   CheckCircle2, ChevronRight, ArrowRight, DollarSign, 
   Calendar, Trophy, Flame, Sparkles
 } from "lucide-react";
+import { SiriusLogo } from "@/components/Sidebar";
 
 function FadeIn({ children, className, delay }) {
   const [visible, setVisible] = useState(false);
@@ -188,7 +189,7 @@ export default function Landing() {
       <nav className={"fixed w-full top-0 z-50 transition-all duration-300 " + (scrolled ? "bg-[#0A0A0A]/90 backdrop-blur-xl border-b border-[#27272A] shadow-lg shadow-black/20" : "bg-transparent")}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            <Shield className="w-8 h-8 text-[#007AFF]" />
+            <SiriusLogo size="w-8 h-8" />
             <span className="font-heading text-2xl bg-gradient-to-r from-[#00F0FF] to-[#007AFF] bg-clip-text text-transparent">SIRIUS</span>
           </div>
           <div className="hidden md:flex items-center space-x-6">
@@ -414,7 +415,7 @@ export default function Landing() {
       <footer className="border-t border-[#1A1A1A] py-10 px-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Shield className="w-6 h-6 text-[#007AFF]" />
+            <SiriusLogo size="w-6 h-6" />
             <span className="font-heading text-lg bg-gradient-to-r from-[#00F0FF] to-[#007AFF] bg-clip-text text-transparent">SIRIUS</span>
           </div>
           <p className="text-xs text-[#3F3F46]">© 2025 Sirius — Discipline is Destiny. Todos os direitos reservados.</p>

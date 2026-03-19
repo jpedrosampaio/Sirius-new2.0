@@ -74,12 +74,12 @@ export default function Chat() {
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
       <div className="flex-1 ml-0 md:ml-64 flex flex-col h-screen">
-        <div className="p-4 md:p-6 border-b border-[#27272A] pt-14 md:pt-6">
+        <div className="p-4 md:p-6 border-b border-[#27272A] pt-[72px] md:pt-6">
           <h1 className="font-heading text-xl md:text-3xl mb-1">ASSISTENTE SIRIUS</h1>
           <p className="text-xs md:text-sm text-[#A1A1AA]">Chat integrado: finanças, estudos, treinos, receitas e mais. Peça algo e ele salva no app!</p>
         </div>
 
-        <div ref={scrollRef} className="flex-1 p-4 md:p-6 overflow-y-auto pb-40 md:pb-28">
+        <div ref={scrollRef} className="flex-1 p-4 md:p-6 overflow-y-auto pb-36 md:pb-28">
           <div className="max-w-4xl mx-auto space-y-4">
             {messages.length === 0 ? (
               <Card className="bg-[#0A0A0A] border-[#27272A] p-6 md:p-8 text-center">
@@ -157,7 +157,7 @@ export default function Chat() {
           </div>
         </div>
 
-        <div className="p-4 md:p-6 border-t border-[#27272A] bg-[#0A0A0A] fixed bottom-16 md:bottom-0 left-0 right-0 md:left-64">
+        <div className="p-3 md:p-6 border-t border-[#27272A] bg-[#0A0A0A]/95 backdrop-blur-lg fixed bottom-[60px] md:bottom-0 left-0 right-0 md:left-64">
           <form onSubmit={handleSend} className="max-w-4xl mx-auto">
             <div className="flex items-center space-x-2 md:space-x-3">
               <Input value={content} onChange={(e) => setContent(e.target.value)} placeholder="Peça uma receita, treino, dica financeira ou qualquer coisa..." className="flex-1 bg-[#121212] border-[#27272A] text-white font-mono text-sm" disabled={loading} />

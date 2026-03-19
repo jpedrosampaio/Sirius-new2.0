@@ -11,41 +11,64 @@ import { Clock } from "lucide-react";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// SVG Logo Component - Aggressive Wolf/Sirius Star
-const SiriusLogo = () => (
-  <svg viewBox="0 0 100 100" className="w-12 h-12">
+// SVG Logo Component - Wolf/Sirius Star
+const SiriusLogo = ({ size = "w-12 h-12" }) => (
+  <svg viewBox="0 0 100 100" className={size}>
     <defs>
-      <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <linearGradient id="sidebarWolfGrad" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#00F0FF" />
         <stop offset="50%" stopColor="#007AFF" />
         <stop offset="100%" stopColor="#00F0FF" />
       </linearGradient>
-      <filter id="glow">
-        <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <filter id="sidebarGlow">
+        <feGaussianBlur stdDeviation="1.5" result="blur"/>
         <feMerge>
-          <feMergeNode in="coloredBlur"/>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <filter id="sidebarStarGlow">
+        <feGaussianBlur stdDeviation="2" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
           <feMergeNode in="SourceGraphic"/>
         </feMerge>
       </filter>
     </defs>
-    {/* Outer ring */}
-    <circle cx="50" cy="50" r="45" fill="none" stroke="url(#logoGradient)" strokeWidth="2" opacity="0.5"/>
-    {/* Inner aggressive star/sirius symbol */}
-    <path 
-      d="M50 5 L58 35 L90 35 L64 55 L73 88 L50 68 L27 88 L36 55 L10 35 L42 35 Z" 
-      fill="url(#logoGradient)" 
-      filter="url(#glow)"
-    />
-    {/* Center circle */}
-    <circle cx="50" cy="50" r="12" fill="#050505"/>
-    <circle cx="50" cy="50" r="8" fill="url(#logoGradient)" opacity="0.8"/>
-    {/* Cross lines for aggressive look */}
-    <line x1="50" y1="20" x2="50" y2="42" stroke="#050505" strokeWidth="3"/>
-    <line x1="50" y1="58" x2="50" y2="80" stroke="#050505" strokeWidth="3"/>
-    <line x1="20" y1="50" x2="42" y2="50" stroke="#050505" strokeWidth="3"/>
-    <line x1="58" y1="50" x2="80" y2="50" stroke="#050505" strokeWidth="3"/>
+    {/* Ears */}
+    <polygon points="31,20 39,41 23,43" fill="url(#sidebarWolfGrad)" opacity="0.9"/>
+    <polygon points="69,20 61,41 77,43" fill="url(#sidebarWolfGrad)" opacity="0.9"/>
+    <polygon points="32,26 38,41 27,42" fill="#050505" opacity="0.5"/>
+    <polygon points="68,26 62,41 73,42" fill="#050505" opacity="0.5"/>
+    {/* Head */}
+    <path d="M50,82 L35,66 L27,51 L28,41 L37,37 L43,43 L50,39 L57,43 L63,37 L72,41 L73,51 L65,66 Z"
+          fill="url(#sidebarWolfGrad)" filter="url(#sidebarGlow)"/>
+    {/* Forehead shadow */}
+    <path d="M50,41 L44,47 L39,51 L43,55 L50,53 L57,55 L61,51 L56,47 Z" fill="#050505" opacity="0.35"/>
+    {/* Eyes */}
+    <ellipse cx="41" cy="53" rx="4.3" ry="2.8" fill="#050505"/>
+    <ellipse cx="59" cy="53" rx="4.3" ry="2.8" fill="#050505"/>
+    <ellipse cx="42" cy="53" rx="2" ry="1.6" fill="#00F0FF" opacity="0.9"/>
+    <ellipse cx="60" cy="53" rx="2" ry="1.6" fill="#00F0FF" opacity="0.9"/>
+    <ellipse cx="42.4" cy="53" rx="0.8" ry="1.2" fill="#050505"/>
+    <ellipse cx="60.4" cy="53" rx="0.8" ry="1.2" fill="#050505"/>
+    {/* Nose */}
+    <path d="M50,63 L48,65 L50,67 L52,65 Z" fill="#050505"/>
+    <line x1="50" y1="67" x2="50" y2="71" stroke="#050505" strokeWidth="0.6"/>
+    <path d="M47,71 Q50,74 53,71" fill="none" stroke="#050505" strokeWidth="0.5"/>
+    {/* Sirius Star */}
+    <polygon points="50,8 51.5,13 56,13 52.5,16 54,21 50,18 46,21 47.5,16 44,13 48.5,13"
+             fill="#00F0FF" filter="url(#sidebarStarGlow)"/>
+    <circle cx="50" cy="14.5" r="1.2" fill="white" opacity="0.7"/>
+    {/* Fur lines */}
+    <line x1="22" y1="55" x2="36" y2="57" stroke="url(#sidebarWolfGrad)" strokeWidth="0.4" opacity="0.3"/>
+    <line x1="21" y1="58" x2="35" y2="59" stroke="url(#sidebarWolfGrad)" strokeWidth="0.4" opacity="0.3"/>
+    <line x1="78" y1="55" x2="64" y2="57" stroke="url(#sidebarWolfGrad)" strokeWidth="0.4" opacity="0.3"/>
+    <line x1="79" y1="58" x2="65" y2="59" stroke="url(#sidebarWolfGrad)" strokeWidth="0.4" opacity="0.3"/>
   </svg>
 );
+
+export { SiriusLogo };
 
 // Brasilia Clock Hook
 function useBrasiliaTime() {
@@ -116,16 +139,8 @@ export default function Sidebar({ user }) {
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 bg-[#0A0A0A] p-2 rounded-sm border border-[#27272A]"
-      >
-        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-
-      <div className={`w-64 bg-[#0A0A0A] border-r border-[#27272A] flex flex-col h-screen fixed left-0 top-0 z-40 transform transition-transform duration-300 ${
-        isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-      }`}>
+      {/* Sidebar - desktop only, no mobile hamburger needed (MobileNav handles it) */}
+      <div className={`w-64 bg-[#0A0A0A] border-r border-[#27272A] flex flex-col h-screen fixed left-0 top-0 z-40 hidden md:flex`}>
         <div className="p-6 border-b border-[#27272A]">
           <div className="flex items-center space-x-3 mb-4">
             <SiriusLogo />
@@ -198,12 +213,6 @@ export default function Sidebar({ user }) {
         </div>
       </div>
 
-      {isOpen && (
-        <div
-          className="md:hidden fixed inset-0 bg-black/50 z-30"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
     </>
   );
 }

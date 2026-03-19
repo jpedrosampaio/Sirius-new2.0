@@ -203,9 +203,9 @@ export default function Habits() {
   return (
     <div className="flex min-h-screen bg-[#050505]">
       <Sidebar user={user} />
-      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8 pt-[72px] md:pt-8">
         <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-8 pt-14 md:pt-0 gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 md:mb-8 md:pt-0 gap-3">
             <div>
               <h1 className="font-heading text-3xl md:text-4xl mb-1 md:mb-2" data-testid="habits-title">HÁBITOS</h1>
               <p className="text-[#A1A1AA] text-sm">Construa sequências inquebráveis</p>

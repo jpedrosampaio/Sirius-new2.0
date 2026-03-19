@@ -1320,7 +1320,7 @@ export default function Studies() {
   return (
     <div className="min-h-screen bg-[#050505] text-white flex">
       <Sidebar user={user} />
-      <main className="flex-1 md:ml-64 p-3 md:p-6 pb-24 md:pb-8 pt-14 md:pt-6">
+      <main className="flex-1 md:ml-64 p-3 md:p-6 pb-24 md:pb-8 pt-[72px] md:pt-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
           <div>

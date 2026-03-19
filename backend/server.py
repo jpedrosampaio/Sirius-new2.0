@@ -10441,12 +10441,30 @@ Responda SOMENTE com JSON:
                 ai_response_text = "Não consegui criar a meta. Tente: 'Minha meta é economizar 5000 até dezembro'"
 
         else:
-            # General / finance_general / study - enriched with FULL app context
+            # General / finance_general / study - enriched with DEEP FULL app context
             current_month = datetime.now(timezone.utc).strftime("%Y-%m")
             today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            now_utc = datetime.now(timezone.utc)
+            week_ago_str = (now_utc - timedelta(days=7)).strftime("%Y-%m-%d")
+            last_month = (now_utc.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
             
-            # === FINANCE CONTEXT ===
-            fin_trans = await db.transactions.find({"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}}, {"_id": 0}).to_list(50)
+            # === USER PROFILE CONTEXT ===
+            user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "name": 1, "email": 1, "birth_date": 1, "bio": 1, "xp": 1, "rank": 1, "health_condition": 1, "created_at": 1})
+            user_name = user_doc.get("name", "Usuário") if user_doc else "Usuário"
+            user_rank = user_doc.get("rank", "Recruta") if user_doc else "Recruta"
+            user_xp = user_doc.get("xp", 0) if user_doc else 0
+            user_bio = user_doc.get("bio", "") if user_doc else ""
+            user_birth = user_doc.get("birth_date", "") if user_doc else ""
+            health_cond = user_doc.get("health_condition", "") if user_doc else ""
+            user_age = ""
+            if user_birth:
+                try:
+                    bd = datetime.fromisoformat(user_birth)
+                    user_age = str(now_utc.year - bd.year - ((now_utc.month, now_utc.day) < (bd.month, bd.day)))
+                except: pass
+            
+            # === FINANCE CONTEXT (current + last month for trends) ===
+            fin_trans = await db.transactions.find({"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}}, {"_id": 0}).to_list(100)
             total_in = sum(t['amount'] for t in fin_trans if t['type'] == 'income')
             total_out = sum(t['amount'] for t in fin_trans if t['type'] == 'expense')
             expense_cats = {}
@@ -10454,106 +10472,294 @@ Responda SOMENTE com JSON:
                 if t['type'] == 'expense':
                     expense_cats[t['category']] = expense_cats.get(t['category'], 0) + t['amount']
             top_expenses = sorted(expense_cats.items(), key=lambda x: x[1], reverse=True)[:5]
+            
+            # Last month comparison
+            last_month_trans = await db.transactions.find({"user_id": user.user_id, "date": {"$regex": f"^{last_month}"}}, {"_id": 0}).to_list(100)
+            lm_in = sum(t['amount'] for t in last_month_trans if t['type'] == 'income')
+            lm_out = sum(t['amount'] for t in last_month_trans if t['type'] == 'expense')
+            
             budgets = await db.budgets.find({"user_id": user.user_id, "month": current_month}, {"_id": 0}).to_list(20)
             budget_alerts = []
+            budget_status = []
             for b in budgets:
                 spent = expense_cats.get(b.get("category", ""), 0)
-                if b.get("amount", 0) > 0 and spent / b["amount"] >= 0.8:
+                if b.get("amount", 0) > 0:
                     pct = int(spent / b["amount"] * 100)
-                    budget_alerts.append(f"{b['category']}: {pct}% usado (R$ {spent:.0f}/{b['amount']:.0f})")
+                    budget_status.append(f"{b['category']}: R$ {spent:.0f}/{b['amount']:.0f} ({pct}%)")
+                    if pct >= 80:
+                        budget_alerts.append(f"{b['category']}: {pct}% usado (R$ {spent:.0f}/{b['amount']:.0f})")
             
-            # === WORKOUT CONTEXT ===
+            # Credit cards
+            credit_cards = await db.credit_cards.find({"user_id": user.user_id}, {"_id": 0, "name": 1, "limit": 1, "current_balance": 1}).to_list(10)
+            cc_info = []
+            for cc in credit_cards:
+                cc_info.append(f"{cc.get('name','Cartão')}: R$ {cc.get('current_balance',0):.0f}/{cc.get('limit',0):.0f}")
+            
+            # Projections for next month
+            next_month_dt = (now_utc.replace(day=28) + timedelta(days=4)).replace(day=1)
+            next_month_str = next_month_dt.strftime("%Y-%m")
+            projections = await db.projections.find({"user_id": user.user_id, "month": next_month_str}, {"_id": 0, "description": 1, "amount": 1, "type": 1}).to_list(20)
+            proj_total = sum(p.get("amount", 0) for p in projections)
+            
+            # === GOALS CONTEXT ===
+            goals = await db.goals.find({"user_id": user.user_id, "completed": False}, {"_id": 0, "title": 1, "category": 1, "target_date": 1, "target_value": 1, "current_value": 1}).to_list(10)
+            completed_goals = await db.goals.count_documents({"user_id": user.user_id, "completed": True})
+            goals_text = []
+            for g in goals:
+                prog = ""
+                if g.get("target_value") and g.get("current_value") is not None:
+                    pct = int((g["current_value"] / g["target_value"]) * 100) if g["target_value"] > 0 else 0
+                    prog = f" ({pct}% concluído)"
+                deadline = f" - prazo: {g['target_date']}" if g.get("target_date") else ""
+                goals_text.append(f"• {g['title']} [{g.get('category','geral')}]{prog}{deadline}")
+            
+            # === WORKOUT CONTEXT (deep) ===
             recent_workouts = await db.workout_logs.find(
-                {"user_id": user.user_id}, {"_id": 0, "date": 1, "duration_minutes": 1, "calories": 1}
-            ).sort("created_at", -1).to_list(10)
+                {"user_id": user.user_id}, {"_id": 0, "date": 1, "duration_minutes": 1, "calories": 1, "exercises": 1}
+            ).sort("created_at", -1).to_list(15)
             last_workout_date = recent_workouts[0].get("date", "nunca") if recent_workouts else "nunca"
-            workouts_this_week = len([w for w in recent_workouts if w.get("date", "") >= (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")])
+            workouts_this_week = len([w for w in recent_workouts if w.get("date", "") >= week_ago_str])
+            workouts_this_month = len([w for w in recent_workouts if w.get("date", "").startswith(current_month)])
             total_workout_min = sum(w.get("duration_minutes", 0) for w in recent_workouts[:7])
-            workout_plans = await db.workout_plans.find({"user_id": user.user_id}, {"_id": 0, "name": 1}).to_list(5)
-            user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "health_condition": 1})
-            health_cond = user_doc.get("health_condition", "") if user_doc else ""
+            total_workout_cals = sum(w.get("calories", 0) for w in recent_workouts[:7])
             
-            # === NUTRITION CONTEXT ===
+            workout_plans = await db.workout_plans.find({"user_id": user.user_id}, {"_id": 0, "name": 1, "objective": 1, "level": 1}).to_list(5)
+            
+            # Recent sessions with feedback
+            recent_sessions = await db.workout_sessions.find(
+                {"user_id": user.user_id, "status": "completed"}, {"_id": 0, "difficulty": 1, "feeling": 1, "notes": 1, "completed_at": 1}
+            ).sort("completed_at", -1).to_list(5)
+            avg_difficulty = sum(s.get("difficulty", 3) for s in recent_sessions) / len(recent_sessions) if recent_sessions else 0
+            feelings = [s.get("feeling", "") for s in recent_sessions if s.get("feeling")]
+            
+            # === NUTRITION CONTEXT (deep) ===
             today_meals = await db.meals.find({"user_id": user.user_id, "date": today_str}, {"_id": 0}).to_list(20)
             today_cals = sum(m.get("calories", 0) for m in today_meals)
             today_protein = sum(m.get("protein", 0) for m in today_meals)
+            today_carbs = sum(m.get("carbs", 0) for m in today_meals)
+            today_fat = sum(m.get("fat", 0) for m in today_meals)
             nutrition_goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
             cal_goal = nutrition_goals.get("calories", 2000) if nutrition_goals else 2000
+            protein_goal = nutrition_goals.get("protein", 150) if nutrition_goals else 150
             water_today = await db.water_logs.find_one({"user_id": user.user_id, "date": today_str}, {"_id": 0})
             water_ml = water_today.get("total_ml", 0) if water_today else 0
+            water_goal = nutrition_goals.get("water_ml", 2500) if nutrition_goals else 2500
             
-            # === STUDY CONTEXT ===
+            # Week average nutrition
+            week_meals = await db.meals.find({"user_id": user.user_id, "date": {"$gte": week_ago_str}}, {"_id": 0, "calories": 1, "date": 1}).to_list(100)
+            meals_by_day = {}
+            for m in week_meals:
+                d = m.get("date", "")
+                meals_by_day[d] = meals_by_day.get(d, 0) + m.get("calories", 0)
+            avg_cals_week = int(sum(meals_by_day.values()) / max(len(meals_by_day), 1)) if meals_by_day else 0
+            
+            # Active diets
+            active_diets = await db.diets.find({"user_id": user.user_id, "active": True}, {"_id": 0, "name": 1, "type": 1}).to_list(5)
+            
+            # === STUDY CONTEXT (deep) ===
             study_streak_doc = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
             study_streak = study_streak_doc.get("current_streak", 0) if study_streak_doc else 0
+            longest_study_streak = study_streak_doc.get("longest_streak", 0) if study_streak_doc else 0
             focus_today = await db.focus_sessions.find({"user_id": user.user_id, "date": today_str}, {"_id": 0}).to_list(20)
             focus_min_today = sum(f.get("duration_minutes", 0) for f in focus_today)
             
-            # === HABITS & TASKS CONTEXT ===
+            # Study programs
+            study_programs = await db.study_programs.find({"user_id": user.user_id, "status": "active"}, {"_id": 0, "name": 1, "source_type": 1, "target_date": 1}).to_list(5)
+            
+            # Flashcards due for review
+            flashcard_decks = await db.flashcard_decks.find({"user_id": user.user_id}, {"_id": 0, "name": 1, "cards": 1}).to_list(10)
+            total_cards = 0
+            cards_due = 0
+            for deck in flashcard_decks:
+                for card in deck.get("cards", []):
+                    total_cards += 1
+                    nr = card.get("next_review", "")
+                    if nr and nr <= today_str:
+                        cards_due += 1
+            
+            # Study notebooks with recent activity
+            notebooks = await db.notebooks.find({"user_id": user.user_id}, {"_id": 0, "name": 1, "study_time_minutes": 1, "total_questions": 1, "correct_questions": 1}).to_list(20)
+            top_subjects = sorted(notebooks, key=lambda n: n.get("study_time_minutes", 0), reverse=True)[:5]
+            
+            # Question stats
+            total_q = sum(n.get("total_questions", 0) for n in notebooks)
+            correct_q = sum(n.get("correct_questions", 0) for n in notebooks)
+            accuracy = int(correct_q / total_q * 100) if total_q > 0 else 0
+            
+            # === HABITS & TASKS CONTEXT (deep) ===
             habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0, "name": 1, "frequency": 1}).to_list(20)
             habits_completed = await db.habits.count_documents({"user_id": user.user_id, f"completions.{today_str}": True})
             tasks_total = await db.tasks.count_documents({"user_id": user.user_id})
             tasks_completed = await db.task_instances.count_documents({"user_id": user.user_id, "date": today_str, "completed": True})
             
-            # === BUILD CONTEXT ===
-            context_parts = [
-                f"💰 FINANÇAS ({current_month}): Receitas R$ {total_in:.2f} | Despesas R$ {total_out:.2f} | Saldo R$ {total_in - total_out:.2f}",
-            ]
+            # Pending tasks
+            pending_tasks = await db.tasks.find({"user_id": user.user_id}, {"_id": 0, "title": 1, "priority": 1}).to_list(10)
+            high_priority_tasks = [t for t in pending_tasks if t.get("priority") == "high"]
+            
+            # Global streaks
+            streaks_doc = await db.global_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+            global_streak = streaks_doc.get("current_streak", 0) if streaks_doc else 0
+            
+            # === BUILD COMPREHENSIVE CONTEXT ===
+            context_parts = []
+            
+            # User profile
+            profile_line = f"👤 PERFIL: {user_name}"
+            if user_age: profile_line += f", {user_age} anos"
+            profile_line += f" | Rank: {user_rank} ({user_xp} XP) | Streak global: {global_streak} dias"
+            if user_bio: profile_line += f"\n   Bio: {user_bio}"
+            if health_cond: profile_line += f"\n   Condição de saúde: {health_cond}"
+            context_parts.append(profile_line)
+            
+            # Finance
+            fin_line = f"💰 FINANÇAS ({current_month}): Receitas R$ {total_in:.2f} | Despesas R$ {total_out:.2f} | Saldo R$ {total_in - total_out:.2f}"
+            if lm_out > 0:
+                change_pct = int(((total_out - lm_out) / lm_out) * 100) if lm_out > 0 else 0
+                trend = "↑" if change_pct > 0 else "↓" if change_pct < 0 else "="
+                fin_line += f"\n   Vs mês anterior: {trend} {abs(change_pct)}% nas despesas (era R$ {lm_out:.0f})"
+            context_parts.append(fin_line)
             if top_expenses:
                 context_parts.append(f"   Top gastos: {', '.join(f'{c}: R$ {v:.0f}' for c,v in top_expenses)}")
+            if budget_status:
+                context_parts.append(f"   Orçamentos: {' | '.join(budget_status)}")
             if budget_alerts:
-                context_parts.append(f"   ⚠️ Alertas de orçamento: {'; '.join(budget_alerts)}")
+                context_parts.append(f"   ⚠️ Alertas: {'; '.join(budget_alerts)}")
+            if cc_info:
+                context_parts.append(f"   💳 Cartões: {' | '.join(cc_info)}")
+            if projections:
+                context_parts.append(f"   📊 Projeções próximo mês: R$ {proj_total:.0f} em {len(projections)} itens")
             
-            context_parts.append(f"🏋️ TREINOS: Último treino: {last_workout_date} | Esta semana: {workouts_this_week} treinos | {total_workout_min}min total")
+            # Workouts
+            wk_line = f"🏋️ TREINOS: Último treino: {last_workout_date} | Esta semana: {workouts_this_week} treinos ({total_workout_min}min, ~{total_workout_cals} kcal)"
+            context_parts.append(wk_line)
             if workout_plans:
-                context_parts.append(f"   Fichas: {', '.join(p.get('name','')[:30] for p in workout_plans)}")
-            if health_cond:
-                context_parts.append(f"   Condição de saúde: {health_cond}")
+                plan_names = ', '.join(p.get('name','')[:25] + " (" + p.get('objective','') + ")" for p in workout_plans)
+                context_parts.append(f"   Fichas: {plan_names}")
+            if recent_sessions:
+                context_parts.append(f"   Dificuldade média: {avg_difficulty:.1f}/5 | Sentimentos recentes: {', '.join(feelings[:3])}")
             
-            context_parts.append(f"🍽️ NUTRIÇÃO HOJE: {today_cals}/{cal_goal} calorias | {today_protein}g proteína | {len(today_meals)} refeições | Água: {water_ml}ml")
-            context_parts.append(f"📚 ESTUDOS: Streak {study_streak} dias | Foco hoje: {focus_min_today}min")
+            # Nutrition
+            nut_line = f"🍽️ NUTRIÇÃO HOJE: {today_cals}/{cal_goal} cal | {today_protein}g/{protein_goal}g prot | {today_carbs}g carbs | {today_fat}g gordura | {len(today_meals)} refeições"
+            context_parts.append(nut_line)
+            context_parts.append(f"   💧 Água: {water_ml}/{water_goal}ml | Média semanal: {avg_cals_week} cal/dia")
+            if active_diets:
+                context_parts.append(f"   Dietas ativas: {', '.join(d.get('name','') for d in active_diets)}")
+            
+            # Studies
+            st_line = f"📚 ESTUDOS: Streak {study_streak} dias (recorde: {longest_study_streak}) | Foco hoje: {focus_min_today}min"
+            context_parts.append(st_line)
+            if study_programs:
+                progs = ', '.join(f"{p.get('name','')[:30]}" + (f" (prova: {p['target_date']})" if p.get('target_date') else "") for p in study_programs)
+                context_parts.append(f"   Programas ativos: {progs}")
+            if total_q > 0:
+                context_parts.append(f"   Questões: {total_q} total, {accuracy}% acerto")
+            if cards_due > 0:
+                context_parts.append(f"   ⚠️ {cards_due} flashcards pendentes para revisão hoje!")
+            if top_subjects:
+                subj_names = ', '.join(n.get('name','')[:20] + " (" + str(n.get('study_time_minutes',0)) + "min)" for n in top_subjects[:3])
+                context_parts.append(f"   Top matérias: {subj_names}")
+            
+            # Tasks & Habits
             context_parts.append(f"✅ TAREFAS: {tasks_completed}/{tasks_total} completadas hoje | Hábitos: {habits_completed}/{len(habits)} hoje")
+            if high_priority_tasks:
+                context_parts.append(f"   🔴 Tarefas urgentes: {', '.join(t.get('title','')[:25] for t in high_priority_tasks[:3])}")
+            
+            # Goals
+            if goals:
+                context_parts.append(f"🎯 METAS ATIVAS ({len(goals)}, {completed_goals} concluídas):")
+                for gt in goals_text[:5]:
+                    context_parts.append(f"   {gt}")
             
             full_context = "\n".join(context_parts)
             
-            # Build proactive suggestions based on data
+            # Build INTELLIGENT proactive suggestions based on comprehensive data
             proactive_hints = []
+            
+            # Workout proactivity
             if last_workout_date != "nunca":
-                days_since = (datetime.now(timezone.utc) - datetime.fromisoformat(last_workout_date.replace("Z", "+00:00") if "T" in last_workout_date else last_workout_date + "T00:00:00+00:00")).days
-                if days_since >= 3:
-                    proactive_hints.append(f"O usuário não treina há {days_since} dias - sugira gentilmente retomar")
-            if today_cals > 0 and today_cals < cal_goal * 0.3 and datetime.now(timezone.utc).hour >= 14:
+                try:
+                    days_since = (now_utc - datetime.fromisoformat(last_workout_date.replace("Z", "+00:00") if "T" in last_workout_date else last_workout_date + "T00:00:00+00:00")).days
+                    if days_since >= 3:
+                        proactive_hints.append(f"O usuário não treina há {days_since} dias - sugira gentilmente retomar")
+                    if days_since == 0 and avg_difficulty >= 4:
+                        proactive_hints.append("Treinou hoje com dificuldade alta - sugira descanso ou alongamento")
+                except: pass
+            elif workouts_this_month == 0:
+                proactive_hints.append("Nenhum treino este mês - motive a começar uma rotina de exercícios")
+            
+            # Nutrition proactivity
+            if today_cals > 0 and today_cals < cal_goal * 0.3 and now_utc.hour >= 14:
                 proactive_hints.append(f"Já passa das 14h e consumiu apenas {today_cals} de {cal_goal} calorias - pergunte se está se alimentando bem")
-            if water_ml < 1000 and datetime.now(timezone.utc).hour >= 12:
-                proactive_hints.append(f"Apenas {water_ml}ml de água até agora - lembre de beber água")
+            if today_protein > 0 and today_protein < protein_goal * 0.3 and now_utc.hour >= 16:
+                proactive_hints.append(f"Proteína baixa hoje ({today_protein}g de {protein_goal}g) - sugira alimentos ricos em proteína")
+            if water_ml < water_goal * 0.4 and now_utc.hour >= 12:
+                proactive_hints.append(f"Apenas {water_ml}ml de {water_goal}ml de água - lembre de se hidratar")
+            
+            # Finance proactivity
             if budget_alerts:
-                proactive_hints.append("Alguns orçamentos estão próximos do limite - mencione se relevante")
+                proactive_hints.append("Alguns orçamentos estão próximos do limite - alerte se relevante")
+            if total_out > lm_out * 1.2 and lm_out > 0:
+                proactive_hints.append(f"Gastos {int(((total_out-lm_out)/lm_out)*100)}% acima do mês anterior - sugira revisão de gastos")
+            
+            # Study proactivity
+            if cards_due > 0:
+                proactive_hints.append(f"{cards_due} flashcards pendentes para revisão - motivar a estudar")
+            if study_streak > 0 and focus_min_today == 0 and now_utc.hour >= 18:
+                proactive_hints.append(f"Streak de {study_streak} dias em risco! Não estudou hoje ainda")
+            if study_programs:
+                for sp in study_programs:
+                    if sp.get("target_date"):
+                        try:
+                            td = datetime.fromisoformat(sp["target_date"])
+                            days_left = (td - now_utc).days
+                            if 0 < days_left <= 30:
+                                proactive_hints.append(f"Prova de '{sp['name'][:30]}' em {days_left} dias - motivar intensificação dos estudos")
+                        except: pass
+            
+            # Goal proactivity
+            for g in goals:
+                if g.get("target_date"):
+                    try:
+                        td = datetime.fromisoformat(g["target_date"])
+                        days_left = (td - now_utc).days
+                        if 0 < days_left <= 14:
+                            proactive_hints.append(f"Meta '{g['title'][:25]}' vence em {days_left} dias")
+                    except: pass
+            
+            # Tasks proactivity
+            if high_priority_tasks and tasks_completed == 0 and now_utc.hour >= 15:
+                proactive_hints.append(f"{len(high_priority_tasks)} tarefas urgentes pendentes e nenhuma concluída hoje")
             
             proactive_text = ""
             if proactive_hints:
-                proactive_text = "\n\nSugestões proativas (mencione naturalmente se relevante à conversa):\n- " + "\n- ".join(proactive_hints)
+                proactive_text = "\n\nSugestões proativas (mencione NATURALMENTE se relevante à conversa, não liste tudo de uma vez):\n- " + "\n- ".join(proactive_hints[:6])
             
-            system = f"""Você é o SIRIUS, assistente pessoal completo e integrado. Você conhece TUDO sobre o usuário e pode dar sugestões verdadeiramente personalizadas.
+            system = f"""Você é o SIRIUS 🐺, assistente pessoal integrado com visão TOTAL da vida do usuário. Você é como um mentor estratégico que conhece finanças, treinos, nutrição, estudos, metas e rotina do usuário.
+
+PERSONALIDADE: Direto, inteligente, motivador mas realista. Como um lobo líder da matilha — leal, estratégico e focado em resultados. Use o nome do usuário quando relevante.
 
 CAPACIDADES:
-🏋️ TREINOS: Criar fichas de treino, sugerir exercícios, planos de musculação
-🍽️ ALIMENTAÇÃO: Receitas, planos alimentares, dicas nutricionais  
-📚 ESTUDOS: Cronogramas, planos de estudo para concursos, dicas
-💰 FINANÇAS: Registrar receitas/despesas, relatórios, dicas de economia
-✅ TAREFAS: Criar tarefas, lembretes, organização
-🎯 METAS: Definir e acompanhar objetivos
+🏋️ TREINOS: Criar fichas, sugerir exercícios, analisar desempenho, ajustar planos
+🍽️ ALIMENTAÇÃO: Receitas, dietas, análise nutricional, planos alimentares personalizados
+📚 ESTUDOS: Cronogramas, revisão espaçada, dicas para concursos, análise de desempenho
+💰 FINANÇAS: Registrar transações, analisar gastos, projeções, dicas de economia
+✅ TAREFAS: Criar e organizar tarefas, sugerir prioridades
+🎯 METAS: Definir objetivos, acompanhar progresso, sugerir ações
 
 CONTEXTO COMPLETO DO USUÁRIO:
 {full_context}
 {proactive_text}
 
-INSTRUÇÕES:
-- Use o contexto para dar respostas personalizadas e específicas
-- Se o usuário perguntar algo genérico, aproveite para dar insights baseados nos dados dele
-- Se quiser registrar transação: 'Gastei 50 no mercado' ou 'Recebi 3000 de salário'
-- Se quiser criar tarefa: 'Criar tarefa: ...'
-- Se quiser criar meta: 'Minha meta é ...'
-- Responda em português, de forma objetiva, amigável e útil
-- Seja proativo: se notar algo nos dados que merece atenção, mencione"""
+INSTRUÇÕES CRÍTICAS:
+- SEMPRE use o contexto real do usuário para personalizar respostas
+- Faça CONEXÕES INTELIGENTES entre módulos (ex: "Você treinou pesado hoje, que tal aumentar a proteína no jantar?")
+- Se o usuário perguntar algo genérico, dê insights baseados nos dados dele
+- Seja proativo: se notar padrões ou alertas, mencione naturalmente (mas não despeje tudo de uma vez)
+- Para registrar transação: 'Gastei 50 no mercado' ou 'Recebi 3000 de salário'
+- Para criar tarefa: 'Criar tarefa: ...'
+- Para criar meta: 'Minha meta é ...'
+- Responda em português, de forma objetiva, personalizada e motivadora
+- Se perceber que o usuário está negligenciando alguma área, sugira de forma empática"""
             response = await call_llm(content, f"general_chat_{user.user_id}", system)
             ai_response_text = response
 

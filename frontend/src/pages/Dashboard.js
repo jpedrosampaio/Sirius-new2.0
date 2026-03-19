@@ -153,7 +153,7 @@ export default function Dashboard() {
     <div className="flex min-h-screen bg-[#050505]">
       <Onboarding />
       <Sidebar user={user} />
-      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pb-24 md:pb-8">
+      <div className="flex-1 ml-0 md:ml-64 p-4 md:p-8 pt-[72px] md:pt-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 md:mb-8 pt-12 md:pt-0">
             <div className="flex items-center justify-between flex-wrap gap-4">

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Shield, Mail, Lock, User, Chrome } from "lucide-react";
+import { SiriusLogo } from "@/components/Sidebar";
 import axios from "axios";
 import { toast } from "sonner";
 import { setToken } from "@/lib/api";
@@ -48,7 +49,7 @@ export default function Register() {
     <div className="min-h-screen bg-[#050505] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Shield className="w-16 h-16 text-[#007AFF] mx-auto mb-4" />
+          <SiriusLogo size="w-16 h-16 mx-auto mb-4" />
           <h1 className="font-heading text-4xl mb-2">SIRIUS</h1>
           <p className="text-[#A1A1AA]">Junte-se ao sistema de comando</p>
         </div>
