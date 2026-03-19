@@ -100,8 +100,12 @@ export default function Nutrition() {
     protein: 0,
     carbs: 0,
     fat: 0,
-    quantity: 1
+    fiber: 0,
+    quantity: 1,
+    weight: ""
   });
+  const [estimatingFood, setEstimatingFood] = useState(false);
+  const [foodEstimated, setFoodEstimated] = useState(false);
 
   // Goals form
   const [goalsForm, setGoalsForm] = useState({

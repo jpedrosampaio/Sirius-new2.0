@@ -5604,6 +5604,88 @@ async def delete_meal(request: Request, meal_id: str, session_token: Optional[st
         raise HTTPException(status_code=404, detail="Meal not found")
     return {"message": "Meal deleted"}
 
+@api_router.post("/nutrition/estimate-food")
+async def estimate_food_nutrition(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Use AI to estimate nutritional values for a food item"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    food_name = body.get("food_name", "").strip()
+    quantity = body.get("quantity", "").strip()
+    
+    if not food_name:
+        raise HTTPException(status_code=400, detail="Nome do alimento é obrigatório")
+    if not quantity:
+        raise HTTPException(status_code=400, detail="Quantidade/peso é obrigatório")
+    
+    prompt = f"""Analise o seguinte alimento e estime os valores nutricionais com precisão.
+
+Alimento: {food_name}
+Quantidade/Peso: {quantity}
+
+Retorne APENAS um JSON válido (sem markdown, sem explicação) com esta estrutura exata:
+{{
+  "food_name": "nome do alimento formatado",
+  "quantity": "{quantity}",
+  "calories": número inteiro (kcal),
+  "protein": número decimal (gramas),
+  "carbs": número decimal (gramas),
+  "fat": número decimal (gramas),
+  "fiber": número decimal (gramas),
+  "sodium": número decimal (mg),
+  "sugar": número decimal (gramas)
+}}
+
+Use valores baseados em tabelas nutricionais brasileiras (TACO) quando possível.
+Considere a quantidade informada para calcular os valores proporcionais.
+Se for um prato composto (ex: "prato feito"), estime os ingredientes típicos.
+Retorne SOMENTE o JSON, nada mais."""
+
+    system_msg = "Você é um nutricionista especialista em tabelas nutricionais brasileiras. Retorne apenas JSON válido sem markdown."
+    
+    try:
+        response = await call_llm(prompt, f"food_estimate_{user.user_id}_{uuid.uuid4().hex[:6]}", system_msg)
+        
+        # Parse JSON from response
+        json_str = response.strip()
+        if json_str.startswith("```"):
+            json_str = json_str.split("\n", 1)[1] if "\n" in json_str else json_str[3:]
+            json_str = json_str.rsplit("```", 1)[0]
+        json_str = json_str.strip()
+        
+        nutrition_data = json.loads(json_str)
+        
+        return {
+            "success": True,
+            "food_name": nutrition_data.get("food_name", food_name),
+            "quantity": nutrition_data.get("quantity", quantity),
+            "calories": int(nutrition_data.get("calories", 0)),
+            "protein": round(float(nutrition_data.get("protein", 0)), 1),
+            "carbs": round(float(nutrition_data.get("carbs", 0)), 1),
+            "fat": round(float(nutrition_data.get("fat", 0)), 1),
+            "fiber": round(float(nutrition_data.get("fiber", 0)), 1),
+            "sodium": round(float(nutrition_data.get("sodium", 0)), 1),
+            "sugar": round(float(nutrition_data.get("sugar", 0)), 1)
+        }
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Não foi possível estimar os nutrientes. Tente novamente ou insira manualmente.",
+            "food_name": food_name,
+            "quantity": quantity,
+            "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "sodium": 0, "sugar": 0
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Erro ao estimar nutrientes: {str(e)}",
+            "food_name": food_name,
+            "quantity": quantity,
+            "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "sodium": 0, "sugar": 0
+        }
+
+
 @api_router.get("/nutrition/goals")
 async def get_nutrition_goals(request: Request, session_token: Optional[str] = Cookie(None)):
     """Get user's nutrition goals"""
