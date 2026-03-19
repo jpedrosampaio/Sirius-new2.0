@@ -263,6 +263,7 @@ class WorkoutPlanGenerate(BaseModel):
     cycle_weeks: Optional[int] = None  # 1-12
     include_cardio: bool = False
     cardio_type: Optional[str] = None  # "corrida", "bike", "HIIT", "caminhada", "natacao", "pular_corda"
+    health_condition: Optional[str] = None  # user health conditions/injuries to consider
 
 class WorkoutSession(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -653,7 +654,7 @@ async def update_profile(request: Request, data: dict, session_token: Optional[s
     user = await get_current_user(authorization=auth_header, session_token=session_token)
     
     update_fields = {}
-    for field in ["name", "birth_date", "bio"]:
+    for field in ["name", "birth_date", "bio", "health_condition"]:
         if field in data:
             update_fields[field] = data[field]
     
@@ -3836,6 +3837,24 @@ async def generate_workout_plan(request: Request, gen_data: WorkoutPlanGenerate,
     if not gemini_client:
         raise HTTPException(status_code=503, detail="Serviço de IA indisponível")
     
+    # Build health condition text if provided
+    health_text = ""
+    if gen_data.health_condition and gen_data.health_condition.strip():
+        health_text = f"""
+CONDIÇÃO DE SAÚDE / LESÕES DO USUÁRIO:
+{gen_data.health_condition.strip()}
+
+ATENÇÃO: Adapte TODOS os exercícios considerando esta condição. Evite exercícios que possam agravar a lesão/condição.
+Inclua exercícios de fortalecimento e reabilitação quando apropriado.
+Para cada exercício, adicione um campo "health_notes" com observações específicas sobre como adaptar o exercício à condição do usuário.
+Se algum exercício for contraindicado, substitua por uma alternativa segura e explique por quê.
+"""
+        # Save health condition to user profile for future use
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$set": {"health_condition": gen_data.health_condition.strip()}}
+        )
+    
     # ===== BUILD PROMPT BASED ON GENERATION MODE =====
     if gen_data.generation_mode == "tipo_treino" and gen_data.split_config:
         # --- SPLIT-BASED GENERATION (Tipo de Treino) ---
@@ -3884,7 +3903,7 @@ PARÂMETROS:
 - Tipo de divisão: {split_type} ({len(split_labels)} divisões)
 - Dias de treino por semana: {days_per_week}
 - Duração do ciclo: {cycle_weeks} semana(s)
-
+{health_text}
 DIVISÕES DEFINIDAS PELO USUÁRIO:
 {split_text}
 
@@ -3960,7 +3979,7 @@ PARÂMETROS:
 - Objetivo: {gen_data.objective}
 - Nível: {gen_data.level}
 - Duração: {gen_data.duration}{muscle_groups_text}
-
+{health_text}
 {duration_instructions.get(gen_data.duration, duration_instructions['dia'])}
 
 Para CADA exercício, inclua obrigatoriamente:
@@ -4057,6 +4076,7 @@ IMPORTANTE:
             "cycle_weeks": gen_data.cycle_weeks if gen_data.generation_mode == "tipo_treino" else None,
             "include_cardio": gen_data.include_cardio if gen_data.generation_mode == "tipo_treino" else False,
             "cardio_type": gen_data.cardio_type if gen_data.generation_mode == "tipo_treino" and gen_data.include_cardio else None,
+            "health_condition": gen_data.health_condition if gen_data.health_condition else None,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -5949,6 +5969,193 @@ async def delete_recipe(request: Request, recipe_id: str, session_token: Optiona
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return {"message": "Recipe deleted"}
+
+# ========== IMPORT MEAL PLAN ==========
+
+@api_router.post("/nutrition/import-plan")
+async def import_meal_plan(
+    request: Request,
+    file: UploadFile = File(...),
+    session_token: Optional[str] = Cookie(None)
+):
+    """Import a meal plan from PDF or image file using AI extraction"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    if not gemini_client:
+        raise HTTPException(status_code=503, detail="Serviço de IA indisponível")
+    
+    allowed_types = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Formato não suportado. Envie PDF, JPG, PNG ou WEBP.")
+    
+    import tempfile, os
+    content = await file.read()
+    suffix = ".pdf" if "pdf" in file.content_type else ".jpg" if "jpeg" in file.content_type else ".png" if "png" in file.content_type else ".webp"
+    
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        
+        uploaded_file = gemini_client.files.upload(file=tmp_path)
+        
+        mime = file.content_type
+        prompt = """Analise este plano alimentar/dieta e extraia TODAS as refeições em formato JSON estruturado.
+
+Para cada refeição, extraia:
+- meal_type: "breakfast" (café da manhã), "lunch" (almoço), "dinner" (jantar), "snack" (lanche)
+- name: nome da refeição
+- time: horário sugerido (ex: "07:00")
+- foods: lista de alimentos com quantidade
+- calories: calorias estimadas (número)
+- protein: proteína em gramas (número)
+- carbs: carboidratos em gramas (número)
+- fat: gordura em gramas (número)
+- fiber: fibra em gramas (número, opcional)
+- notes: observações adicionais
+
+Também extraia informações gerais do plano:
+- plan_name: nome do plano
+- goal: objetivo (emagrecimento, hipertrofia, saúde, etc.)
+- daily_calories: meta calórica diária total
+- daily_protein: meta de proteína diária
+- daily_carbs: meta de carboidratos diária
+- daily_fat: meta de gordura diária
+- restrictions: restrições alimentares mencionadas
+- tips: dicas do nutricionista
+
+Responda APENAS com JSON válido neste formato:
+{
+  "plan_name": "Nome do Plano",
+  "goal": "objetivo",
+  "daily_calories": 2000,
+  "daily_protein": 150,
+  "daily_carbs": 200,
+  "daily_fat": 70,
+  "restrictions": ["restrição 1"],
+  "tips": ["dica 1", "dica 2"],
+  "meals": [
+    {
+      "meal_type": "breakfast",
+      "name": "Café da Manhã",
+      "time": "07:00",
+      "foods": [{"name": "Ovos mexidos", "quantity": "3 unidades", "calories": 210}],
+      "calories": 350,
+      "protein": 25,
+      "carbs": 30,
+      "fat": 15,
+      "notes": ""
+    }
+  ]
+}
+
+IMPORTANTE: Retorne APENAS o JSON, sem markdown, sem ```json."""
+
+        response = gemini_client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_uri(file_uri=uploaded_file.uri, mime_type=mime),
+                prompt
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction="Você é um nutricionista especialista. Extraia com precisão todas as informações do plano alimentar."
+            )
+        )
+        
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3].strip()
+        if response_text.startswith("json"):
+            response_text = response_text[4:].strip()
+        
+        plan_data = json.loads(response_text)
+        
+        # Save the imported plan
+        plan_id = f"mealplan_{uuid.uuid4().hex[:12]}"
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        
+        plan_doc = {
+            "plan_id": plan_id,
+            "user_id": user.user_id,
+            "name": plan_data.get("plan_name", "Plano Importado"),
+            "goal": plan_data.get("goal", ""),
+            "daily_calories": plan_data.get("daily_calories", 0),
+            "daily_protein": plan_data.get("daily_protein", 0),
+            "daily_carbs": plan_data.get("daily_carbs", 0),
+            "daily_fat": plan_data.get("daily_fat", 0),
+            "restrictions": plan_data.get("restrictions", []),
+            "tips": plan_data.get("tips", []),
+            "meals": plan_data.get("meals", []),
+            "source": "imported",
+            "source_filename": file.filename,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.meal_plans.insert_one(plan_doc)
+        plan_doc.pop('_id', None)
+        
+        # Also create individual meal entries for today
+        meals_created = 0
+        for meal in plan_data.get("meals", []):
+            meal_id = f"meal_{uuid.uuid4().hex[:12]}"
+            meal_doc = {
+                "meal_id": meal_id,
+                "user_id": user.user_id,
+                "date": today,
+                "meal_type": meal.get("meal_type", "snack"),
+                "name": meal.get("name", "Refeição importada"),
+                "foods": meal.get("foods", []),
+                "calories": meal.get("calories", 0),
+                "protein": meal.get("protein", 0),
+                "carbs": meal.get("carbs", 0),
+                "fat": meal.get("fat", 0),
+                "fiber": meal.get("fiber", 0),
+                "notes": meal.get("notes", ""),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.meals.insert_one(meal_doc)
+            meals_created += 1
+        
+        # Update nutrition goals if plan has daily targets
+        if plan_data.get("daily_calories"):
+            await db.nutrition_goals.update_one(
+                {"user_id": user.user_id},
+                {"$set": {
+                    "calories": plan_data.get("daily_calories", 2000),
+                    "protein": plan_data.get("daily_protein", 150),
+                    "carbs": plan_data.get("daily_carbs", 200),
+                    "fat": plan_data.get("daily_fat", 70),
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }},
+                upsert=True
+            )
+        
+        # Award XP
+        xp_earned = 10
+        new_xp = user.xp + xp_earned
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        
+        os.unlink(tmp_path)
+        
+        return {
+            "success": True,
+            "plan": plan_doc,
+            "meals_created": meals_created,
+            "goals_updated": bool(plan_data.get("daily_calories")),
+            "xp_earned": xp_earned
+        }
+        
+    except json.JSONDecodeError as e:
+        os.unlink(tmp_path)
+        raise HTTPException(status_code=422, detail=f"Não foi possível extrair dados do arquivo. Tente com outro formato. Erro: {str(e)}")
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        logging.error(f"Import meal plan failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao importar plano: {str(e)}")
 
 # ========== STUDY ENDPOINTS ==========
 
@@ -9922,8 +10129,8 @@ async def general_integrated_chat(request: Request, data: dict, session_token: O
     # Task/Goal keywords
     task_kw = ['tarefa', 'task', 'adicionar tarefa', 'criar tarefa', 'nova tarefa', 'to-do', 'todo',
                'lembrete', 'reminder', 'preciso fazer', 'tenho que fazer', 'não esquecer']
-    goal_kw = ['meta', 'objetivo', 'goal', 'criar meta', 'definir meta', 'quero alcançar',
-               'minha meta', 'definir objetivo']
+    goal_kw = ['criar meta', 'definir meta', 'quero alcançar', 'nova meta',
+               'minha meta é', 'minha meta e', 'definir objetivo', 'novo objetivo', 'criar objetivo']
     
     import re
     amount_pattern = r'(?:R\$\s*)?(\d+(?:[.,]\d{1,2})?)'
@@ -10234,14 +10441,100 @@ Responda SOMENTE com JSON:
                 ai_response_text = "Não consegui criar a meta. Tente: 'Minha meta é economizar 5000 até dezembro'"
 
         else:
-            # General / finance_general / study - enriched with app context
+            # General / finance_general / study - enriched with FULL app context
             current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            
+            # === FINANCE CONTEXT ===
             fin_trans = await db.transactions.find({"user_id": user.user_id, "date": {"$regex": f"^{current_month}"}}, {"_id": 0}).to_list(50)
             total_in = sum(t['amount'] for t in fin_trans if t['type'] == 'income')
             total_out = sum(t['amount'] for t in fin_trans if t['type'] == 'expense')
+            expense_cats = {}
+            for t in fin_trans:
+                if t['type'] == 'expense':
+                    expense_cats[t['category']] = expense_cats.get(t['category'], 0) + t['amount']
+            top_expenses = sorted(expense_cats.items(), key=lambda x: x[1], reverse=True)[:5]
+            budgets = await db.budgets.find({"user_id": user.user_id, "month": current_month}, {"_id": 0}).to_list(20)
+            budget_alerts = []
+            for b in budgets:
+                spent = expense_cats.get(b.get("category", ""), 0)
+                if b.get("amount", 0) > 0 and spent / b["amount"] >= 0.8:
+                    pct = int(spent / b["amount"] * 100)
+                    budget_alerts.append(f"{b['category']}: {pct}% usado (R$ {spent:.0f}/{b['amount']:.0f})")
             
-            system = f"""Você é o SIRIUS, assistente pessoal completo e integrado. Você pode ajudar com TODAS as áreas:
+            # === WORKOUT CONTEXT ===
+            recent_workouts = await db.workout_logs.find(
+                {"user_id": user.user_id}, {"_id": 0, "date": 1, "duration_minutes": 1, "calories": 1}
+            ).sort("created_at", -1).to_list(10)
+            last_workout_date = recent_workouts[0].get("date", "nunca") if recent_workouts else "nunca"
+            workouts_this_week = len([w for w in recent_workouts if w.get("date", "") >= (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d")])
+            total_workout_min = sum(w.get("duration_minutes", 0) for w in recent_workouts[:7])
+            workout_plans = await db.workout_plans.find({"user_id": user.user_id}, {"_id": 0, "name": 1}).to_list(5)
+            user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "health_condition": 1})
+            health_cond = user_doc.get("health_condition", "") if user_doc else ""
+            
+            # === NUTRITION CONTEXT ===
+            today_meals = await db.meals.find({"user_id": user.user_id, "date": today_str}, {"_id": 0}).to_list(20)
+            today_cals = sum(m.get("calories", 0) for m in today_meals)
+            today_protein = sum(m.get("protein", 0) for m in today_meals)
+            nutrition_goals = await db.nutrition_goals.find_one({"user_id": user.user_id}, {"_id": 0})
+            cal_goal = nutrition_goals.get("calories", 2000) if nutrition_goals else 2000
+            water_today = await db.water_logs.find_one({"user_id": user.user_id, "date": today_str}, {"_id": 0})
+            water_ml = water_today.get("total_ml", 0) if water_today else 0
+            
+            # === STUDY CONTEXT ===
+            study_streak_doc = await db.study_streaks.find_one({"user_id": user.user_id}, {"_id": 0})
+            study_streak = study_streak_doc.get("current_streak", 0) if study_streak_doc else 0
+            focus_today = await db.focus_sessions.find({"user_id": user.user_id, "date": today_str}, {"_id": 0}).to_list(20)
+            focus_min_today = sum(f.get("duration_minutes", 0) for f in focus_today)
+            
+            # === HABITS & TASKS CONTEXT ===
+            habits = await db.habits.find({"user_id": user.user_id}, {"_id": 0, "name": 1, "frequency": 1}).to_list(20)
+            habits_completed = await db.habits.count_documents({"user_id": user.user_id, f"completions.{today_str}": True})
+            tasks_total = await db.tasks.count_documents({"user_id": user.user_id})
+            tasks_completed = await db.task_instances.count_documents({"user_id": user.user_id, "date": today_str, "completed": True})
+            
+            # === BUILD CONTEXT ===
+            context_parts = [
+                f"💰 FINANÇAS ({current_month}): Receitas R$ {total_in:.2f} | Despesas R$ {total_out:.2f} | Saldo R$ {total_in - total_out:.2f}",
+            ]
+            if top_expenses:
+                context_parts.append(f"   Top gastos: {', '.join(f'{c}: R$ {v:.0f}' for c,v in top_expenses)}")
+            if budget_alerts:
+                context_parts.append(f"   ⚠️ Alertas de orçamento: {'; '.join(budget_alerts)}")
+            
+            context_parts.append(f"🏋️ TREINOS: Último treino: {last_workout_date} | Esta semana: {workouts_this_week} treinos | {total_workout_min}min total")
+            if workout_plans:
+                context_parts.append(f"   Fichas: {', '.join(p.get('name','')[:30] for p in workout_plans)}")
+            if health_cond:
+                context_parts.append(f"   Condição de saúde: {health_cond}")
+            
+            context_parts.append(f"🍽️ NUTRIÇÃO HOJE: {today_cals}/{cal_goal} calorias | {today_protein}g proteína | {len(today_meals)} refeições | Água: {water_ml}ml")
+            context_parts.append(f"📚 ESTUDOS: Streak {study_streak} dias | Foco hoje: {focus_min_today}min")
+            context_parts.append(f"✅ TAREFAS: {tasks_completed}/{tasks_total} completadas hoje | Hábitos: {habits_completed}/{len(habits)} hoje")
+            
+            full_context = "\n".join(context_parts)
+            
+            # Build proactive suggestions based on data
+            proactive_hints = []
+            if last_workout_date != "nunca":
+                days_since = (datetime.now(timezone.utc) - datetime.fromisoformat(last_workout_date.replace("Z", "+00:00") if "T" in last_workout_date else last_workout_date + "T00:00:00+00:00")).days
+                if days_since >= 3:
+                    proactive_hints.append(f"O usuário não treina há {days_since} dias - sugira gentilmente retomar")
+            if today_cals > 0 and today_cals < cal_goal * 0.3 and datetime.now(timezone.utc).hour >= 14:
+                proactive_hints.append(f"Já passa das 14h e consumiu apenas {today_cals} de {cal_goal} calorias - pergunte se está se alimentando bem")
+            if water_ml < 1000 and datetime.now(timezone.utc).hour >= 12:
+                proactive_hints.append(f"Apenas {water_ml}ml de água até agora - lembre de beber água")
+            if budget_alerts:
+                proactive_hints.append("Alguns orçamentos estão próximos do limite - mencione se relevante")
+            
+            proactive_text = ""
+            if proactive_hints:
+                proactive_text = "\n\nSugestões proativas (mencione naturalmente se relevante à conversa):\n- " + "\n- ".join(proactive_hints)
+            
+            system = f"""Você é o SIRIUS, assistente pessoal completo e integrado. Você conhece TUDO sobre o usuário e pode dar sugestões verdadeiramente personalizadas.
 
+CAPACIDADES:
 🏋️ TREINOS: Criar fichas de treino, sugerir exercícios, planos de musculação
 🍽️ ALIMENTAÇÃO: Receitas, planos alimentares, dicas nutricionais  
 📚 ESTUDOS: Cronogramas, planos de estudo para concursos, dicas
@@ -10249,14 +10542,18 @@ Responda SOMENTE com JSON:
 ✅ TAREFAS: Criar tarefas, lembretes, organização
 🎯 METAS: Definir e acompanhar objetivos
 
-Contexto rápido do usuário:
-- Finanças do mês: Receitas R$ {total_in:.2f} | Despesas R$ {total_out:.2f} | Saldo R$ {total_in - total_out:.2f}
+CONTEXTO COMPLETO DO USUÁRIO:
+{full_context}
+{proactive_text}
 
-Se o usuário quiser registrar uma transação financeira, instrua-o a dizer algo como 'Gastei 50 no mercado' ou 'Recebi 3000 de salário'.
-Se quiser criar tarefa: 'Criar tarefa: ...'
-Se quiser criar meta: 'Minha meta é ...'
-
-Responda em português, de forma objetiva, amigável e útil. Use emojis moderadamente."""
+INSTRUÇÕES:
+- Use o contexto para dar respostas personalizadas e específicas
+- Se o usuário perguntar algo genérico, aproveite para dar insights baseados nos dados dele
+- Se quiser registrar transação: 'Gastei 50 no mercado' ou 'Recebi 3000 de salário'
+- Se quiser criar tarefa: 'Criar tarefa: ...'
+- Se quiser criar meta: 'Minha meta é ...'
+- Responda em português, de forma objetiva, amigável e útil
+- Seja proativo: se notar algo nos dados que merece atenção, mencione"""
             response = await call_llm(content, f"general_chat_{user.user_id}", system)
             ai_response_text = response
 

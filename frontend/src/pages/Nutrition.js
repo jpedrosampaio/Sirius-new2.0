@@ -18,7 +18,7 @@ import {
   Flame, Drumstick, Wheat, Droplet, Settings, Sparkles,
   UtensilsCrossed, Clock, ChevronLeft, ChevronRight, Loader2,
   Coffee, Sun, Moon, Cookie, TrendingUp, BarChart3,
-  Calculator, ShoppingCart, Heart, Activity, CheckSquare, Scale, ListChecks
+  Calculator, ShoppingCart, Heart, Activity, CheckSquare, Scale, ListChecks, Upload
 } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 
@@ -72,6 +72,11 @@ export default function Nutrition() {
   });
   const [selectedMealPlan, setSelectedMealPlan] = useState(null);
   const [shoppingLists, setShoppingLists] = useState([]);
+
+  // Import Meal Plan
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importingPlan, setImportingPlan] = useState(false);
+  const [importFile, setImportFile] = useState(null);
 
   // Health Calculator
   const [calcForm, setCalcForm] = useState({
@@ -341,6 +346,34 @@ export default function Nutrition() {
       ...prev,
       restrictions: prev.restrictions.includes(r) ? prev.restrictions.filter(x => x !== r) : [...prev.restrictions, r]
     }));
+  };
+
+  const handleImportMealPlan = async () => {
+    if (!importFile) {
+      toast.error("Selecione um arquivo");
+      return;
+    }
+    setImportingPlan(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+      const res = await axios.post(`${API}/nutrition/import-plan`, formData, {
+        withCredentials: true,
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000
+      });
+      if (res.data.success) {
+        toast.success(`Plano importado! ${res.data.meals_created} refeições criadas. +${res.data.xp_earned} XP`);
+        setShowImportDialog(false);
+        setImportFile(null);
+        fetchData();
+        fetchMealPlans();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao importar plano alimentar");
+    } finally {
+      setImportingPlan(false);
+    }
   };
 
   if (loading && !user) {
@@ -1024,12 +1057,73 @@ export default function Nutrition() {
           <TabsContent value="meal_plans" className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold">Planos Alimentares com IA</h2>
-              <Dialog open={showMealPlanDialog} onOpenChange={setShowMealPlanDialog}>
-                <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] text-white">
-                    <Sparkles className="w-4 h-4 mr-2" /> Gerar Plano com IA
-                  </Button>
-                </DialogTrigger>
+              <div className="flex gap-2">
+                {/* Import Plan Dialog */}
+                <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="import-meal-plan-btn" variant="outline" className="border-[#27272A] text-white hover:bg-[#1A1A2E]">
+                      <Upload className="w-4 h-4 mr-2" /> Importar Plano
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5 text-[#00F0FF]" /> Importar Plano Alimentar</DialogTitle>
+                      <DialogDescription className="text-[#A1A1AA]">Envie um PDF ou foto do seu plano alimentar. A IA vai extrair as refeições automaticamente.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                      <div 
+                        data-testid="import-drop-zone"
+                        onClick={() => document.getElementById('import-file-input').click()}
+                        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                          importFile ? 'border-[#00F0FF] bg-[#00F0FF]/5' : 'border-[#27272A] hover:border-[#A855F7]'
+                        }`}
+                      >
+                        <input
+                          id="import-file-input"
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,.webp"
+                          className="hidden"
+                          onChange={(e) => setImportFile(e.target.files[0] || null)}
+                        />
+                        {importFile ? (
+                          <div>
+                            <CheckSquare className="w-8 h-8 mx-auto text-[#00F0FF] mb-2" />
+                            <p className="text-sm font-medium text-[#00F0FF]">{importFile.name}</p>
+                            <p className="text-xs text-[#71717A] mt-1">{(importFile.size / 1024).toFixed(0)} KB</p>
+                            <button onClick={(e) => { e.stopPropagation(); setImportFile(null); }} className="text-xs text-red-400 mt-2 hover:underline">Remover</button>
+                          </div>
+                        ) : (
+                          <div>
+                            <Upload className="w-8 h-8 mx-auto text-[#71717A] mb-2" />
+                            <p className="text-sm text-[#A1A1AA]">Clique para selecionar</p>
+                            <p className="text-xs text-[#52525B] mt-1">PDF, JPG, PNG ou WEBP</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-[#121212] rounded-lg p-3 border border-[#27272A]">
+                        <p className="text-xs text-[#A1A1AA]">
+                          <Sparkles className="w-3 h-3 inline mr-1 text-[#A855F7]" />
+                          A IA vai extrair: refeições, calorias, macros, horários e dicas do nutricionista. As refeições serão adicionadas ao dia de hoje.
+                        </p>
+                      </div>
+                      <Button 
+                        data-testid="import-plan-submit-btn"
+                        onClick={handleImportMealPlan} 
+                        disabled={!importFile || importingPlan} 
+                        className="w-full bg-gradient-to-r from-[#00F0FF] to-[#007AFF] text-white"
+                      >
+                        {importingPlan ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importando...</> : <><Upload className="w-4 h-4 mr-2" /> Importar Plano</>}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                {/* Generate Plan Dialog */}
+                <Dialog open={showMealPlanDialog} onOpenChange={setShowMealPlanDialog}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-gradient-to-r from-[#A855F7] to-[#00F0FF] text-white">
+                      <Sparkles className="w-4 h-4 mr-2" /> Gerar Plano com IA
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="bg-[#0A0A0A] border-[#27272A] text-white max-w-lg max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2"><Sparkles className="w-5 h-5 text-[#A855F7]" /> Gerar Plano Alimentar</DialogTitle>
@@ -1089,6 +1183,7 @@ export default function Nutrition() {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
             </div>
             {mealPlans.length === 0 && !selectedMealPlan ? (
               <Card className="bg-[#0A0A0A] border-[#27272A]"><CardContent className="text-center py-12"><Apple className="w-12 h-12 mx-auto text-[#A1A1AA] mb-4" /><h3 className="text-lg font-medium mb-2">Nenhum plano alimentar</h3><p className="text-[#A1A1AA]">Gere um plano personalizado com IA</p></CardContent></Card>

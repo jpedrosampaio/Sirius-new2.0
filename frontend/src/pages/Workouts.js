@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle, Zap, Video, BookOpenCheck, Star, Pause, RotateCcw, Square, ExternalLink, Clock, Trophy, ChevronRight } from "lucide-react";
+import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle, Zap, Video, BookOpenCheck, Star, Pause, RotateCcw, Square, ExternalLink, Clock, Trophy, ChevronRight, Heart, ShieldCheck } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
@@ -84,7 +84,8 @@ export default function Workouts() {
     training_days_per_week: 5,
     cycle_weeks: 4,
     include_cardio: false,
-    cardio_type: "corrida"
+    cardio_type: "corrida",
+    health_condition: ""
   });
 
   const SPLIT_OPTIONS = [
@@ -242,6 +243,10 @@ export default function Workouts() {
         axios.get(`${API}/motivational-quote`, { withCredentials: true })
       ]);
       setUser(userRes.data);
+      // Pre-fill health condition from user profile
+      if (userRes.data.health_condition) {
+        setAiGenForm(prev => ({ ...prev, health_condition: userRes.data.health_condition }));
+      }
       setWorkouts(Array.isArray(workoutsRes.data) ? workoutsRes.data : []);
       setPlans(Array.isArray(plansRes.data) ? plansRes.data : []);
       setStats(statsRes.data || null);
@@ -633,6 +638,7 @@ export default function Workouts() {
         objective: aiGenForm.objective,
         level: aiGenForm.level,
         generation_mode: aiGenMode,
+        health_condition: aiGenForm.health_condition || null,
       };
       
       if (aiGenMode === "tipo_treino") {
@@ -1217,6 +1223,27 @@ export default function Workouts() {
                           </SelectContent>
                         </Select>
                       </div>
+                    </div>
+
+                    {/* Health Condition Field */}
+                    <div>
+                      <Label className="text-xs uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Heart className="w-3.5 h-3.5 text-red-400" /> Condição de Saúde / Lesões
+                        <span className="text-[#52525B] font-normal normal-case">(opcional)</span>
+                      </Label>
+                      <textarea
+                        data-testid="health-condition-input"
+                        value={aiGenForm.health_condition}
+                        onChange={(e) => setAiGenForm({...aiGenForm, health_condition: e.target.value})}
+                        placeholder="Ex: Luxação anterior no ombro esquerdo, preciso de fortalecimento. Dor no joelho direito..."
+                        className="w-full bg-[#121212] border border-[#27272A] rounded-lg p-3 text-sm text-white placeholder:text-[#52525B] focus:border-[#A855F7] focus:ring-1 focus:ring-[#A855F7] outline-none resize-none transition-colors"
+                        rows={2}
+                      />
+                      {aiGenForm.health_condition && (
+                        <p className="text-[10px] text-[#A855F7] mt-1 flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" /> A IA adaptará os exercícios à sua condição
+                        </p>
+                      )}
                     </div>
 
                     {/* ============ MODE: TIPO DE TREINO (SPLIT) ============ */}
