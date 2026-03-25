@@ -3915,9 +3915,7 @@ PADRÃO DE ROTAÇÃO SEMANAL (exemplo de 1 semana):
 Gere o plano para {cycle_weeks} semana(s), com {days_per_week} dias de treino por semana.
 Total de dias: {days_per_week * cycle_weeks}.
 
-Para CADA exercício, inclua obrigatoriamente:
-1. Tutorial detalhado de execução (posição inicial, movimento, respiração, erros comuns)
-2. Link de vídeo do YouTube com tutorial real do exercício (use links reais e populares de canais conhecidos como Leandro Twin, Renato Cariani, ATHLEAN-X, Jeff Nippard, etc.)
+Para CADA exercício, inclua um tutorial descritivo de execução (posição inicial, movimento, respiração, erros comuns) em 2-3 frases.
 
 Se o ciclo for maior que 1 semana, aplique progressão de carga/volume entre as semanas.
 
@@ -3943,8 +3941,7 @@ FORMATO JSON OBRIGATÓRIO:
           "weight": "adequado ao nível",
           "rest_seconds": 90,
           "muscle_group": "peito",
-          "tutorial": "Tutorial detalhado...",
-          "video_url": "https://www.youtube.com/watch?v=exemplo"
+          "tutorial": "Deite no banco plano, pés firmes no chão. Segure a barra com pegada um pouco maior que os ombros. Desça controladamente até o peito e empurre para cima. Inspire ao descer, expire ao subir."
         }}
       ]
     }}
@@ -3953,9 +3950,8 @@ FORMATO JSON OBRIGATÓRIO:
 
 IMPORTANTE:
 - Retorne APENAS o JSON, sem markdown, sem ```json, sem texto adicional.
-- Os links do YouTube devem ser URLs reais de vídeos tutoriais de exercícios.
+- Seja CONCISO nos tutoriais (2-3 frases por exercício).
 - Adapte a complexidade, volume e carga ao nível ({gen_data.level}).
-- O tutorial deve ser detalhado e instrutivo para o nível do usuário.
 - rest_seconds deve variar: 60s para exercícios leves, 90s para moderados, 120s para compostos pesados.
 - Cada dia DEVE respeitar os grupos musculares definidos para aquela divisão.
 - Use 4-6 exercícios por treino para iniciantes, 5-7 para intermediários, 6-8 para avançados."""
@@ -3982,9 +3978,7 @@ PARÂMETROS:
 {health_text}
 {duration_instructions.get(gen_data.duration, duration_instructions['dia'])}
 
-Para CADA exercício, inclua obrigatoriamente:
-1. Tutorial detalhado de execução (posição inicial, movimento, respiração, erros comuns)
-2. Link de vídeo do YouTube com tutorial real do exercício (use links reais e populares de canais conhecidos de fitness como Leandro Twin, Renato Cariani, ATHLEAN-X, Jeff Nippard, etc.)
+Para CADA exercício, inclua um tutorial descritivo de execução (posição inicial, movimento, respiração, erros comuns) em 2-3 frases.
 
 FORMATO JSON OBRIGATÓRIO:
 {{
@@ -4003,8 +3997,7 @@ FORMATO JSON OBRIGATÓRIO:
           "weight": "adequado ao nível",
           "rest_seconds": 90,
           "muscle_group": "peito",
-          "tutorial": "Deite-se no banco plano com os pés firmes no chão. Segure a barra com as mãos um pouco mais largas que a largura dos ombros. Desça a barra controladamente até tocar levemente o peito, na linha dos mamilos. Empurre a barra para cima até estender os braços completamente. Inspire ao descer e expire ao subir. Erros comuns: arquear excessivamente as costas, não descer completamente, subir rápido demais.",
-          "video_url": "https://www.youtube.com/watch?v=exemplo"
+          "tutorial": "Deite no banco plano, pés firmes no chão. Segure a barra com pegada um pouco maior que os ombros. Desça controladamente até o peito e empurre para cima. Inspire ao descer, expire ao subir."
         }}
       ]
     }}
@@ -4018,31 +4011,78 @@ FORMATO JSON OBRIGATÓRIO:
 
 IMPORTANTE: 
 - Retorne APENAS o JSON, sem markdown, sem ```json, sem texto adicional.
-- Os links do YouTube devem ser URLs reais de vídeos tutoriais de exercícios.
+- Seja CONCISO nos tutoriais (2-3 frases por exercício).
 - Adapte a complexidade, volume e carga ao nível ({gen_data.level}).
-- O tutorial deve ser detalhado e instrutivo para o nível do usuário.
 - rest_seconds deve variar: 60s para exercícios leves, 90s para moderados, 120s para compostos pesados."""
 
-    try:
-        response = gemini_client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction="Você é um personal trainer profissional certificado. Sempre responda em JSON válido. Forneça tutoriais detalhados e links de YouTube reais para cada exercício."
+    # Helper to clean and parse JSON from AI response
+    def _clean_and_parse_json(text: str) -> dict:
+        """Robustly clean and parse JSON from AI response text"""
+        import re
+        cleaned = text.strip()
+        # Remove markdown code blocks
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:].strip()
+        # Remove any trailing text after the last }
+        last_brace = cleaned.rfind("}")
+        if last_brace != -1 and last_brace < len(cleaned) - 1:
+            cleaned = cleaned[:last_brace + 1]
+        # Try to find JSON object if there's leading text
+        first_brace = cleaned.find("{")
+        if first_brace > 0:
+            cleaned = cleaned[first_brace:]
+        # Fix common JSON issues: trailing commas before } or ]
+        cleaned = re.sub(r',\s*}', '}', cleaned)
+        cleaned = re.sub(r',\s*]', ']', cleaned)
+        return json.loads(cleaned)
+
+    # Try with primary model, then fallback
+    models_to_try = [GEMINI_MODEL, GEMINI_FALLBACK_MODEL]
+    last_error = None
+    plan_data = None
+    
+    for model_name in models_to_try:
+        try:
+            logging.info(f"Generating workout plan with model: {model_name}")
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction="Você é um personal trainer profissional certificado. Sempre responda SOMENTE em JSON válido, sem nenhum texto adicional.",
+                    max_output_tokens=65536,
+                    temperature=0.7
+                )
             )
-        )
-        
-        response_text = response.text.strip()
-        # Clean up response - remove markdown code blocks if present
-        if response_text.startswith("```"):
-            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3].strip()
-        if response_text.startswith("json"):
-            response_text = response_text[4:].strip()
             
-        plan_data = json.loads(response_text)
-        
+            response_text = response.text
+            if not response_text or not response_text.strip():
+                logging.warning(f"Empty response from model {model_name}")
+                last_error = "Resposta vazia da IA"
+                continue
+            
+            plan_data = _clean_and_parse_json(response_text)
+            logging.info(f"Successfully parsed workout plan from {model_name}")
+            break  # Success, exit retry loop
+            
+        except json.JSONDecodeError as e:
+            logging.error(f"JSON parse error with model {model_name}: {e}")
+            logging.error(f"Response text length: {len(response_text) if response_text else 0}")
+            logging.error(f"Response text (first 500 chars): {response_text[:500] if response_text else 'N/A'}")
+            last_error = f"Erro ao processar resposta do modelo {model_name}"
+            continue
+        except Exception as e:
+            logging.error(f"Workout generation failed with model {model_name}: {e}")
+            last_error = str(e)
+            continue
+    
+    if plan_data is None:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar treino: {last_error}. Tente novamente.")
+    
+    try:
         # Create the plan document
         plan_id = f"plan_{uuid.uuid4().hex[:12]}"
         
@@ -4099,12 +4139,9 @@ IMPORTANTE:
             "new_rank": new_rank
         }
         
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse AI workout response: {e}")
-        raise HTTPException(status_code=500, detail="Erro ao processar resposta da IA. Tente novamente.")
     except Exception as e:
-        logging.error(f"Workout generation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro ao gerar treino: {str(e)[:100]}")
+        logging.error(f"Failed to save workout plan: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar treino: {str(e)[:100]}")
 
 
 # ========== WORKOUT SESSION ENDPOINTS ==========

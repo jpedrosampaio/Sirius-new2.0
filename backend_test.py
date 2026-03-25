@@ -6,7 +6,7 @@ import sys
 from datetime import datetime
 
 # Configuration from review request  
-BASE_URL = "https://ai-mentor-wolf.preview.emergentagent.com/api"
+BASE_URL = "https://ai-workout-fix.preview.emergentagent.com/api"
 LOGIN_EMAIL = "testworkout@test.com"
 LOGIN_PASSWORD = "Test123!"
 

@@ -1384,7 +1384,7 @@ export default function Workouts() {
                             <li>• <span className="text-white font-medium">{aiGenForm.training_days_per_week}</span> dias por semana durante <span className="text-white font-medium">{aiGenForm.cycle_weeks}</span> semana{aiGenForm.cycle_weeks > 1 ? 's' : ''}</li>
                             <li>• Total: <span className="text-white font-medium">{aiGenForm.training_days_per_week * aiGenForm.cycle_weeks}</span> sessões de treino</li>
                             {aiGenForm.include_cardio && <li>• Cardio intercalado: <span className="text-[#00F0FF] font-medium">{CARDIO_TYPES.find(c => c.value === aiGenForm.cardio_type)?.label || aiGenForm.cardio_type}</span></li>}
-                            <li>• Tutorial detalhado + vídeos do YouTube por exercício</li>
+                            <li>• Tutorial descritivo por exercício</li>
                             <li>• Progressão de carga entre semanas</li>
                           </ul>
                         </div>
