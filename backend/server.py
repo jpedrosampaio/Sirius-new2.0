@@ -3884,8 +3884,9 @@ Se algum exercício for contraindicado, substitua por uma alternativa segura e e
             cardio_display = cardio_labels.get(cardio_name, cardio_name)
             cardio_text = f"""
 Inclua também um treino de cardio como uma das "splits":
-- Adicione um item extra no array "splits" com split_label: "Cardio", muscle_group: "cardio", cardio_type: "{cardio_name}".
-- O cardio deve ter 4-5 etapas (aquecimento, blocos de intensidade, desaquecimento) com nome, duracao, e dicas.
+- Adicione um item extra no array "splits" com split_label: "Cardio", split_name: "{cardio_display}".
+- O cardio DEVE usar o mesmo formato "exercises" com campos: name, sets (1), reps ("30min"), rest_seconds (0), muscle_group ("cardio"), tutorial.
+- Exemplo de exercises para cardio: [{{"name": "Aquecimento leve", "sets": 1, "reps": "5min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Caminhe em ritmo leve para aquecer."}}, {{"name": "{cardio_display} moderado", "sets": 1, "reps": "20min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Mantenha ritmo constante, respiração controlada."}}]
 """
 
         prompt = f"""Você é um personal trainer certificado. Gere APENAS os treinos BASE de cada divisão ({split_type}) em formato JSON compacto.
