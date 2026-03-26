@@ -85,7 +85,7 @@ export default function Workouts() {
     cycle_weeks: 4,
     include_cardio: false,
     cardio_type: "corrida",
-    cardio_mode: "pos_treino",
+    cardio_mode: "hibrido",
     health_condition: ""
   });
 
@@ -1381,9 +1381,8 @@ export default function Workouts() {
                                 <Label className="text-xs uppercase tracking-wider mb-2 block">Modo de Cardio</Label>
                                 <div className="grid grid-cols-1 gap-2">
                                   {[
-                                    { value: "pos_treino", label: "Pós-Treino", desc: "Cardio após a musculação no mesmo dia", icon: "🏃" },
-                                    { value: "alternado", label: "Alternado", desc: "1 dia musculação, 1 dia cardio", icon: "🔄" },
-                                    { value: "hibrido", label: "Híbrido", desc: "Força + resistência combinados no mesmo treino (circuito)", icon: "⚡" }
+                                    { value: "hibrido", label: "Híbrido", desc: "Musculação + Cardio no mesmo dia (cardio ao final do treino)", icon: "💪" },
+                                    { value: "hibrido_alternado", label: "Híbrido Alternado", desc: "1 dia musculação, 1 dia cardio (variando intensidade) + dia de descanso", icon: "🔄" }
                                   ].map(mode => (
                                     <button
                                       key={mode.value}
@@ -1435,7 +1434,7 @@ export default function Workouts() {
                             <li>• <span className="text-white font-medium">{aiGenForm.training_days_per_week}</span> dias por semana durante <span className="text-white font-medium">{aiGenForm.cycle_weeks}</span> semana{aiGenForm.cycle_weeks > 1 ? 's' : ''}</li>
                             <li>• Total: <span className="text-white font-medium">{aiGenForm.training_days_per_week * aiGenForm.cycle_weeks}</span> sessões de treino</li>
                             {aiGenForm.include_cardio && <li>• Cardio: <span className="text-[#00F0FF] font-medium">{
-                              aiGenForm.cardio_mode === "pos_treino" ? "Pós-treino" : aiGenForm.cardio_mode === "alternado" ? "Alternado" : "Híbrido"
+                              aiGenForm.cardio_mode === "hibrido" ? "Híbrido (mesmo dia)" : "Híbrido Alternado (dias alternados)"
                             }</span> ({CARDIO_TYPES.find(c => c.value === aiGenForm.cardio_type)?.label || aiGenForm.cardio_type})</li>}
                             <li>• Tutorial descritivo por exercício</li>
                             <li>• Progressão de carga entre semanas</li>

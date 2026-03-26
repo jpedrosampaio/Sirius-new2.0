@@ -263,7 +263,7 @@ class WorkoutPlanGenerate(BaseModel):
     cycle_weeks: Optional[int] = None  # 1-12
     include_cardio: bool = False
     cardio_type: Optional[str] = None  # "corrida", "bike", "HIIT", "caminhada", "natacao", "pular_corda"
-    cardio_mode: Optional[str] = None  # "pos_treino", "alternado", "hibrido"
+    cardio_mode: Optional[str] = None  # "hibrido", "hibrido_alternado"
     health_condition: Optional[str] = None  # user health conditions/injuries to consider
 
 class WorkoutSession(BaseModel):
@@ -3883,32 +3883,30 @@ Se algum exercício for contraindicado, substitua por uma alternativa segura e e
                 "eliptico": "Elíptico", "remo": "Remo"
             }
             cardio_display = cardio_labels.get(cardio_name, cardio_name)
-            cardio_mode = gen_data.cardio_mode or "pos_treino"
+            cardio_mode = gen_data.cardio_mode or "hibrido"
             
-            if cardio_mode == "pos_treino":
+            if cardio_mode == "hibrido":
                 cardio_text = f"""
-CARDIO PÓS-TREINO ({cardio_display}):
+TREINO HÍBRIDO (Musculação + Cardio no mesmo dia):
 - NÃO crie split separada de cardio.
 - Em CADA split de musculação, adicione 2-3 exercícios de cardio ({cardio_display}) ao FINAL da lista de exercícios.
 - Estes exercícios finais devem ter muscle_group: "cardio" e seguir o formato padrão.
-- Exemplo: {{"name": "{cardio_display} pós-treino", "sets": 1, "reps": "15-20min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Realize após finalizar a musculação. Intensidade moderada."}}
+- Varie a intensidade do cardio entre os dias: em um split use cardio de alta intensidade (tiros, HIIT), em outro use cardio de baixa/moderada intensidade (zona 2, ritmo constante).
+- Exemplo alta intensidade: {{"name": "{cardio_display} - Tiros (HIIT)", "sets": 1, "reps": "15-20min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Alterne 30seg de alta intensidade com 60seg de recuperação. Total 15-20 minutos."}}
+- Exemplo baixa intensidade: {{"name": "{cardio_display} - Zona 2 (moderado)", "sets": 1, "reps": "20-30min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Mantenha ritmo constante e confortável, onde consiga conversar. Frequência cardíaca em zona 2."}}
+- O ÚLTIMO dia da semana deve ser um dia de DESCANSO (split_label: "Descanso", com exercícios leves ou nenhum exercício).
 """
-            elif cardio_mode == "alternado":
+            elif cardio_mode == "hibrido_alternado":
                 cardio_text = f"""
-CARDIO ALTERNADO (1 dia musculação, 1 dia cardio):
+TREINO HÍBRIDO ALTERNADO (1 dia musculação, 1 dia cardio):
 - Adicione um item extra no array "splits" com split_label: "Cardio", split_name: "{cardio_display}".
 - O cardio DEVE usar o mesmo formato "exercises": name, sets (1), reps (duração), rest_seconds, muscle_group ("cardio"), tutorial.
-- Inclua 4-5 etapas: aquecimento, blocos de intensidade variada, desaquecimento.
-"""
-            elif cardio_mode == "hibrido":
-                cardio_text = f"""
-TREINO HÍBRIDO (força + resistência combinados):
-- NÃO crie split separada de cardio.
-- Em CADA split, INTEGRE exercícios de cardio/resistência ({cardio_display}) ENTRE os exercícios de musculação.
-- Use o formato de circuito: exercício de força → exercício cardio → exercício de força, etc.
-- O objetivo é combinar estímulos variados, equilibrando força e resistência para aumentar queima de gordura e ganho muscular.
-- Exercícios cardio integrados devem ter muscle_group: "cardio" e duração de 1-3 min.
-- Exemplo: após um exercício de peito, inclua {{"name": "Burpees", "sets": 3, "reps": "45seg", "rest_seconds": 30, "muscle_group": "cardio", "tutorial": "Agache, posição de prancha, flexão, salte. Ritmo intenso."}}
+- VARIE a intensidade do cardio entre os dias: alterne entre alta intensidade (tiros/HIIT) e baixa/moderada intensidade (zona 2).
+- Inclua 4-5 exercícios por dia de cardio: aquecimento, blocos de intensidade variada, desaquecimento.
+- Exemplo para dia de alta intensidade: {{"name": "{cardio_display} - Tiros", "sets": 1, "reps": "30seg sprint + 60seg descanso x8", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Sprint máximo por 30 segundos, descanse 60 segundos caminhando. Repita 8 vezes."}}
+- Exemplo para dia de zona 2: {{"name": "{cardio_display} - Zona 2", "sets": 1, "reps": "30-40min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Ritmo constante onde consegue manter uma conversa. Foco em resistência aeróbica."}}
+- O ÚLTIMO dia da semana DEVE ser de DESCANSO absoluto ou ativo (caminhada leve de 20-30min). Use split_label: "Descanso".
+- Padrão ideal: Seg musculação, Ter cardio alta intensidade, Qua musculação, Qui cardio zona 2, Sex musculação, Sáb cardio moderado, Dom descanso.
 """
 
         prompt = f"""Você é um personal trainer certificado. Gere APENAS os treinos BASE de cada divisão ({split_type}) em formato JSON compacto.
@@ -4113,12 +4111,13 @@ IMPORTANTE:
             cycle_weeks_count = gen_data.cycle_weeks or 4
             
             # Build rotation pattern using split labels from AI response
-            # Filter out cardio splits for the main rotation
-            main_splits = [s for s in splits if s.get("split_label", "").lower() != "cardio"]
+            # Filter out cardio and rest splits for the main rotation
+            main_splits = [s for s in splits if s.get("split_label", "").lower() not in ("cardio", "descanso")]
             cardio_split = next((s for s in splits if s.get("split_label", "").lower() == "cardio"), None)
+            rest_split = next((s for s in splits if s.get("split_label", "").lower() == "descanso"), None)
             
             day_counter = 0
-            cardio_mode = gen_data.cardio_mode or "pos_treino"
+            cardio_mode = gen_data.cardio_mode or "hibrido"
             
             for week in range(1, cycle_weeks_count + 1):
                 week_progression = next((wp for wp in weekly_progression if wp.get("week") == week), None)
@@ -4127,17 +4126,29 @@ IMPORTANTE:
                 
                 for day_in_week in range(1, days_per_week + 1):
                     # Determine which split to use (rotate through main splits)
-                    split_idx = day_counter % len(main_splits)
-                    split = main_splits[split_idx]
+                    split_idx = day_counter % len(main_splits) if main_splits else 0
+                    split = main_splits[split_idx] if main_splits else {"exercises": []}
                     
-                    # Check if this day should be cardio (only for "alternado" mode)
+                    # Check if last day of the week should be rest day
+                    is_rest_day = False
                     is_cardio_day = False
-                    if cardio_split and cardio_mode == "alternado" and days_per_week > len(main_splits):
-                        # Alternate: insert cardio day between muscle days
-                        if (day_in_week - 1) % (len(main_splits) + 1) == len(main_splits):
+                    
+                    if day_in_week == days_per_week and gen_data.include_cardio:
+                        # Last day of the week = rest day
+                        is_rest_day = True
+                    elif cardio_split and cardio_mode == "hibrido_alternado" and days_per_week > len(main_splits):
+                        # Alternate: insert cardio day between muscle days (skip rest day)
+                        if not is_rest_day and (day_in_week - 1) % (len(main_splits) + 1) == len(main_splits):
                             is_cardio_day = True
                     
-                    if is_cardio_day and cardio_split:
+                    if is_rest_day:
+                        if rest_split:
+                            current_split = rest_split
+                        else:
+                            current_split = {"exercises": [{"name": "Descanso ativo - Caminhada leve", "sets": 1, "reps": "20-30min", "rest_seconds": 0, "muscle_group": "descanso", "tutorial": "Caminhada leve para recuperação ativa. Mantenha ritmo tranquilo."}]}
+                        label = "Descanso"
+                        split_name = "Descanso / Recuperação"
+                    elif is_cardio_day and cardio_split:
                         current_split = cardio_split
                         label = "Cardio"
                         split_name = cardio_split.get("split_name", "Cardio")
@@ -6058,6 +6069,126 @@ Retorne SOMENTE o JSON, nada mais."""
         }
 
 
+@api_router.post("/nutrition/estimate-foods-batch")
+async def estimate_foods_batch(request: Request, session_token: Optional[str] = Cookie(None)):
+    """Use AI to estimate nutritional values for multiple food items at once"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    body = await request.json()
+    foods = body.get("foods", [])
+    
+    if not foods or len(foods) == 0:
+        raise HTTPException(status_code=400, detail="Lista de alimentos é obrigatória")
+    
+    if len(foods) > 20:
+        raise HTTPException(status_code=400, detail="Máximo de 20 alimentos por vez")
+    
+    # Build the food list for the prompt
+    food_list_text = ""
+    for i, food in enumerate(foods):
+        name = food.get("food_name", "").strip()
+        qty = food.get("quantity", "").strip()
+        if name and qty:
+            food_list_text += f"{i+1}. {name} - {qty}\n"
+    
+    if not food_list_text:
+        raise HTTPException(status_code=400, detail="Nenhum alimento válido na lista")
+    
+    prompt = f"""Analise os seguintes alimentos e estime os valores nutricionais de CADA UM com precisão.
+
+ALIMENTOS:
+{food_list_text}
+
+Retorne APENAS um JSON válido (sem markdown, sem explicação) com esta estrutura exata:
+{{
+  "foods": [
+    {{
+      "index": 0,
+      "food_name": "nome do alimento formatado",
+      "quantity": "quantidade informada",
+      "calories": número inteiro (kcal),
+      "protein": número decimal (gramas),
+      "carbs": número decimal (gramas),
+      "fat": número decimal (gramas),
+      "fiber": número decimal (gramas),
+      "sodium": número decimal (mg),
+      "sugar": número decimal (gramas)
+    }}
+  ]
+}}
+
+Use valores baseados em tabelas nutricionais brasileiras (TACO) quando possível.
+Considere a quantidade informada para calcular os valores proporcionais.
+Se for um prato composto (ex: "prato feito"), estime os ingredientes típicos.
+Retorne UM item para CADA alimento listado, na mesma ordem.
+Retorne SOMENTE o JSON, nada mais."""
+
+    system_msg = "Você é um nutricionista especialista em tabelas nutricionais brasileiras. Retorne apenas JSON válido sem markdown."
+    
+    try:
+        response = await call_llm(prompt, f"food_batch_{user.user_id}_{uuid.uuid4().hex[:6]}", system_msg)
+        
+        # Parse JSON from response
+        json_str = response.strip()
+        if json_str.startswith("```"):
+            json_str = json_str.split("\n", 1)[1] if "\n" in json_str else json_str[3:]
+            json_str = json_str.rsplit("```", 1)[0]
+        json_str = json_str.strip()
+        
+        result = json.loads(json_str)
+        estimated_foods = result.get("foods", [])
+        
+        # Normalize the response
+        normalized = []
+        for i, food in enumerate(foods):
+            # Find matching estimation (by index or position)
+            est = next((e for e in estimated_foods if e.get("index") == i), None)
+            if not est and i < len(estimated_foods):
+                est = estimated_foods[i]
+            
+            if est:
+                normalized.append({
+                    "index": i,
+                    "success": True,
+                    "food_name": est.get("food_name", food.get("food_name", "")),
+                    "quantity": est.get("quantity", food.get("quantity", "")),
+                    "calories": int(est.get("calories", 0)),
+                    "protein": round(float(est.get("protein", 0)), 1),
+                    "carbs": round(float(est.get("carbs", 0)), 1),
+                    "fat": round(float(est.get("fat", 0)), 1),
+                    "fiber": round(float(est.get("fiber", 0)), 1),
+                    "sodium": round(float(est.get("sodium", 0)), 1),
+                    "sugar": round(float(est.get("sugar", 0)), 1)
+                })
+            else:
+                normalized.append({
+                    "index": i,
+                    "success": False,
+                    "food_name": food.get("food_name", ""),
+                    "quantity": food.get("quantity", ""),
+                    "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "sodium": 0, "sugar": 0
+                })
+        
+        return {
+            "success": True,
+            "foods": normalized
+        }
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Não foi possível estimar os nutrientes. Tente novamente.",
+            "foods": []
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Erro ao estimar nutrientes: {str(e)}",
+            "foods": []
+        }
+
+
+
 @api_router.get("/nutrition/goals")
 async def get_nutrition_goals(request: Request, session_token: Optional[str] = Cookie(None)):
     """Get user's nutrition goals"""
@@ -6443,7 +6574,8 @@ async def import_meal_plan(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Formato não suportado. Envie PDF, JPG, PNG ou WEBP.")
     
-    import tempfile, os
+    import tempfile
+    import os
     content = await file.read()
     suffix = ".pdf" if "pdf" in file.content_type else ".jpg" if "jpeg" in file.content_type else ".png" if "png" in file.content_type else ".webp"
     

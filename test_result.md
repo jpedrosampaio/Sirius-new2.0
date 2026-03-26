@@ -4129,3 +4129,156 @@ agent_communication:
         
         **RECOMMENDATION FOR MAIN AGENT:**
         Upgrade Google Cloud billing to increase Gemini API quota limits or implement exponential backoff retry logic for quota-limited endpoints.
+
+
+
+## New Changes - Round 14 (Cardio Modes Fix + Batch Nutrition + Mobile Icon + Performance)
+
+backend:
+  - task: "Fix cardio modes - reduce to Hibrido and Hibrido Alternado"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Replaced 3 modes (pos_treino, alternado, hibrido) with 2 clearer modes: 'hibrido' (musculação + cardio no mesmo dia, com variação de intensidade) and 'hibrido_alternado' (dias alternados + variação HIIT/zona 2 + dia de descanso). Updated AI prompts and server-side expansion logic to include rest days on last day of week."
+
+  - task: "Batch nutrition estimate endpoint (POST /api/nutrition/estimate-foods-batch)"
+    implemented: true
+    working: false
+    file: "backend/server.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint accepts array of {food_name, quantity} and estimates all foods at once with single AI call. Returns array of estimated nutritional values. Max 20 foods per request."
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED: POST /api/nutrition/estimate-foods-batch endpoint structure working correctly but BLOCKED BY GOOGLE GEMINI API QUOTA EXHAUSTION. Comprehensive testing confirms: (1) ✅ Endpoint accessible and processing requests correctly, (2) ✅ Authentication via session cookies working, (3) ✅ Error validation working - empty foods array correctly rejected with 400 error 'Lista de alimentos é obrigatória', (4) ✅ Request structure validation working (expects foods array with food_name and quantity), (5) ❌ All AI processing blocked by '429 RESOURCE_EXHAUSTED' Google Gemini API quota limits. Backend logs show: 'You exceeded your current quota, please check your plan and billing details' for both gemini-2.5-flash and gemini-2.0-flash-lite models. This is an INFRASTRUCTURE/BILLING issue, not a code bug. Recommendation: Main agent should upgrade Google Cloud billing to increase Gemini API quota limits."
+
+frontend:
+  - task: "Nutrition batch calculate UI"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Nutrition.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Changed meal creation flow: add foods with just name+weight first, then click 'Calcular Nutrientes de Toda Refeição com IA' to estimate all foods at once. Shows totals after estimation. Green border for estimated foods."
+
+  - task: "Fix mobile icon (manifest.json)"
+    implemented: true
+    working: "NA"
+    file: "frontend/public/manifest.json"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Split manifest icon purpose from 'maskable any' into separate 'any' and 'maskable' entries for each icon. Added shortcut icon to index.html. Removed screenshot references to non-existent files."
+
+  - task: "Performance optimizations (React.memo)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/Sidebar.js, MobileNav.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Wrapped Sidebar and MobileNav components with React.memo to prevent unnecessary re-renders on navigation. App already uses React.lazy for all pages."
+
+test_plan:
+  current_focus:
+    - ""
+  completed_focus:
+    - "Batch nutrition estimate endpoint - TESTED BUT BLOCKED BY GOOGLE GEMINI API QUOTA ❌"
+  stuck_tasks:
+    - "Batch nutrition estimate endpoint - BLOCKED BY GOOGLE GEMINI API QUOTA EXHAUSTION"
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: |
+        Test the NEW batch nutrition estimate endpoint. Login first.
+        Login: POST /api/auth/login {"email":"testworkout@test.com","password":"Test123!"}
+        
+        1. POST /api/nutrition/estimate-foods-batch
+           Body: {"foods": [{"food_name": "Arroz branco", "quantity": "200g"}, {"food_name": "Frango grelhado", "quantity": "150g"}, {"food_name": "Brócolis", "quantity": "100g"}]}
+           Expected: 200 OK with {success: true, foods: [{index: 0, success: true, food_name, calories, protein, carbs, fat, fiber, ...}, ...]}
+           TIMEOUT: 30 seconds (AI estimation)
+        
+        2. POST /api/nutrition/estimate-foods-batch (error case)
+           Body: {"foods": []}
+           Expected: 400 error
+    - agent: "testing"
+      message: |
+        ❌ BATCH NUTRITION ENDPOINT TESTING COMPLETE - BLOCKED BY GOOGLE GEMINI API QUOTA EXHAUSTION
+        
+        **Test Environment:**
+        - User: testworkout@test.com / Test123! (as specified in review request)
+        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Authentication: Session cookie method working correctly
+        - Test Date: 2026-03-26
+        
+        **✅ WORKING FEATURES (1/2 - 50%):**
+        
+        **Test 1: Authentication ✅**
+        - POST /api/auth/login with testworkout@test.com / Test123! successful
+        - Session cookies working correctly for subsequent requests
+        
+        **Test 2: Error Case Validation ✅**
+        - POST /api/nutrition/estimate-foods-batch with {"foods": []} correctly returned 400 error
+        - Error message: "Lista de alimentos é obrigatória" (as expected)
+        - Request validation working properly
+        
+        **❌ BLOCKED FEATURES (1/2 - 50%):**
+        
+        **Test 3: Success Case - AI Nutrition Estimation ❌**
+        - POST /api/nutrition/estimate-foods-batch with 3 foods (Arroz branco 200g, Frango grelhado 150g, Brócolis 100g)
+        - ❌ Response: {"success": false, "error": "Não foi possível estimar os nutrientes. Tente novamente.", "foods": []}
+        - ❌ Backend logs show Google Gemini API quota exhaustion (429 RESOURCE_EXHAUSTED)
+        - ❌ Error details: "You exceeded your current quota, please check your plan and billing details"
+        - ❌ Both gemini-2.5-flash and gemini-2.0-flash-lite models hitting quota limits
+        - ❌ Multiple quota violations: daily requests, per-minute requests, and input token count limits
+        
+        **🔗 Integration Status:**
+        - Authentication: Session cookie method working correctly
+        - Endpoint Structure: Correctly implemented and accessible
+        - Request Validation: Working correctly (empty array validation passed)
+        - Google Gemini AI: BLOCKED by quota exhaustion (infrastructure issue)
+        - Error Handling: Proper error responses for validation failures
+        
+        **📊 Test Coverage:**
+        - Backend Endpoint: 1/1 (100% - endpoint accessible and structured correctly)
+        - Authentication Flow: Working correctly with session cookies
+        - Error Validation: 1/1 (100% - empty foods array properly rejected)
+        - AI Processing: 0/1 (0% - blocked by API quota limits)
+        
+        **🎯 CRITICAL ISSUE IDENTIFIED:**
+        The batch nutrition endpoint is **BLOCKED BY GOOGLE GEMINI API QUOTA EXHAUSTION**. This is not a code bug but an infrastructure limitation:
+        - Free tier quota limits exceeded for both Gemini models
+        - Multiple quota violations: daily requests, per-minute requests, and input tokens
+        - Retry delay: 18+ seconds suggested by API
+        
+        **📋 CONCLUSION:**
+        The NEW batch nutrition endpoint is **CORRECTLY IMPLEMENTED** but currently non-functional due to Google Gemini API quota limits:
+        - ✅ Endpoint structure and validation working correctly
+        - ✅ Authentication and request processing functional
+        - ✅ Error handling working as designed
+        - ❌ AI nutrition estimation blocked by quota exhaustion
+        
+        **RECOMMENDATION FOR MAIN AGENT:**
+        Upgrade Google Cloud billing to increase Gemini API quota limits or implement exponential backoff retry logic for quota-limited endpoints.

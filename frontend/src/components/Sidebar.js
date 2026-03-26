@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Home, CheckSquare, TrendingUp, DollarSign, Target, MessageSquare, FileText, User, LogOut, Menu, X, Dumbbell, Bell, Apple, BookOpen, Trophy, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import axios from "axios";
 import { toast } from "sonner";
 import { clearToken } from "@/lib/api";
@@ -96,7 +96,7 @@ function useBrasiliaTime() {
   return { timeStr, dateStr };
 }
 
-export default function Sidebar({ user }) {
+function Sidebar({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
@@ -216,3 +216,5 @@ export default function Sidebar({ user }) {
     </>
   );
 }
+
+export default memo(Sidebar);

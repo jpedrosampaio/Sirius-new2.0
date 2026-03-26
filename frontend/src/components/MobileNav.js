@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, CheckSquare, TrendingUp, DollarSign, MessageSquare, MoreHorizontal } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, memo } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Target, Dumbbell, Apple, BookOpen, Bell, FileText, User, LogOut, Clock, Trophy, Calendar, Award } from "lucide-react";
 import axios from "axios";
@@ -11,7 +11,7 @@ import { SiriusLogo } from "@/components/Sidebar";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-export default function MobileNav({ user }) {
+function MobileNav({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -197,3 +197,5 @@ export default function MobileNav({ user }) {
     </>
   );
 }
+
+export default memo(MobileNav);
