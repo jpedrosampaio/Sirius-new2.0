@@ -263,6 +263,7 @@ class WorkoutPlanGenerate(BaseModel):
     cycle_weeks: Optional[int] = None  # 1-12
     include_cardio: bool = False
     cardio_type: Optional[str] = None  # "corrida", "bike", "HIIT", "caminhada", "natacao", "pular_corda"
+    cardio_mode: Optional[str] = None  # "pos_treino", "alternado", "hibrido"
     health_condition: Optional[str] = None  # user health conditions/injuries to consider
 
 class WorkoutSession(BaseModel):
@@ -3882,11 +3883,32 @@ Se algum exercício for contraindicado, substitua por uma alternativa segura e e
                 "eliptico": "Elíptico", "remo": "Remo"
             }
             cardio_display = cardio_labels.get(cardio_name, cardio_name)
-            cardio_text = f"""
-Inclua também um treino de cardio como uma das "splits":
+            cardio_mode = gen_data.cardio_mode or "pos_treino"
+            
+            if cardio_mode == "pos_treino":
+                cardio_text = f"""
+CARDIO PÓS-TREINO ({cardio_display}):
+- NÃO crie split separada de cardio.
+- Em CADA split de musculação, adicione 2-3 exercícios de cardio ({cardio_display}) ao FINAL da lista de exercícios.
+- Estes exercícios finais devem ter muscle_group: "cardio" e seguir o formato padrão.
+- Exemplo: {{"name": "{cardio_display} pós-treino", "sets": 1, "reps": "15-20min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Realize após finalizar a musculação. Intensidade moderada."}}
+"""
+            elif cardio_mode == "alternado":
+                cardio_text = f"""
+CARDIO ALTERNADO (1 dia musculação, 1 dia cardio):
 - Adicione um item extra no array "splits" com split_label: "Cardio", split_name: "{cardio_display}".
-- O cardio DEVE usar o mesmo formato "exercises" com campos: name, sets (1), reps ("30min"), rest_seconds (0), muscle_group ("cardio"), tutorial.
-- Exemplo de exercises para cardio: [{{"name": "Aquecimento leve", "sets": 1, "reps": "5min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Caminhe em ritmo leve para aquecer."}}, {{"name": "{cardio_display} moderado", "sets": 1, "reps": "20min", "rest_seconds": 0, "muscle_group": "cardio", "tutorial": "Mantenha ritmo constante, respiração controlada."}}]
+- O cardio DEVE usar o mesmo formato "exercises": name, sets (1), reps (duração), rest_seconds, muscle_group ("cardio"), tutorial.
+- Inclua 4-5 etapas: aquecimento, blocos de intensidade variada, desaquecimento.
+"""
+            elif cardio_mode == "hibrido":
+                cardio_text = f"""
+TREINO HÍBRIDO (força + resistência combinados):
+- NÃO crie split separada de cardio.
+- Em CADA split, INTEGRE exercícios de cardio/resistência ({cardio_display}) ENTRE os exercícios de musculação.
+- Use o formato de circuito: exercício de força → exercício cardio → exercício de força, etc.
+- O objetivo é combinar estímulos variados, equilibrando força e resistência para aumentar queima de gordura e ganho muscular.
+- Exercícios cardio integrados devem ter muscle_group: "cardio" e duração de 1-3 min.
+- Exemplo: após um exercício de peito, inclua {{"name": "Burpees", "sets": 3, "reps": "45seg", "rest_seconds": 30, "muscle_group": "cardio", "tutorial": "Agache, posição de prancha, flexão, salte. Ritmo intenso."}}
 """
 
         prompt = f"""Você é um personal trainer certificado. Gere APENAS os treinos BASE de cada divisão ({split_type}) em formato JSON compacto.
@@ -4096,6 +4118,8 @@ IMPORTANTE:
             cardio_split = next((s for s in splits if s.get("split_label", "").lower() == "cardio"), None)
             
             day_counter = 0
+            cardio_mode = gen_data.cardio_mode or "pos_treino"
+            
             for week in range(1, cycle_weeks_count + 1):
                 week_progression = next((wp for wp in weekly_progression if wp.get("week") == week), None)
                 progression_note = week_progression.get("notes", "") if week_progression else ""
@@ -4106,11 +4130,10 @@ IMPORTANTE:
                     split_idx = day_counter % len(main_splits)
                     split = main_splits[split_idx]
                     
-                    # Check if this day should be cardio instead
-                    # If cardio is included and there are more days than main splits, use cardio for extras
+                    # Check if this day should be cardio (only for "alternado" mode)
                     is_cardio_day = False
-                    if cardio_split and days_per_week > len(main_splits):
-                        # Intercalate: every Nth day is cardio
+                    if cardio_split and cardio_mode == "alternado" and days_per_week > len(main_splits):
+                        # Alternate: insert cardio day between muscle days
                         if (day_in_week - 1) % (len(main_splits) + 1) == len(main_splits):
                             is_cardio_day = True
                     
@@ -4169,6 +4192,7 @@ IMPORTANTE:
             "cycle_weeks": gen_data.cycle_weeks if gen_data.generation_mode == "tipo_treino" else None,
             "include_cardio": gen_data.include_cardio if gen_data.generation_mode == "tipo_treino" else False,
             "cardio_type": gen_data.cardio_type if gen_data.generation_mode == "tipo_treino" and gen_data.include_cardio else None,
+            "cardio_mode": gen_data.cardio_mode if gen_data.generation_mode == "tipo_treino" and gen_data.include_cardio else None,
             "health_condition": gen_data.health_condition if gen_data.health_condition else None,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
@@ -4195,6 +4219,264 @@ IMPORTANTE:
     except Exception as e:
         logging.error(f"Failed to save workout plan: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao salvar treino: {str(e)[:100]}")
+
+
+
+# ========== IMPROVE WORKOUT (MELHORAR TREINO) ==========
+@api_router.post("/workout-plans/{plan_id}/improve")
+async def improve_workout_plan(request: Request, plan_id: str, session_token: Optional[str] = Cookie(None)):
+    """AI analyzes a completed workout plan and generates an improved version"""
+    auth_header = request.headers.get("Authorization")
+    user = await get_current_user(authorization=auth_header, session_token=session_token)
+    
+    # Get the original plan
+    plan = await db.workout_plans.find_one({"plan_id": plan_id, "user_id": user.user_id}, {"_id": 0})
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plano não encontrado")
+    
+    # Get workout logs/sessions for this plan to understand user performance
+    sessions = await db.workout_sessions.find(
+        {"user_id": user.user_id, "plan_id": plan_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    daily_statuses = await db.daily_workout_status.find(
+        {"user_id": user.user_id, "plan_id": plan_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    # Build performance summary
+    completed_sessions = [s for s in sessions if s.get("status") == "completed"]
+    total_sessions = len(sessions)
+    
+    performance_summary = f"Total de sessões: {total_sessions}, Completadas: {len(completed_sessions)}"
+    if completed_sessions:
+        avg_duration = sum(s.get("duration_minutes", 0) for s in completed_sessions) / len(completed_sessions)
+        performance_summary += f", Duração média: {avg_duration:.0f} min"
+    
+    completed_days = len([d for d in daily_statuses if d.get("completed")])
+    performance_summary += f", Dias concluídos: {completed_days}"
+    
+    # Build exercises summary from the plan
+    exercises_summary = []
+    splits_data = []
+    if plan.get("generation_mode") == "tipo_treino" and plan.get("split_config"):
+        for s in plan["split_config"]:
+            split_exercises = []
+            for day in plan.get("days", []):
+                if day.get("split_label") == s.get("label"):
+                    split_exercises = day.get("exercises", [])
+                    break
+            splits_data.append({
+                "label": s.get("label"),
+                "name": s.get("name"),
+                "exercises": [{"name": ex.get("name"), "sets": ex.get("sets"), "reps": ex.get("reps"), "muscle_group": ex.get("muscle_group")} for ex in split_exercises[:8]]
+            })
+    else:
+        for day in plan.get("days", [])[:5]:
+            exercises_summary.append({
+                "day": day.get("day_label", ""),
+                "exercises": [{"name": ex.get("name"), "sets": ex.get("sets"), "reps": ex.get("reps")} for ex in day.get("exercises", [])[:8]]
+            })
+
+    plan_info = f"""
+Plano: {plan.get('name', 'Treino')}
+Objetivo: {plan.get('objective', 'hipertrofia')}
+Nível: {plan.get('level', 'intermediario')}
+Tipo: {plan.get('generation_mode', 'periodo')}
+Divisão: {plan.get('split_type', 'N/A')}
+Duração: {plan.get('plan_duration', 'ciclo')}
+Semanas: {plan.get('cycle_weeks', 'N/A')}
+Dias/semana: {plan.get('training_days_per_week', 'N/A')}
+Performance: {performance_summary}
+"""
+    
+    if splits_data:
+        for sd in splits_data:
+            plan_info += f"\nTreino {sd['label']} ({sd['name']}): {json.dumps([e['name'] for e in sd['exercises']], ensure_ascii=False)}"
+    elif exercises_summary:
+        for es in exercises_summary[:3]:
+            plan_info += f"\n{es['day']}: {json.dumps([e['name'] for e in es['exercises']], ensure_ascii=False)}"
+    
+    is_split_mode = plan.get("generation_mode") == "tipo_treino"
+    format_type = "splits" if is_split_mode else "days"
+    format_instruction = "Gere no formato de splits (mesmo formato do plano atual)." if is_split_mode else "Gere no formato de days."
+    
+    if is_split_mode:
+        item_example = '"split_label": "A", "split_name": "Nome",'
+    else:
+        item_example = '"day_name": "dia1", "day_label": "Nome do dia",'
+    
+    num_splits = len(splits_data) if splits_data else "a mesma quantidade de"
+    cycle_wk_count = plan.get('cycle_weeks', 4)
+    
+    prompt = f"""Você é um personal trainer experiente. O aluno completou um ciclo de treino e precisa de EVOLUÇÃO.
+
+PLANO ATUAL:
+{plan_info}
+
+Como um personal trainer faria, analise o treino atual e gere uma VERSÃO MELHORADA:
+1. Substitua exercícios que podem ter estagnado por variações mais desafiadoras
+2. Aumente volume ou intensidade gradualmente (mais séries, mais reps, ou mais carga)
+3. Adicione exercícios complementares ou variações
+4. Mantenha a estrutura geral (mesma divisão) mas evolua o conteúdo
+5. Diversifique os estímulos musculares
+
+{format_instruction}
+
+FORMATO JSON OBRIGATÓRIO (use a chave "{format_type}"):
+{{
+  "name": "Nome do plano evoluído (v2, v3, etc)",
+  "description": "Descrição das mudanças e evolução aplicada",
+  "improvements_summary": "Resumo das melhorias em 2-3 frases",
+  "{format_type}": [
+    {{
+      {item_example}
+      "exercises": [
+        {{
+          "name": "Nome do exercício",
+          "sets": 4,
+          "reps": 12,
+          "weight": "adequado",
+          "rest_seconds": 90,
+          "muscle_group": "grupo",
+          "tutorial": "Instrução concisa em 1-2 frases."
+        }}
+      ]
+    }}
+  ],
+  "weekly_progression": [
+    {{"week": 1, "focus": "Foco", "notes": "Notas"}}
+  ]
+}}
+
+REGRAS:
+- Retorne APENAS JSON válido.
+- Tutorial: máximo 2 frases por exercício.
+- Mantenha {num_splits} splits/dias.
+- Substitua pelo menos 30-40% dos exercícios por variações.
+- rest_seconds: 60s leves, 90s moderados, 120s compostos.
+- Gere {cycle_wk_count} itens em weekly_progression."""
+    
+    system_msg = "Você é um personal trainer certificado. Retorne apenas JSON válido sem markdown."
+    
+    try:
+        response_text = None
+        last_error = None
+        
+        for attempt in range(3):
+            try:
+                model_to_use = GEMINI_MODEL if attempt < 2 else GEMINI_FALLBACK_MODEL
+                ai_response = gemini_client.models.generate_content(
+                    model=model_to_use,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system_msg,
+                        temperature=0.7,
+                        max_output_tokens=16384,
+                    )
+                )
+                response_text = ai_response.text.strip()
+                if response_text.startswith("```"):
+                    response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+                    response_text = response_text.rsplit("```", 1)[0].strip()
+                
+                improved_data = json.loads(response_text)
+                break
+            except Exception as e:
+                last_error = str(e)
+                continue
+        else:
+            raise HTTPException(status_code=500, detail=f"Erro ao melhorar treino: {last_error}")
+        
+        # Create a new plan from the improved data
+        new_plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+        
+        # Build days from improved splits or use days directly
+        new_days = []
+        new_weekly_progression = improved_data.get("weekly_progression", [])
+        
+        if plan.get("generation_mode") == "tipo_treino" and improved_data.get("splits"):
+            new_splits = improved_data["splits"]
+            main_splits = [s for s in new_splits if s.get("split_label", "").lower() != "cardio"]
+            cardio_split = next((s for s in new_splits if s.get("split_label", "").lower() == "cardio"), None)
+            days_per_week = plan.get("training_days_per_week", 5)
+            cycle_wks = plan.get("cycle_weeks", 4)
+            day_counter = 0
+            
+            for week in range(1, cycle_wks + 1):
+                wp = next((w for w in new_weekly_progression if w.get("week") == week), None)
+                for day_in_week in range(1, days_per_week + 1):
+                    split_idx = day_counter % len(main_splits)
+                    current = main_splits[split_idx]
+                    label = current.get("split_label", "?")
+                    sname = current.get("split_name", "")
+                    day_counter += 1
+                    
+                    new_days.append({
+                        "day_name": f"sem{week}_dia{day_in_week}",
+                        "day_label": f"Semana {week} - Dia {day_in_week}: Treino {label} - {sname}",
+                        "split_label": label,
+                        "week": week,
+                        "exercises": current.get("exercises", []),
+                        "progression_focus": wp.get("focus", "") if wp else "",
+                        "progression_notes": wp.get("notes", "") if wp else "",
+                    })
+        else:
+            new_days = improved_data.get("days", [])
+        
+        all_exercises = []
+        for d in new_days:
+            all_exercises.extend(d.get("exercises", []))
+        
+        new_plan_doc = {
+            "plan_id": new_plan_id,
+            "user_id": user.user_id,
+            "name": improved_data.get("name", f"{plan.get('name', 'Treino')} - Evoluído"),
+            "description": improved_data.get("description", ""),
+            "exercises": all_exercises,
+            "plan_duration": plan.get("plan_duration", "ciclo"),
+            "generated_by_ai": True,
+            "improved_from": plan_id,
+            "improvements_summary": improved_data.get("improvements_summary", ""),
+            "days": new_days,
+            "weekly_progression": new_weekly_progression,
+            "objective": plan.get("objective", "hipertrofia"),
+            "level": plan.get("level", "intermediario"),
+            "generation_mode": plan.get("generation_mode", "tipo_treino"),
+            "split_type": plan.get("split_type"),
+            "split_config": plan.get("split_config"),
+            "training_days_per_week": plan.get("training_days_per_week"),
+            "cycle_weeks": plan.get("cycle_weeks"),
+            "include_cardio": plan.get("include_cardio", False),
+            "cardio_type": plan.get("cardio_type"),
+            "cardio_mode": plan.get("cardio_mode"),
+            "health_condition": plan.get("health_condition"),
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        new_plan_doc['created_at'] = datetime.fromisoformat(new_plan_doc['created_at'])
+        await db.workout_plans.insert_one(new_plan_doc)
+        
+        xp_earned = 3
+        new_xp = user.xp + xp_earned
+        new_rank = calculate_rank(new_xp)
+        await db.users.update_one({"user_id": user.user_id}, {"$set": {"xp": new_xp, "rank": new_rank}})
+        
+        return {
+            "success": True,
+            "plan": {**new_plan_doc, "_id": None},
+            "improvements_summary": improved_data.get("improvements_summary", ""),
+            "xp_earned": xp_earned,
+            "new_xp": new_xp,
+            "new_rank": new_rank
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Failed to improve workout plan: {e}")
+        raise HTTPException(status_code=500, detail=f"Erro ao melhorar treino: {str(e)[:100]}")
+
 
 
 # ========== WORKOUT SESSION ENDPOINTS ==========

@@ -85,6 +85,7 @@ export default function Workouts() {
     cycle_weeks: 4,
     include_cardio: false,
     cardio_type: "corrida",
+    cardio_mode: "pos_treino",
     health_condition: ""
   });
 
@@ -186,6 +187,7 @@ export default function Workouts() {
   const [expandedTutorials, setExpandedTutorials] = useState({});
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
   const [selectedWeek, setSelectedWeek] = useState(1);
+  const [improvingPlan, setImprovingPlan] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
   
@@ -649,6 +651,7 @@ export default function Workouts() {
         payload.cycle_weeks = aiGenForm.cycle_weeks;
         payload.include_cardio = aiGenForm.include_cardio;
         payload.cardio_type = aiGenForm.include_cardio ? aiGenForm.cardio_type : null;
+        payload.cardio_mode = aiGenForm.include_cardio ? aiGenForm.cardio_mode : null;
         payload.duration = "ciclo";
       } else {
         payload.duration = aiGenForm.duration;
@@ -682,6 +685,25 @@ export default function Workouts() {
         ? prev.muscle_groups.filter(g => g !== group)
         : [...prev.muscle_groups, group]
     }));
+  };
+
+  // === IMPROVE WORKOUT ===
+  const handleImproveWorkout = async (planId) => {
+    setImprovingPlan(planId);
+    try {
+      const res = await axios.post(`${API}/workout-plans/${planId}/improve`, {}, { withCredentials: true, timeout: 120000 });
+      if (res.data.success) {
+        toast.success(`Treino evoluído! +${res.data.xp_earned} XP`);
+        if (res.data.improvements_summary) {
+          toast.info(res.data.improvements_summary, { duration: 8000 });
+        }
+        loadData();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Erro ao melhorar treino");
+    } finally {
+      setImprovingPlan(null);
+    }
   };
 
   // === WORKOUT SESSION ===
@@ -1353,22 +1375,50 @@ export default function Workouts() {
                             />
                           </div>
                           {aiGenForm.include_cardio && (
-                            <div className="mt-3 pt-3 border-t border-[#27272A]">
-                              <Label className="text-xs uppercase tracking-wider mb-2 block">Tipo de Cardio</Label>
-                              <div className="flex flex-wrap gap-2">
-                                {CARDIO_TYPES.map(ct => (
-                                  <button
-                                    key={ct.value}
-                                    onClick={() => setAiGenForm({...aiGenForm, cardio_type: ct.value})}
-                                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                                      aiGenForm.cardio_type === ct.value
-                                        ? 'bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]'
-                                        : 'bg-[#0A0A0A] border border-[#27272A] text-[#71717A] hover:border-[#00F0FF]/50'
-                                    }`}
-                                  >
-                                    {ct.emoji} {ct.label}
-                                  </button>
-                                ))}
+                            <div className="mt-3 pt-3 border-t border-[#27272A] space-y-3">
+                              {/* Cardio Mode */}
+                              <div>
+                                <Label className="text-xs uppercase tracking-wider mb-2 block">Modo de Cardio</Label>
+                                <div className="grid grid-cols-1 gap-2">
+                                  {[
+                                    { value: "pos_treino", label: "Pós-Treino", desc: "Cardio após a musculação no mesmo dia", icon: "🏃" },
+                                    { value: "alternado", label: "Alternado", desc: "1 dia musculação, 1 dia cardio", icon: "🔄" },
+                                    { value: "hibrido", label: "Híbrido", desc: "Força + resistência combinados no mesmo treino (circuito)", icon: "⚡" }
+                                  ].map(mode => (
+                                    <button
+                                      key={mode.value}
+                                      onClick={() => setAiGenForm({...aiGenForm, cardio_mode: mode.value})}
+                                      className={`text-left p-2.5 rounded-lg border transition-all ${
+                                        aiGenForm.cardio_mode === mode.value
+                                          ? 'bg-[#00F0FF]/10 border-[#00F0FF] text-white'
+                                          : 'bg-[#0A0A0A] border-[#27272A] text-[#71717A] hover:border-[#00F0FF]/50'
+                                      }`}
+                                    >
+                                      <span className="text-sm font-medium">{mode.icon} {mode.label}</span>
+                                      <p className="text-[11px] text-[#A1A1AA] mt-0.5">{mode.desc}</p>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              {/* Cardio Type */}
+                              <div>
+                                <Label className="text-xs uppercase tracking-wider mb-2 block">Tipo de Cardio</Label>
+                                <div className="flex flex-wrap gap-2">
+                                  {CARDIO_TYPES.map(ct => (
+                                    <button
+                                      key={ct.value}
+                                      onClick={() => setAiGenForm({...aiGenForm, cardio_type: ct.value})}
+                                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                        aiGenForm.cardio_type === ct.value
+                                          ? 'bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]'
+                                          : 'bg-[#0A0A0A] border border-[#27272A] text-[#71717A] hover:border-[#00F0FF]/50'
+                                      }`}
+                                    >
+                                      {ct.emoji} {ct.label}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1384,7 +1434,9 @@ export default function Workouts() {
                             <li>• Divisão <span className="text-white font-medium">{aiGenForm.split_type}</span> com <span className="text-white font-medium">{aiGenForm.split_config.length}</span> treinos diferentes</li>
                             <li>• <span className="text-white font-medium">{aiGenForm.training_days_per_week}</span> dias por semana durante <span className="text-white font-medium">{aiGenForm.cycle_weeks}</span> semana{aiGenForm.cycle_weeks > 1 ? 's' : ''}</li>
                             <li>• Total: <span className="text-white font-medium">{aiGenForm.training_days_per_week * aiGenForm.cycle_weeks}</span> sessões de treino</li>
-                            {aiGenForm.include_cardio && <li>• Cardio intercalado: <span className="text-[#00F0FF] font-medium">{CARDIO_TYPES.find(c => c.value === aiGenForm.cardio_type)?.label || aiGenForm.cardio_type}</span></li>}
+                            {aiGenForm.include_cardio && <li>• Cardio: <span className="text-[#00F0FF] font-medium">{
+                              aiGenForm.cardio_mode === "pos_treino" ? "Pós-treino" : aiGenForm.cardio_mode === "alternado" ? "Alternado" : "Híbrido"
+                            }</span> ({CARDIO_TYPES.find(c => c.value === aiGenForm.cardio_type)?.label || aiGenForm.cardio_type})</li>}
                             <li>• Tutorial descritivo por exercício</li>
                             <li>• Progressão de carga entre semanas</li>
                           </ul>
@@ -1808,6 +1860,21 @@ export default function Workouts() {
                               </p>
                             </div>
                             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              {plan.generated_by_ai && (
+                                <Button 
+                                  variant="ghost" size="sm" 
+                                  onClick={() => handleImproveWorkout(plan.plan_id)}
+                                  className="text-[#A855F7] h-8 px-2 text-xs gap-1"
+                                  title="Melhorar treino com IA"
+                                  disabled={improvingPlan === plan.plan_id}
+                                >
+                                  {improvingPlan === plan.plan_id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <><TrendingUp className="w-4 h-4" /> Evoluir</>
+                                  )}
+                                </Button>
+                              )}
                               <Button 
                                 variant="ghost" size="sm" 
                                 onClick={() => handleStartWorkout(plan, selectedDayIndex)} 

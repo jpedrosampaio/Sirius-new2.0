@@ -1,228 +1,344 @@
 #!/usr/bin/env python3
+"""
+Backend Testing Script for Workout Plans Endpoints
+Testing cardio_mode features and workout plan improvement
+"""
 
 import requests
 import json
 import time
 import sys
 
-# Get backend URL from frontend/.env
+# Backend URL from frontend/.env
 BACKEND_URL = "https://ai-workout-fix-1.preview.emergentagent.com/api"
 
-def test_food_nutrition_estimation():
-    """Test the food nutrition estimation endpoint POST /api/nutrition/estimate-food"""
-    
-    print("🧪 TESTING: Food Nutrition Estimation Endpoint")
-    print("=" * 60)
-    
-    # Test user credentials
-    test_email = "testfood@test.com"
-    test_password = "Test123!"
-    
-    session = requests.Session()
-    
-    # Step 1: Register/Login test user
-    print(f"📝 Step 1: Registering/Logging in test user: {test_email}")
-    
-    # Try to register first
-    register_data = {
-        "email": test_email,
-        "password": test_password,
-        "name": "Test Food User"
-    }
-    
-    try:
-        register_response = session.post(f"{BACKEND_URL}/auth/register", json=register_data)
-        if register_response.status_code == 200:
-            print("✅ User registered successfully")
-        elif register_response.status_code == 400 and "already registered" in register_response.text:
-            print("ℹ️ User already exists, proceeding to login")
-        else:
-            print(f"❌ Registration failed: {register_response.status_code} - {register_response.text}")
-    except Exception as e:
-        print(f"❌ Registration error: {e}")
-    
-    # Login
-    login_data = {
-        "email": test_email,
-        "password": test_password
-    }
-    
-    try:
-        login_response = session.post(f"{BACKEND_URL}/auth/login", json=login_data)
-        if login_response.status_code == 200:
+class WorkoutPlanTester:
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Content-Type': 'application/json',
+            'User-Agent': 'Backend-Tester/1.0'
+        })
+        self.plan_id_for_improvement = None
+        
+    def register_and_login(self):
+        """Register and login test user"""
+        print("🔐 Registering and logging in test user...")
+        
+        # Register user
+        register_data = {
+            "email": "testevolve@test.com",
+            "password": "Test123!",
+            "name": "Test Evolve User"
+        }
+        
+        try:
+            response = self.session.post(f"{BACKEND_URL}/auth/register", json=register_data)
+            if response.status_code == 201:
+                print("✅ User registered successfully")
+            elif response.status_code == 400 and "já existe" in response.text:
+                print("ℹ️ User already exists, proceeding to login")
+            else:
+                print(f"⚠️ Registration response: {response.status_code} - {response.text}")
+        except Exception as e:
+            print(f"⚠️ Registration error: {e}")
+        
+        # Login user
+        login_data = {
+            "email": "testevolve@test.com", 
+            "password": "Test123!"
+        }
+        
+        response = self.session.post(f"{BACKEND_URL}/auth/login", json=login_data)
+        if response.status_code == 200:
             print("✅ Login successful")
-            login_result = login_response.json()
-            print(f"   User ID: {login_result.get('user', {}).get('user_id', 'N/A')}")
+            return True
         else:
-            print(f"❌ Login failed: {login_response.status_code} - {login_response.text}")
+            print(f"❌ Login failed: {response.status_code} - {response.text}")
             return False
-    except Exception as e:
-        print(f"❌ Login error: {e}")
-        return False
     
-    print()
-    
-    # Test 1: Estimate nutrition for a common food (Frango grelhado, 150g)
-    print("🍗 Test 1: Estimate nutrition for common food - Frango grelhado, 150g")
-    print("-" * 50)
-    
-    test1_data = {
-        "food_name": "Frango grelhado",
-        "quantity": "150g"
-    }
-    
-    try:
+    def test_cardio_pos_treino(self):
+        """Test 1: Generate workout with cardio_mode 'pos_treino'"""
+        print("\n🏃‍♂️ Test 1: Generate workout with cardio_mode 'pos_treino'")
+        
+        payload = {
+            "objective": "hipertrofia",
+            "level": "intermediario", 
+            "generation_mode": "tipo_treino",
+            "split_type": "AB",
+            "split_config": [
+                {"label": "A", "name": "Peito e Tríceps", "muscle_groups": ["peito", "triceps"]},
+                {"label": "B", "name": "Costas e Bíceps", "muscle_groups": ["costas", "biceps"]}
+            ],
+            "training_days_per_week": 4,
+            "cycle_weeks": 2,
+            "include_cardio": True,
+            "cardio_type": "corrida",
+            "cardio_mode": "pos_treino",
+            "duration": "ciclo"
+        }
+        
+        print(f"📤 Sending request to POST {BACKEND_URL}/workout-plans/generate")
+        print(f"📋 Payload: {json.dumps(payload, indent=2)}")
+        
         start_time = time.time()
-        response1 = session.post(f"{BACKEND_URL}/nutrition/estimate-food", json=test1_data, timeout=60)
-        end_time = time.time()
+        try:
+            response = self.session.post(f"{BACKEND_URL}/workout-plans/generate", 
+                                       json=payload, timeout=120)
+            duration = time.time() - start_time
+            
+            print(f"⏱️ Response time: {duration:.1f}s")
+            print(f"📊 Status code: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ Request successful")
+                
+                # Verify response structure
+                if data.get('success'):
+                    print("✅ Response has success: true")
+                    
+                    plan = data.get('plan', {})
+                    if plan.get('days'):
+                        print(f"✅ Plan has {len(plan['days'])} days with exercises")
+                        
+                        # Check for cardio exercises at end of splits (pos_treino mode)
+                        cardio_found = False
+                        cardio_only_days = 0
+                        
+                        for day in plan['days']:
+                            exercises = day.get('exercises', [])
+                            if exercises:
+                                # Check if last exercises are cardio
+                                for exercise in exercises:
+                                    if exercise.get('muscle_group') == 'cardio':
+                                        cardio_found = True
+                                        break
+                            else:
+                                # Count days with no exercises (cardio-only days)
+                                cardio_only_days += 1
+                        
+                        if cardio_found:
+                            print("✅ Found cardio exercises within splits (pos_treino mode)")
+                        else:
+                            print("⚠️ No cardio exercises found within splits")
+                            
+                        if cardio_only_days == 0:
+                            print("✅ No separate cardio-only days (correct for pos_treino)")
+                        else:
+                            print(f"⚠️ Found {cardio_only_days} cardio-only days")
+                        
+                        # Save plan_id for improvement test
+                        self.plan_id_for_improvement = plan.get('plan_id')
+                        if self.plan_id_for_improvement:
+                            print(f"💾 Saved plan_id for improvement test: {self.plan_id_for_improvement}")
+                        
+                    else:
+                        print("❌ Plan has no days")
+                        
+                else:
+                    print("❌ Response success is false")
+                    
+                print(f"📄 Response preview: {json.dumps(data, indent=2)[:500]}...")
+                return True
+                
+            else:
+                print(f"❌ Request failed: {response.text}")
+                return False
+                
+        except requests.exceptions.Timeout:
+            print("❌ Request timed out after 120 seconds")
+            return False
+        except Exception as e:
+            print(f"❌ Request error: {e}")
+            return False
+    
+    def test_cardio_hibrido(self):
+        """Test 2: Generate workout with cardio_mode 'hibrido'"""
+        print("\n🏃‍♀️ Test 2: Generate workout with cardio_mode 'hibrido'")
         
-        print(f"⏱️ Response time: {end_time - start_time:.2f} seconds")
-        print(f"📊 Status code: {response1.status_code}")
+        payload = {
+            "objective": "emagrecimento",
+            "level": "intermediario",
+            "generation_mode": "tipo_treino", 
+            "split_type": "AB",
+            "split_config": [
+                {"label": "A", "name": "Superior", "muscle_groups": ["peito", "ombros", "triceps"]},
+                {"label": "B", "name": "Inferior", "muscle_groups": ["pernas", "gluteos"]}
+            ],
+            "training_days_per_week": 3,
+            "cycle_weeks": 2,
+            "include_cardio": True,
+            "cardio_type": "HIIT",
+            "cardio_mode": "hibrido",
+            "duration": "ciclo"
+        }
         
-        if response1.status_code == 200:
-            result1 = response1.json()
-            print("✅ Response received successfully")
-            print(f"   Success: {result1.get('success')}")
-            print(f"   Food name: {result1.get('food_name')}")
-            print(f"   Quantity: {result1.get('quantity')}")
-            print(f"   Calories: {result1.get('calories')} kcal")
-            print(f"   Protein: {result1.get('protein')} g")
-            print(f"   Carbs: {result1.get('carbs')} g")
-            print(f"   Fat: {result1.get('fat')} g")
-            print(f"   Fiber: {result1.get('fiber')} g")
-            print(f"   Sodium: {result1.get('sodium')} mg")
-            print(f"   Sugar: {result1.get('sugar')} g")
-            
-            # Verify response structure and reasonable values
-            if result1.get('success') == True:
-                print("✅ Success field is True")
-            else:
-                print(f"❌ Success field is not True: {result1.get('success')}")
-                
-            calories = result1.get('calories', 0)
-            protein = result1.get('protein', 0)
-            
-            # Check if values are reasonable for 150g chicken (should be ~200-300 kcal, ~30-45g protein)
-            if 150 <= calories <= 400:
-                print(f"✅ Calories value reasonable for 150g chicken: {calories} kcal")
-            else:
-                print(f"⚠️ Calories value may be unreasonable: {calories} kcal (expected ~200-300)")
-                
-            if 20 <= protein <= 50:
-                print(f"✅ Protein value reasonable for 150g chicken: {protein} g")
-            else:
-                print(f"⚠️ Protein value may be unreasonable: {protein} g (expected ~30-45)")
-                
-            # Check if all numeric values are present
-            required_fields = ['calories', 'protein', 'carbs', 'fat', 'fiber']
-            all_present = all(field in result1 for field in required_fields)
-            if all_present:
-                print("✅ All required nutritional fields present")
-            else:
-                missing = [field for field in required_fields if field not in result1]
-                print(f"❌ Missing nutritional fields: {missing}")
-                
-        else:
-            print(f"❌ Request failed: {response1.text}")
-            
-    except Exception as e:
-        print(f"❌ Test 1 error: {e}")
-    
-    print()
-    
-    # Test 2: Estimate nutrition for a composite dish (Prato feito brasileiro)
-    print("🍽️ Test 2: Estimate nutrition for composite dish - Prato feito brasileiro")
-    print("-" * 50)
-    
-    test2_data = {
-        "food_name": "Prato feito brasileiro",
-        "quantity": "1 prato médio"
-    }
-    
-    try:
+        print(f"📤 Sending request to POST {BACKEND_URL}/workout-plans/generate")
+        print(f"📋 Payload: {json.dumps(payload, indent=2)}")
+        
         start_time = time.time()
-        response2 = session.post(f"{BACKEND_URL}/nutrition/estimate-food", json=test2_data, timeout=60)
-        end_time = time.time()
-        
-        print(f"⏱️ Response time: {end_time - start_time:.2f} seconds")
-        print(f"📊 Status code: {response2.status_code}")
-        
-        if response2.status_code == 200:
-            result2 = response2.json()
-            print("✅ Response received successfully")
-            print(f"   Success: {result2.get('success')}")
-            print(f"   Food name: {result2.get('food_name')}")
-            print(f"   Quantity: {result2.get('quantity')}")
-            print(f"   Calories: {result2.get('calories')} kcal")
-            print(f"   Protein: {result2.get('protein')} g")
-            print(f"   Carbs: {result2.get('carbs')} g")
-            print(f"   Fat: {result2.get('fat')} g")
-            print(f"   Fiber: {result2.get('fiber')} g")
+        try:
+            response = self.session.post(f"{BACKEND_URL}/workout-plans/generate",
+                                       json=payload, timeout=120)
+            duration = time.time() - start_time
             
-            # Verify response structure and reasonable values
-            if result2.get('success') == True:
-                print("✅ Success field is True")
-            else:
-                print(f"❌ Success field is not True: {result2.get('success')}")
+            print(f"⏱️ Response time: {duration:.1f}s")
+            print(f"📊 Status code: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ Request successful")
                 
-            calories = result2.get('calories', 0)
-            
-            # Check if values are reasonable for a Brazilian plate (typically 500-800 kcal)
-            if 400 <= calories <= 1000:
-                print(f"✅ Calories value reasonable for Brazilian plate: {calories} kcal")
-            else:
-                print(f"⚠️ Calories value may be unreasonable: {calories} kcal (expected ~500-800)")
+                # Verify response structure
+                if data.get('success'):
+                    print("✅ Response has success: true")
+                    
+                    plan = data.get('plan', {})
+                    if plan.get('days'):
+                        print(f"✅ Plan has {len(plan['days'])} days with exercises")
+                        
+                        # Check for mixed strength and cardio (hibrido mode)
+                        mixed_days = 0
+                        for day in plan['days']:
+                            exercises = day.get('exercises', [])
+                            has_strength = False
+                            has_cardio = False
+                            
+                            for exercise in exercises:
+                                muscle_group = exercise.get('muscle_group', '')
+                                if muscle_group == 'cardio':
+                                    has_cardio = True
+                                elif muscle_group in ['peito', 'ombros', 'triceps', 'pernas', 'gluteos']:
+                                    has_strength = True
+                            
+                            if has_strength and has_cardio:
+                                mixed_days += 1
+                        
+                        if mixed_days > 0:
+                            print(f"✅ Found {mixed_days} days with mixed strength and cardio (hibrido mode)")
+                        else:
+                            print("⚠️ No mixed strength/cardio days found")
+                            
+                    else:
+                        print("❌ Plan has no days")
+                        
+                else:
+                    print("❌ Response success is false")
+                    
+                print(f"📄 Response preview: {json.dumps(data, indent=2)[:500]}...")
+                return True
                 
-            # Check if all nutritional values are present and reasonable
-            required_fields = ['calories', 'protein', 'carbs', 'fat', 'fiber']
-            all_present = all(field in result2 and result2[field] > 0 for field in required_fields)
-            if all_present:
-                print("✅ All required nutritional fields present and > 0")
             else:
-                missing_or_zero = [field for field in required_fields if field not in result2 or result2[field] <= 0]
-                print(f"❌ Missing or zero nutritional fields: {missing_or_zero}")
+                print(f"❌ Request failed: {response.text}")
+                return False
                 
-        else:
-            print(f"❌ Request failed: {response2.text}")
-            
-    except Exception as e:
-        print(f"❌ Test 2 error: {e}")
+        except requests.exceptions.Timeout:
+            print("❌ Request timed out after 120 seconds")
+            return False
+        except Exception as e:
+            print(f"❌ Request error: {e}")
+            return False
     
-    print()
-    
-    # Test 3: Missing food_name should return error
-    print("❌ Test 3: Missing food_name should return 400 error")
-    print("-" * 50)
-    
-    test3_data = {
-        "food_name": "",
-        "quantity": "100g"
-    }
-    
-    try:
-        response3 = session.post(f"{BACKEND_URL}/nutrition/estimate-food", json=test3_data, timeout=30)
+    def test_improve_workout(self):
+        """Test 3: Improve/Evolve workout plan"""
+        print("\n🚀 Test 3: Improve/Evolve workout plan")
         
-        print(f"📊 Status code: {response3.status_code}")
+        if not self.plan_id_for_improvement:
+            print("❌ No plan_id available from Test 1")
+            return False
         
-        if response3.status_code == 400:
-            print("✅ Correctly returned 400 error for missing food_name")
-            try:
-                error_result = response3.json()
-                print(f"   Error detail: {error_result.get('detail', 'No detail provided')}")
-            except:
-                print(f"   Error text: {response3.text}")
-        else:
-            print(f"❌ Expected 400 error but got {response3.status_code}")
-            print(f"   Response: {response3.text}")
+        print(f"📤 Sending request to POST {BACKEND_URL}/workout-plans/{self.plan_id_for_improvement}/improve")
+        print("📋 Payload: {} (empty body)")
+        
+        start_time = time.time()
+        try:
+            response = self.session.post(f"{BACKEND_URL}/workout-plans/{self.plan_id_for_improvement}/improve",
+                                       json={}, timeout=120)
+            duration = time.time() - start_time
             
-    except Exception as e:
-        print(f"❌ Test 3 error: {e}")
+            print(f"⏱️ Response time: {duration:.1f}s")
+            print(f"📊 Status code: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                print("✅ Request successful")
+                
+                # Verify response structure
+                if data.get('success'):
+                    print("✅ Response has success: true")
+                    
+                    # Check for improvements_summary
+                    if 'improvements_summary' in data:
+                        print("✅ New plan has improvements_summary field")
+                    else:
+                        print("⚠️ No improvements_summary field found")
+                    
+                    # Check for different exercises (evolved)
+                    plan = data.get('plan', {})
+                    if plan.get('days'):
+                        print("✅ New plan has exercises (evolved)")
+                    else:
+                        print("⚠️ New plan has no exercises")
+                    
+                    # Check for XP earned
+                    if 'xp_earned' in data:
+                        print(f"✅ Returns xp_earned: {data['xp_earned']}")
+                    else:
+                        print("⚠️ No xp_earned field found")
+                    
+                    # Check if split structure is preserved
+                    if plan.get('split_type'):
+                        print(f"✅ New plan preserves split structure: {plan['split_type']}")
+                    else:
+                        print("⚠️ Split structure not preserved")
+                        
+                else:
+                    print("❌ Response success is false")
+                    
+                print(f"📄 Response preview: {json.dumps(data, indent=2)[:500]}...")
+                return True
+                
+            else:
+                print(f"❌ Request failed: {response.text}")
+                return False
+                
+        except requests.exceptions.Timeout:
+            print("❌ Request timed out after 120 seconds")
+            return False
+        except Exception as e:
+            print(f"❌ Request error: {e}")
+            return False
     
-    print()
-    print("🏁 TESTING COMPLETE")
-    print("=" * 60)
-    
-    return True
+    def run_all_tests(self):
+        """Run all tests in sequence"""
+        print("🧪 Starting Workout Plans Cardio Mode Testing")
+        print("=" * 60)
+        
+        # Login first
+        if not self.register_and_login():
+            print("❌ Authentication failed, cannot proceed with tests")
+            return False
+        
+        # Run tests
+        test1_result = self.test_cardio_pos_treino()
+        test2_result = self.test_cardio_hibrido()
+        test3_result = self.test_improve_workout()
+        
+        # Summary
+        print("\n" + "=" * 60)
+        print("📊 TEST SUMMARY")
+        print("=" * 60)
+        print(f"Test 1 (pos_treino): {'✅ PASSED' if test1_result else '❌ FAILED'}")
+        print(f"Test 2 (hibrido): {'✅ PASSED' if test2_result else '❌ FAILED'}")
+        print(f"Test 3 (improve): {'✅ PASSED' if test3_result else '❌ FAILED'}")
+        
+        total_passed = sum([test1_result, test2_result, test3_result])
+        print(f"\nOverall: {total_passed}/3 tests passed ({total_passed/3*100:.0f}%)")
+        
+        return total_passed == 3
 
 if __name__ == "__main__":
-    test_food_nutrition_estimation()
+    tester = WorkoutPlanTester()
+    success = tester.run_all_tests()
+    sys.exit(0 if success else 1)

@@ -4001,3 +4001,131 @@ agent_communication:
         - All response structures match API specification requirements
         
         **✅ No critical issues found. Endpoint is production-ready and meeting all specification requirements.**
+
+## New Changes - Round 14 (Workout Plans Cardio Mode Testing)
+
+backend:
+  - task: "Workout plans with cardio_mode 'pos_treino'"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented cardio_mode 'pos_treino' - adds cardio exercises at end of strength training splits"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: POST /api/workout-plans/generate with cardio_mode 'pos_treino' working perfectly. Generated AB split plan with 8 days (4 days/week × 2 weeks). Cardio exercises correctly added within splits at end of strength training. No separate cardio-only days (correct behavior). Response time: 13.8s. Plan ID: plan_5612948966ca saved for improvement testing."
+
+  - task: "Workout plans with cardio_mode 'hibrido'"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented cardio_mode 'hibrido' - mixes strength and cardio exercises within same training days"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: POST /api/workout-plans/generate with cardio_mode 'hibrido' working perfectly. Generated AB split plan with 6 days (3 days/week × 2 weeks). All 6 days have mixed strength and cardio exercises (hibrido mode working correctly). HIIT cardio properly integrated with strength exercises. Response time: 13.1s. Plan structure preserved correctly."
+
+  - task: "Workout plan improvement/evolution endpoint"
+    implemented: true
+    working: false
+    file: "backend/server.py"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/workout-plans/{plan_id}/improve - evolves existing workout plans with AI improvements"
+      - working: false
+        agent: "testing"
+        comment: "❌ TESTED: POST /api/workout-plans/{plan_id}/improve failing with 500 error due to Google Gemini API quota exhaustion (429 RESOURCE_EXHAUSTED). Error: 'You exceeded your current quota, please check your plan and billing details.' Multiple quota violations: daily requests, per-minute requests, and input token count limits. This is an INFRASTRUCTURE/BILLING issue, not a code implementation problem. Endpoint structure appears correct but blocked by API limits."
+
+test_plan:
+  current_focus:
+    - ""
+  completed_focus:
+    - "Workout plans with cardio_mode 'pos_treino' - TESTED AND WORKING ✅"
+    - "Workout plans with cardio_mode 'hibrido' - TESTED AND WORKING ✅"
+  stuck_tasks:
+    - "Workout plan improvement/evolution endpoint - BLOCKED BY GOOGLE GEMINI API QUOTA"
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "testing"
+      message: |
+        ✅ WORKOUT PLANS CARDIO MODE TESTING COMPLETE - 2/3 TESTS PASSED (67% SUCCESS RATE)
+        
+        **Test Environment:**
+        - User: testevolve@test.com / Test123! (as specified in review request)
+        - Backend URL: https://ai-workout-fix-1.preview.emergentagent.com/api
+        - Authentication: Session cookie method working correctly
+        - Test Date: 2026-03-17
+        
+        **✅ WORKING FEATURES (2/3 - 67%):**
+        
+        **Test 1: Generate workout with cardio_mode "pos_treino" ✅**
+        - ✅ POST /api/workout-plans/generate successful (13.8s response time)
+        - ✅ Response has success: true
+        - ✅ Plan generated with 8 days of exercises (4 days/week × 2 weeks)
+        - ✅ Found cardio exercises within splits (pos_treino mode working correctly)
+        - ✅ No separate cardio-only days (correct behavior for pos_treino)
+        - ✅ Plan structure: AB split with Peito/Tríceps and Costas/Bíceps
+        - ✅ Saved plan_id: plan_5612948966ca for improvement test
+        
+        **Test 2: Generate workout with cardio_mode "hibrido" ✅**
+        - ✅ POST /api/workout-plans/generate successful (13.1s response time)
+        - ✅ Response has success: true
+        - ✅ Plan generated with 6 days of exercises (3 days/week × 2 weeks)
+        - ✅ Found 6 days with mixed strength and cardio (hibrido mode working correctly)
+        - ✅ Plan structure: AB split with Superior/Inferior muscle groups
+        - ✅ HIIT cardio properly integrated with strength exercises
+        
+        **❌ FAILED FEATURES (1/3 - 33%):**
+        
+        **Test 3: Improve/Evolve workout plan ❌**
+        - ❌ POST /api/workout-plans/{plan_id}/improve failed with 500 error
+        - ❌ Google Gemini API quota exhausted (429 RESOURCE_EXHAUSTED)
+        - ❌ Error: "You exceeded your current quota, please check your plan and billing details"
+        - ❌ Multiple quota violations: requests per day/minute and input token count limits
+        - ⚠️ This is an INFRASTRUCTURE/BILLING issue, not a code implementation problem
+        
+        **🔗 Integration Status:**
+        - Authentication: Session cookie method working correctly
+        - Google Gemini AI: Working for workout generation but hitting quota limits for improvement
+        - Database operations: All workout plans properly saved and retrievable
+        - Cardio mode logic: Both "pos_treino" and "hibrido" modes implemented correctly
+        - Plan structure: Split configurations preserved correctly
+        
+        **📊 Test Coverage:**
+        - Cardio Mode Generation: 2/2 (100% - both pos_treino and hibrido working)
+        - Plan Improvement: 0/1 (0% - blocked by API quota limits)
+        - Authentication Flow: Working correctly with session cookies
+        - Data Persistence: All generated plans properly stored (2 plans created)
+        
+        **🎯 CRITICAL ISSUE IDENTIFIED:**
+        The improve/evolve workout endpoint is **BLOCKED BY GOOGLE GEMINI API QUOTA EXHAUSTION**. This is not a code bug but an infrastructure limitation:
+        - Free tier quota limits exceeded for gemini-2.0-flash-lite model
+        - Multiple quota violations: daily requests, per-minute requests, and input tokens
+        - Retry delay: 13+ seconds suggested by API
+        
+        **📋 CONCLUSION:**
+        The NEW cardio mode features are **FULLY FUNCTIONAL** and working perfectly:
+        - ✅ "pos_treino" mode correctly adds cardio exercises at end of strength training splits
+        - ✅ "hibrido" mode correctly mixes strength and cardio exercises within same days
+        - ✅ Both modes respect split configurations and training frequency
+        - ✅ AI generation times acceptable (13-14 seconds)
+        - ❌ Workout improvement feature blocked by Google Gemini API quota limits
+        
+        **RECOMMENDATION FOR MAIN AGENT:**
+        Upgrade Google Cloud billing to increase Gemini API quota limits or implement exponential backoff retry logic for quota-limited endpoints.
