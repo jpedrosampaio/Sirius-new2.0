@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
+import { getLocalDateStr } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,7 +190,7 @@ export default function Workouts() {
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [improvingPlan, setImprovingPlan] = useState(null);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
   
   const [newWorkout, setNewWorkout] = useState({
     activity_type: "weightlifting",

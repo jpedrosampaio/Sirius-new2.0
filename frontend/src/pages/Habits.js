@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
+import { getLocalDateStr } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ const MiniConsistencyChart = ({ completions = [], color }) => {
   for (let i = 13; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(date);
     last14Days.push({
       date: dateStr,
       completed: completions.includes(dateStr)
@@ -81,7 +82,7 @@ export default function Habits() {
   const [reminderDays, setReminderDays] = useState(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
   const [newHabit, setNewHabit] = useState({ name: "", description: "", color: "#007AFF" });
   const [showStats, setShowStats] = useState(true);
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateStr();
 
   const weekDays = [
     { key: "monday", label: "Seg" },

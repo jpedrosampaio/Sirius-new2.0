@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
+import { getLocalDateStr, getLocalMonthStr } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +44,7 @@ export default function Finance() {
 
   // Monthly bills
   const [monthlyBills, setMonthlyBills] = useState(null);
-  const [billsMonth, setBillsMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [billsMonth, setBillsMonth] = useState(() => getLocalMonthStr());
   const [openAddBill, setOpenAddBill] = useState(false);
   const [newBill, setNewBill] = useState({ description: "", amount: "", category: "outros" });
 
@@ -55,7 +56,7 @@ export default function Finance() {
   const [projectionMonth, setProjectionMonth] = useState(() => {
     const next = new Date();
     next.setMonth(next.getMonth() + 1);
-    return next.toISOString().slice(0, 7);
+    return getLocalMonthStr(next);
   });
   
   const [newTransaction, setNewTransaction] = useState({
@@ -63,13 +64,13 @@ export default function Finance() {
     amount: "",
     category: "alimentação",
     description: "",
-    date: new Date().toISOString().split('T')[0]
+    date: getLocalDateStr()
   });
   
   const [newBudget, setNewBudget] = useState({
     category: "alimentação",
     limit: "",
-    month: new Date().toISOString().slice(0, 7),
+    month: getLocalMonthStr(),
     budget_type: "fixed",
     percentage: ""
   });
@@ -104,7 +105,7 @@ export default function Finance() {
     description: ""
   });
   
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState(getLocalMonthStr());
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 15;
 
@@ -324,7 +325,7 @@ export default function Finance() {
         amount: "",
         category: "alimentação",
         description: "",
-        date: new Date().toISOString().split('T')[0]
+        date: getLocalDateStr()
       });
       setOpenTransaction(false);
       fetchTransactions();
@@ -357,7 +358,7 @@ export default function Finance() {
       setNewBudget({
         category: "alimentação",
         limit: "",
-        month: new Date().toISOString().slice(0, 7),
+        month: getLocalMonthStr(),
         budget_type: "fixed",
         percentage: ""
       });
@@ -518,7 +519,7 @@ export default function Finance() {
   for (let i = 1; i <= 12; i++) {
     const date = new Date();
     date.setMonth(date.getMonth() + i);
-    futureMonths.push(date.toISOString().slice(0, 7));
+    futureMonths.push(getLocalMonthStr(date));
   }
 
   const getMonthLabel = (monthStr) => {
@@ -1518,9 +1519,9 @@ export default function Finance() {
             <TabsContent value="bills" className="mt-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { const d = new Date(billsMonth + "-01"); d.setMonth(d.getMonth() - 1); const m = d.toISOString().slice(0, 7); setBillsMonth(m); fetchMonthlyBills(m); }}><ChevronLeft className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { const d = new Date(billsMonth + "-01"); d.setMonth(d.getMonth() - 1); const m = getLocalMonthStr(d); setBillsMonth(m); fetchMonthlyBills(m); }}><ChevronLeft className="w-4 h-4" /></Button>
                   <span className="text-sm font-medium min-w-[100px] text-center">{new Date(billsMonth + "-01").toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { const d = new Date(billsMonth + "-01"); d.setMonth(d.getMonth() + 1); const m = d.toISOString().slice(0, 7); setBillsMonth(m); fetchMonthlyBills(m); }}><ChevronRight className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { const d = new Date(billsMonth + "-01"); d.setMonth(d.getMonth() + 1); const m = getLocalMonthStr(d); setBillsMonth(m); fetchMonthlyBills(m); }}><ChevronRight className="w-4 h-4" /></Button>
                 </div>
                 <Dialog open={openAddBill} onOpenChange={setOpenAddBill}>
                   <Button onClick={() => setOpenAddBill(true)} size="sm" className="bg-[#007AFF] text-xs"><Plus className="w-3 h-3 mr-1" />Adicionar Conta</Button>

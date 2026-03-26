@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
+import { getLocalDateStr } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,7 +43,7 @@ const mealTypeLabels = {
 export default function Nutrition() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateStr());
   const [meals, setMeals] = useState([]);
   const [stats, setStats] = useState(null);
   const [goals, setGoals] = useState(null);
@@ -369,7 +370,7 @@ export default function Nutrition() {
   const changeDate = (days) => {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() + days);
-    setSelectedDate(date.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateStr(date));
   };
 
   const getProgressColor = (consumed, goal) => {

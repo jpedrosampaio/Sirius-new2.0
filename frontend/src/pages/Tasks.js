@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
+import { getLocalDateStr } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,7 +104,7 @@ function TaskCard({ task, index, onToggle, onDelete, viewMode }) {
 export default function Tasks() {
   const [user, setUser] = useState(null);
   const [tasks, setTasks] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateStr());
   const [activeTab, setActiveTab] = useState("all");
   const [viewMode, setViewMode] = useState("kanban");
   const [open, setOpen] = useState(false);

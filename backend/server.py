@@ -4116,7 +4116,7 @@ IMPORTANTE:
             cardio_split = next((s for s in splits if s.get("split_label", "").lower() == "cardio"), None)
             rest_split = next((s for s in splits if s.get("split_label", "").lower() == "descanso"), None)
             
-            day_counter = 0
+            muscle_day_counter = 0
             cardio_mode = gen_data.cardio_mode or "hibrido"
             
             for week in range(1, cycle_weeks_count + 1):
@@ -4125,21 +4125,20 @@ IMPORTANTE:
                 progression_focus = week_progression.get("focus", "") if week_progression else ""
                 
                 for day_in_week in range(1, days_per_week + 1):
-                    # Determine which split to use (rotate through main splits)
-                    split_idx = day_counter % len(main_splits) if main_splits else 0
-                    split = main_splits[split_idx] if main_splits else {"exercises": []}
-                    
-                    # Check if last day of the week should be rest day
                     is_rest_day = False
                     is_cardio_day = False
                     
-                    if day_in_week == days_per_week and gen_data.include_cardio:
-                        # Last day of the week = rest day
-                        is_rest_day = True
-                    elif cardio_split and cardio_mode == "hibrido_alternado" and days_per_week > len(main_splits):
-                        # Alternate: insert cardio day between muscle days (skip rest day)
-                        if not is_rest_day and (day_in_week - 1) % (len(main_splits) + 1) == len(main_splits):
+                    if cardio_mode == "hibrido_alternado" and gen_data.include_cardio and cardio_split:
+                        # Pattern: Muscle, Cardio, Muscle, Cardio, ..., Rest (last day)
+                        if day_in_week == days_per_week:
+                            is_rest_day = True
+                        elif day_in_week % 2 == 0:
                             is_cardio_day = True
+                        # Odd days (1, 3, 5, ...) are muscle days
+                    elif cardio_mode == "hibrido" and gen_data.include_cardio:
+                        # Hybrid mode: last day is rest, all others are muscle+cardio
+                        if day_in_week == days_per_week:
+                            is_rest_day = True
                     
                     if is_rest_day:
                         if rest_split:
@@ -4153,10 +4152,11 @@ IMPORTANTE:
                         label = "Cardio"
                         split_name = cardio_split.get("split_name", "Cardio")
                     else:
-                        current_split = split
+                        split_idx = muscle_day_counter % len(main_splits) if main_splits else 0
+                        current_split = main_splits[split_idx] if main_splits else {"exercises": []}
                         label = current_split.get("split_label", "?")
                         split_name = current_split.get("split_name", "")
-                        day_counter += 1
+                        muscle_day_counter += 1
                     
                     day_label = f"Semana {week} - Dia {day_in_week}: Treino {label} - {split_name}"
                     
