@@ -182,11 +182,55 @@ export default function Nutrition() {
       toast.error("Digite o nome do alimento");
       return;
     }
+    if (!newFood.calories && !foodEstimated) {
+      toast.error("Calcule os nutrientes com IA primeiro ou preencha manualmente");
+      return;
+    }
     setMealForm(prev => ({
       ...prev,
       foods: [...prev.foods, { ...newFood }]
     }));
-    setNewFood({ name: "", calories: 0, protein: 0, carbs: 0, fat: 0, quantity: 1 });
+    setNewFood({ name: "", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, quantity: 1, weight: "" });
+    setFoodEstimated(false);
+  };
+
+  const handleEstimateFood = async () => {
+    if (!newFood.name) {
+      toast.error("Digite o nome do alimento");
+      return;
+    }
+    if (!newFood.weight) {
+      toast.error("Digite a quantidade ou peso (ex: 200g, 1 unidade, 1 xícara)");
+      return;
+    }
+    setEstimatingFood(true);
+    try {
+      const res = await axios.post(`${API}/nutrition/estimate-food`, {
+        food_name: newFood.name,
+        quantity: newFood.weight
+      }, { withCredentials: true });
+      
+      if (res.data.success) {
+        setNewFood(prev => ({
+          ...prev,
+          name: res.data.food_name || prev.name,
+          calories: res.data.calories || 0,
+          protein: res.data.protein || 0,
+          carbs: res.data.carbs || 0,
+          fat: res.data.fat || 0,
+          fiber: res.data.fiber || 0,
+          quantity: 1
+        }));
+        setFoodEstimated(true);
+        toast.success("Nutrientes calculados com IA!");
+      } else {
+        toast.error(res.data.error || "Não foi possível estimar. Tente novamente.");
+      }
+    } catch (error) {
+      toast.error("Erro ao estimar nutrientes. Tente novamente.");
+    } finally {
+      setEstimatingFood(false);
+    }
   };
 
   const handleRemoveFood = (index) => {
@@ -1372,53 +1416,104 @@ export default function Nutrition() {
 
               {/* Add Food Section */}
               <div className="border border-[#27272A] rounded-lg p-4">
-                <h4 className="font-medium mb-3">Adicionar Alimento</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-                  <Input
-                    placeholder="Nome do alimento"
-                    value={newFood.name}
-                    onChange={(e) => setNewFood({...newFood, name: e.target.value})}
-                    className="bg-[#121212] border-[#27272A]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Calorias"
-                    value={newFood.calories || ""}
-                    onChange={(e) => setNewFood({...newFood, calories: Number(e.target.value)})}
-                    className="bg-[#121212] border-[#27272A]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Proteína (g)"
-                    value={newFood.protein || ""}
-                    onChange={(e) => setNewFood({...newFood, protein: Number(e.target.value)})}
-                    className="bg-[#121212] border-[#27272A]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Carboidratos (g)"
-                    value={newFood.carbs || ""}
-                    onChange={(e) => setNewFood({...newFood, carbs: Number(e.target.value)})}
-                    className="bg-[#121212] border-[#27272A]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Gordura (g)"
-                    value={newFood.fat || ""}
-                    onChange={(e) => setNewFood({...newFood, fat: Number(e.target.value)})}
-                    className="bg-[#121212] border-[#27272A]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Quantidade"
-                    value={newFood.quantity}
-                    onChange={(e) => setNewFood({...newFood, quantity: Number(e.target.value)})}
-                    className="bg-[#121212] border-[#27272A]"
-                  />
-                </div>
-                <Button onClick={handleAddFood} variant="outline" className="w-full">
-                  <Plus className="w-4 h-4 mr-2" />
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#A855F7]" />
                   Adicionar Alimento
+                </h4>
+                
+                {/* Step 1: Food name + weight */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <Label className="text-xs text-[#A1A1AA] mb-1 block">Alimento</Label>
+                    <Input
+                      placeholder="Ex: Arroz, Frango grelhado, Banana..."
+                      value={newFood.name}
+                      onChange={(e) => { setNewFood({...newFood, name: e.target.value}); setFoodEstimated(false); }}
+                      className="bg-[#121212] border-[#27272A]"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-[#A1A1AA] mb-1 block">Quantidade / Peso</Label>
+                    <Input
+                      placeholder="Ex: 200g, 1 xícara, 2 unidades..."
+                      value={newFood.weight}
+                      onChange={(e) => { setNewFood({...newFood, weight: e.target.value}); setFoodEstimated(false); }}
+                      className="bg-[#121212] border-[#27272A]"
+                    />
+                  </div>
+                </div>
+
+                {/* AI Estimate Button */}
+                <Button 
+                  onClick={handleEstimateFood} 
+                  disabled={estimatingFood || !newFood.name || !newFood.weight}
+                  className="w-full bg-gradient-to-r from-[#A855F7] to-[#00F0FF] hover:opacity-90 text-white mb-3"
+                >
+                  {estimatingFood ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Calculando nutrientes...</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" /> Calcular Nutrientes com IA</>
+                  )}
+                </Button>
+
+                {/* Estimated Values (shown after AI estimation) */}
+                {foodEstimated && (
+                  <div className="bg-[#121212] border border-[#27272A] rounded-lg p-3 mb-3 space-y-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-[#A855F7] font-medium uppercase">Valores Estimados pela IA</span>
+                      <span className="text-xs text-[#52525B]">Edite se necessário</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="bg-[#0A0A0A] rounded-lg p-2 text-center">
+                        <span className="text-[10px] text-[#A1A1AA] uppercase block">Calorias</span>
+                        <Input
+                          type="number"
+                          value={newFood.calories || ""}
+                          onChange={(e) => setNewFood({...newFood, calories: Number(e.target.value)})}
+                          className="bg-transparent border-none text-center text-lg font-bold text-[#F59E0B] p-0 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-[10px] text-[#52525B]">kcal</span>
+                      </div>
+                      <div className="bg-[#0A0A0A] rounded-lg p-2 text-center">
+                        <span className="text-[10px] text-[#A1A1AA] uppercase block">Proteína</span>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={newFood.protein || ""}
+                          onChange={(e) => setNewFood({...newFood, protein: Number(e.target.value)})}
+                          className="bg-transparent border-none text-center text-lg font-bold text-red-400 p-0 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-[10px] text-[#52525B]">g</span>
+                      </div>
+                      <div className="bg-[#0A0A0A] rounded-lg p-2 text-center">
+                        <span className="text-[10px] text-[#A1A1AA] uppercase block">Carboidratos</span>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={newFood.carbs || ""}
+                          onChange={(e) => setNewFood({...newFood, carbs: Number(e.target.value)})}
+                          className="bg-transparent border-none text-center text-lg font-bold text-blue-400 p-0 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-[10px] text-[#52525B]">g</span>
+                      </div>
+                      <div className="bg-[#0A0A0A] rounded-lg p-2 text-center">
+                        <span className="text-[10px] text-[#A1A1AA] uppercase block">Gordura</span>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={newFood.fat || ""}
+                          onChange={(e) => setNewFood({...newFood, fat: Number(e.target.value)})}
+                          className="bg-transparent border-none text-center text-lg font-bold text-yellow-400 p-0 h-8 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-[10px] text-[#52525B]">g</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <Button onClick={handleAddFood} variant="outline" className="w-full" disabled={!foodEstimated && !newFood.calories}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {foodEstimated ? 'Adicionar à Refeição' : 'Adicionar Alimento'}
                 </Button>
               </div>
 
@@ -1428,11 +1523,15 @@ export default function Nutrition() {
                   <h4 className="font-medium">Alimentos Adicionados</h4>
                   {mealForm.foods.map((food, idx) => (
                     <div key={idx} className="flex items-center justify-between bg-[#121212] p-3 rounded-lg">
-                      <div>
+                      <div className="flex-1">
                         <span className="font-medium">{food.name}</span>
-                        <span className="text-sm text-[#A1A1AA] ml-2">
-                          x{food.quantity} | {food.calories * food.quantity}kcal
-                        </span>
+                        {food.weight && <span className="text-xs text-[#52525B] ml-2">({food.weight})</span>}
+                        <div className="flex gap-3 mt-1 text-xs text-[#A1A1AA]">
+                          <span className="text-[#F59E0B]">{food.calories}kcal</span>
+                          <span className="text-red-400">P:{food.protein}g</span>
+                          <span className="text-blue-400">C:{food.carbs}g</span>
+                          <span className="text-yellow-400">G:{food.fat}g</span>
+                        </div>
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => handleRemoveFood(idx)}>
                         <Trash2 className="w-4 h-4 text-red-500" />
