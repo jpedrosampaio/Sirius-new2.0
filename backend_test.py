@@ -10,7 +10,7 @@ import time
 import sys
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://ai-workout-fix-1.preview.emergentagent.com/api"
+BACKEND_URL = "https://ai-workout-builder-3.preview.emergentagent.com/api"
 
 class WorkoutPlanTester:
     def __init__(self):
