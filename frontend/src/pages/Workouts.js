@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
-import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle, Zap, Video, BookOpenCheck, Star, Pause, RotateCcw, Square, ExternalLink, Clock, Trophy, ChevronRight, Heart, ShieldCheck } from "lucide-react";
+import { Dumbbell, Plus, Trash2, Play, Check, X, Timer, Flame, TrendingUp, Calendar, FileText, Activity, Edit2, ChevronDown, ChevronUp, Scale, Upload, Sparkles, Target, Ruler, BarChart3, RefreshCw, Loader2, Save, BookOpen, XCircle, Zap, BookOpenCheck, Star, Pause, RotateCcw, Square, Clock, Trophy, ChevronRight, Heart, ShieldCheck } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from 'recharts';
 import axios from "axios";
 import { toast } from "sonner";
@@ -185,6 +185,7 @@ export default function Workouts() {
   const [feedbackData, setFeedbackData] = useState({ difficulty: 3, feeling: "bom", notes: "" });
   const [expandedTutorials, setExpandedTutorials] = useState({});
   const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+  const [selectedWeek, setSelectedWeek] = useState(1);
 
   const today = new Date().toISOString().split('T')[0];
   
@@ -1412,7 +1413,7 @@ export default function Workouts() {
                         <div>
                           <Label className="text-xs uppercase tracking-wider mb-2 block">Grupos Musculares (opcional)</Label>
                           <div className="flex flex-wrap gap-2">
-                            {ALL_MUSCLE_GROUPS.slice(0, 8).map(mg => (
+                            {ALL_MUSCLE_GROUPS.map(mg => (
                               <button
                                 key={mg.value}
                                 onClick={() => toggleMuscleGroup(mg.value)}
@@ -1437,7 +1438,6 @@ export default function Workouts() {
                           <ul className="text-xs text-[#A1A1AA] space-y-1">
                             <li>• Exercícios personalizados para seu nível e objetivo</li>
                             <li>• Tutorial detalhado de execução de cada exercício</li>
-                            <li>• Links de vídeo do YouTube com demonstração</li>
                             <li>• Séries, repetições e tempo de descanso adequados</li>
                             {aiGenForm.duration !== "dia" && <li>• Organização por dias com alternância de grupos</li>}
                           </ul>
@@ -1830,26 +1830,83 @@ export default function Workouts() {
                         {isExpanded && (
                           <div className="mt-4 border-t border-[#27272A] pt-4">
                             {/* Day selector for multi-day plans */}
-                            {plan.days && plan.days.length > 1 && (
-                              <div className="mb-4">
-                                <Label className="text-xs uppercase tracking-wider text-[#A1A1AA] mb-2 block">Selecione o dia</Label>
-                                <div className="flex gap-1 flex-wrap">
-                                  {plan.days.map((day, dIdx) => (
-                                    <button
-                                      key={dIdx}
-                                      onClick={() => setSelectedDayIndex(dIdx)}
-                                      className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                                        selectedDayIndex === dIdx 
-                                          ? 'bg-[#00F0FF] text-black font-medium' 
-                                          : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#00F0FF]'
-                                      }`}
-                                    >
-                                      {day.day_label || `Dia ${dIdx + 1}`}
-                                    </button>
-                                  ))}
+                            {plan.days && plan.days.length > 1 && (() => {
+                              // Group days by week
+                              const weeks = {};
+                              plan.days.forEach((day, idx) => {
+                                const weekNum = day.week || Math.floor(idx / (plan.training_days_per_week || 5)) + 1;
+                                if (!weeks[weekNum]) weeks[weekNum] = [];
+                                weeks[weekNum].push({ ...day, _globalIdx: idx });
+                              });
+                              const weekNumbers = Object.keys(weeks).map(Number).sort((a, b) => a - b);
+                              const hasMultipleWeeks = weekNumbers.length > 1;
+                              const currentWeekDays = hasMultipleWeeks ? (weeks[selectedWeek] || weeks[weekNumbers[0]] || []) : plan.days.map((d, i) => ({ ...d, _globalIdx: i }));
+                              const currentWeekProgression = plan.weekly_progression?.find(wp => wp.week === selectedWeek);
+
+                              return (
+                                <div className="mb-4 space-y-3">
+                                  {/* Week selector (only for multi-week plans) */}
+                                  {hasMultipleWeeks && (
+                                    <div>
+                                      <Label className="text-xs uppercase tracking-wider text-[#A1A1AA] mb-2 block">Semana</Label>
+                                      <div className="flex gap-1.5 flex-wrap">
+                                        {weekNumbers.map(wn => (
+                                          <button
+                                            key={wn}
+                                            onClick={() => { setSelectedWeek(wn); setSelectedDayIndex(weeks[wn]?.[0]?._globalIdx || 0); }}
+                                            className={`px-3 py-1.5 text-xs rounded-lg transition-all font-medium ${
+                                              selectedWeek === wn 
+                                                ? 'bg-[#A855F7] text-white' 
+                                                : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#A855F7]'
+                                            }`}
+                                          >
+                                            Sem {wn}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      {currentWeekProgression && (
+                                        <div className="mt-2 px-3 py-2 bg-[#1A1A2E] rounded-lg border border-[#27272A]">
+                                          <p className="text-xs text-[#A855F7] font-medium">{currentWeekProgression.focus}</p>
+                                          <p className="text-[11px] text-[#A1A1AA] mt-0.5">{currentWeekProgression.notes}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Day selector within week */}
+                                  <div>
+                                    <Label className="text-xs uppercase tracking-wider text-[#A1A1AA] mb-2 block">
+                                      {hasMultipleWeeks ? 'Dia da Semana' : 'Selecione o dia'}
+                                    </Label>
+                                    <div className="flex gap-1.5 flex-wrap">
+                                      {currentWeekDays.map((day, localIdx) => {
+                                        const globalIdx = day._globalIdx !== undefined ? day._globalIdx : localIdx;
+                                        const splitLabel = day.split_label || '';
+                                        const isCardio = splitLabel.toLowerCase() === 'cardio';
+                                        return (
+                                          <button
+                                            key={globalIdx}
+                                            onClick={() => setSelectedDayIndex(globalIdx)}
+                                            className={`px-3 py-2 text-xs rounded-lg transition-all ${
+                                              selectedDayIndex === globalIdx 
+                                                ? isCardio ? 'bg-green-600 text-white font-medium' : 'bg-[#00F0FF] text-black font-medium' 
+                                                : 'bg-[#121212] border border-[#27272A] text-[#A1A1AA] hover:border-[#00F0FF]'
+                                            }`}
+                                          >
+                                            <div className="flex flex-col items-center gap-0.5">
+                                              <span className="font-bold">{splitLabel ? `Treino ${splitLabel}` : `Dia ${localIdx + 1}`}</span>
+                                              {day.split_label && hasMultipleWeeks && (
+                                                <span className="text-[10px] opacity-75">Dia {localIdx + 1}</span>
+                                              )}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              );
+                            })()}
 
                             {/* Start Workout Button */}
                             <div className="mb-4">
@@ -1863,12 +1920,19 @@ export default function Workouts() {
                             </div>
 
                             <div className="flex justify-between items-center mb-3">
-                              <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">
-                                {plan.days && plan.days.length > 1 
-                                  ? (plan.days[selectedDayIndex]?.day_label || 'Exercícios')
-                                  : 'Treino de Hoje'
-                                }
-                              </Label>
+                              <div>
+                                <Label className="text-xs uppercase tracking-wider text-[#A1A1AA]">
+                                  {plan.days && plan.days.length > 1 
+                                    ? (plan.days[selectedDayIndex]?.split_label 
+                                      ? `Treino ${plan.days[selectedDayIndex].split_label} - ${plan.days[selectedDayIndex]?.split_label === 'Cardio' ? 'Cardio' : (plan.split_config?.find(s => s.label === plan.days[selectedDayIndex]?.split_label)?.name || plan.days[selectedDayIndex]?.day_label || 'Exercícios')}`
+                                      : (plan.days[selectedDayIndex]?.day_label || 'Exercícios'))
+                                    : 'Treino de Hoje'
+                                  }
+                                </Label>
+                                {plan.days?.[selectedDayIndex]?.progression_notes && (
+                                  <p className="text-[11px] text-[#A855F7] mt-0.5">{plan.days[selectedDayIndex].progression_notes}</p>
+                                )}
+                              </div>
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
@@ -1886,7 +1950,7 @@ export default function Workouts() {
                                 return dayExercises.map((ex, idx) => {
                                   const isChecked = status.exercises_status?.[idx] || false;
                                   const tutorialKey = `${plan.plan_id}_${selectedDayIndex}_${idx}`;
-                                  const hasTutorial = ex.tutorial || ex.video_url;
+                                  const hasTutorial = !!ex.tutorial;
                                   return (
                                     <div key={idx} className="space-y-0">
                                       <div 
@@ -1939,18 +2003,6 @@ export default function Workouts() {
                                               </p>
                                               <p className="text-xs text-[#A1A1AA] leading-relaxed">{ex.tutorial}</p>
                                             </div>
-                                          )}
-                                          {ex.video_url && (
-                                            <a 
-                                              href={ex.video_url} 
-                                              target="_blank" 
-                                              rel="noopener noreferrer"
-                                              className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 transition-colors bg-red-500/10 p-2 rounded"
-                                            >
-                                              <Video className="w-4 h-4" />
-                                              <span>Assistir tutorial no YouTube</span>
-                                              <ExternalLink className="w-3 h-3 ml-auto" />
-                                            </a>
                                           )}
                                         </div>
                                       )}
@@ -2593,7 +2645,7 @@ export default function Workouts() {
                   <div className="space-y-2">
                     {(activeSession.exercises || []).map((ex, idx) => {
                       const tutorialKey = `session_${idx}`;
-                      const hasTutorial = ex.tutorial || ex.video_url;
+                      const hasTutorial = !!ex.tutorial;
                       const setsProgress = ex.sets_completed || 0;
                       
                       return (
@@ -2673,18 +2725,6 @@ export default function Workouts() {
                                   </p>
                                   <p className="text-xs text-[#A1A1AA] leading-relaxed">{ex.tutorial}</p>
                                 </div>
-                              )}
-                              {ex.video_url && (
-                                <a 
-                                  href={ex.video_url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 bg-red-500/10 p-2 rounded"
-                                >
-                                  <Video className="w-4 h-4" />
-                                  <span>Assistir tutorial no YouTube</span>
-                                  <ExternalLink className="w-3 h-3 ml-auto" />
-                                </a>
                               )}
                             </div>
                           )}

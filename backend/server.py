@@ -253,7 +253,7 @@ class WorkoutPlanCreate(BaseModel):
 class WorkoutPlanGenerate(BaseModel):
     objective: str  # hipertrofia, emagrecimento, condicionamento, forca, flexibilidade
     level: str  # iniciante, intermediario, avancado
-    muscle_groups: Optional[List[str]] = None  # peito, costas, pernas, ombros, biceps, triceps, abdomen, gluteos
+    muscle_groups: Optional[List[str]] = None  # peito, costas, pernas, ombros, biceps, triceps, abdomen, gluteos, trapezio, antebraco, panturrilha
     duration: str = "dia"  # dia, semana, mes, ciclo
     # New fields for split-based generation
     generation_mode: str = "periodo"  # "periodo" or "tipo_treino"
@@ -3858,6 +3858,8 @@ Se algum exercício for contraindicado, substitua por uma alternativa segura e e
     # ===== BUILD PROMPT BASED ON GENERATION MODE =====
     if gen_data.generation_mode == "tipo_treino" and gen_data.split_config:
         # --- SPLIT-BASED GENERATION (Tipo de Treino) ---
+        # Strategy: Generate only BASE SPLITS (A, B, C...) + weekly progression notes
+        # Then expand to full days on the server side to avoid huge AI responses
         split_description = []
         for split in gen_data.split_config:
             label = split.get("label", "?")
@@ -3869,6 +3871,7 @@ Se algum exercício for contraindicado, substitua por uma alternativa segura e e
         days_per_week = gen_data.training_days_per_week or 5
         cycle_weeks = gen_data.cycle_weeks or 4
         split_type = gen_data.split_type or "ABC"
+        split_labels = [s.get("label", "") for s in gen_data.split_config]
         
         cardio_text = ""
         if gen_data.include_cardio:
@@ -3880,81 +3883,71 @@ Se algum exercício for contraindicado, substitua por uma alternativa segura e e
             }
             cardio_display = cardio_labels.get(cardio_name, cardio_name)
             cardio_text = f"""
-CARDIO INTERCALADO:
-- Inclua sessões de cardio ({cardio_display}) nos dias de descanso ou após os treinos de musculação.
-- Se houver mais dias de treino que divisões, preencha os dias extras com cardio.
-- Cada sessão de cardio deve ter: duração sugerida, intensidade, e dicas de execução.
-- No JSON, sessões de cardio devem ter muscle_group: "cardio" e incluir campo "cardio_type": "{cardio_name}".
+Inclua também um treino de cardio como uma das "splits":
+- Adicione um item extra no array "splits" com split_label: "Cardio", muscle_group: "cardio", cardio_type: "{cardio_name}".
+- O cardio deve ter 4-5 etapas (aquecimento, blocos de intensidade, desaquecimento) com nome, duracao, e dicas.
 """
 
-        # Build the day pattern for the cycle
-        split_labels = [s.get("label", "") for s in gen_data.split_config]
-        day_pattern_example = []
-        for i in range(days_per_week):
-            idx = i % len(split_labels)
-            day_pattern_example.append(f"Dia {i+1}: Treino {split_labels[idx]}")
-        pattern_text = ", ".join(day_pattern_example)
+        prompt = f"""Você é um personal trainer certificado. Gere APENAS os treinos BASE de cada divisão ({split_type}) em formato JSON compacto.
 
-        prompt = f"""Você é um personal trainer certificado. Gere um plano de treino completo em formato JSON baseado em DIVISÃO DE TREINO (tipo de treino).
+NÃO gere todos os dias do ciclo. Gere apenas 1 treino para cada letra da divisão + notas de progressão semanal.
 
 PARÂMETROS:
 - Objetivo: {gen_data.objective}
 - Nível: {gen_data.level}
-- Tipo de divisão: {split_type} ({len(split_labels)} divisões)
-- Dias de treino por semana: {days_per_week}
-- Duração do ciclo: {cycle_weeks} semana(s)
+- Divisão: {split_type} ({len(split_labels)} treinos base)
+- Ciclo: {cycle_weeks} semana(s), {days_per_week} dias/semana
 {health_text}
-DIVISÕES DEFINIDAS PELO USUÁRIO:
+DIVISÕES:
 {split_text}
-
-PADRÃO DE ROTAÇÃO SEMANAL (exemplo de 1 semana):
-{pattern_text}
-{"Se houver mais dias que divisões, repita o ciclo." if days_per_week > len(split_labels) else ""}
 {cardio_text}
-
-Gere o plano para {cycle_weeks} semana(s), com {days_per_week} dias de treino por semana.
-Total de dias: {days_per_week * cycle_weeks}.
-
-Para CADA exercício, inclua um tutorial descritivo de execução (posição inicial, movimento, respiração, erros comuns) em 2-3 frases.
-
-Se o ciclo for maior que 1 semana, aplique progressão de carga/volume entre as semanas.
 
 FORMATO JSON OBRIGATÓRIO:
 {{
-  "name": "Nome do plano (ex: Treino {split_type} - {gen_data.objective})",
-  "description": "Descrição do plano com objetivo e divisão",
+  "name": "Treino {split_type} - {gen_data.objective.capitalize()}",
+  "description": "Descrição breve",
   "plan_duration": "ciclo",
   "split_type": "{split_type}",
   "cycle_weeks": {cycle_weeks},
   "training_days_per_week": {days_per_week},
-  "days": [
+  "splits": [
     {{
-      "day_name": "sem1_dia1",
-      "day_label": "Semana 1 - Dia 1: Treino A - Peito e Tríceps",
       "split_label": "A",
-      "week": 1,
+      "split_name": "Peito e Tríceps",
       "exercises": [
         {{
-          "name": "Supino Reto com Barra",
+          "name": "Supino Reto",
           "sets": 4,
           "reps": 10,
-          "weight": "adequado ao nível",
+          "weight": "adequado",
           "rest_seconds": 90,
           "muscle_group": "peito",
-          "tutorial": "Deite no banco plano, pés firmes no chão. Segure a barra com pegada um pouco maior que os ombros. Desça controladamente até o peito e empurre para cima. Inspire ao descer, expire ao subir."
+          "tutorial": "Instrução concisa de execução em 1-2 frases."
         }}
       ]
+    }}
+  ],
+  "weekly_progression": [
+    {{
+      "week": 1,
+      "focus": "Adaptação e técnica",
+      "notes": "Carga moderada, foco na execução correta"
+    }},
+    {{
+      "week": 2,
+      "focus": "Aumento de volume",
+      "notes": "Aumente 1-2 reps por exercício"
     }}
   ]
 }}
 
-IMPORTANTE:
-- Retorne APENAS o JSON, sem markdown, sem ```json, sem texto adicional.
-- Seja CONCISO nos tutoriais (2-3 frases por exercício).
-- Adapte a complexidade, volume e carga ao nível ({gen_data.level}).
-- rest_seconds deve variar: 60s para exercícios leves, 90s para moderados, 120s para compostos pesados.
-- Cada dia DEVE respeitar os grupos musculares definidos para aquela divisão.
-- Use 4-6 exercícios por treino para iniciantes, 5-7 para intermediários, 6-8 para avançados."""
+REGRAS:
+- Retorne APENAS JSON válido, sem markdown, sem texto extra.
+- Gere 1 treino por letra ({', '.join(split_labels)}).
+- Tutorial: máximo 2 frases curtas por exercício.
+- {len(split_labels) * 5} a {len(split_labels) * 7} exercícios no total (4-6 por split para iniciante, 5-7 intermediário, 6-8 avançado).
+- Gere {cycle_weeks} itens em weekly_progression.
+- rest_seconds: 60s leves, 90s moderados, 120s compostos pesados."""
 
     else:
         # --- PERIOD-BASED GENERATION (existing flow) ---
@@ -3978,7 +3971,7 @@ PARÂMETROS:
 {health_text}
 {duration_instructions.get(gen_data.duration, duration_instructions['dia'])}
 
-Para CADA exercício, inclua um tutorial descritivo de execução (posição inicial, movimento, respiração, erros comuns) em 2-3 frases.
+Para CADA exercício, inclua um tutorial descritivo de execução em 1-2 frases curtas.
 
 FORMATO JSON OBRIGATÓRIO:
 {{
@@ -3997,23 +3990,23 @@ FORMATO JSON OBRIGATÓRIO:
           "weight": "adequado ao nível",
           "rest_seconds": 90,
           "muscle_group": "peito",
-          "tutorial": "Deite no banco plano, pés firmes no chão. Segure a barra com pegada um pouco maior que os ombros. Desça controladamente até o peito e empurre para cima. Inspire ao descer, expire ao subir."
+          "tutorial": "Deite no banco, desça a barra ao peito controladamente e empurre para cima. Inspire ao descer, expire ao subir."
         }}
       ]
     }}
   ]
 }}
 
-{"Se duração for 'dia', retorne apenas 1 dia no array 'days'." if gen_data.duration == "dia" else ""}
-{"Se duração for 'semana', retorne 5 dias (segunda a sexta) no array 'days'." if gen_data.duration == "semana" else ""}
-{"Se duração for 'mes', retorne as semanas organizadas: dias como 'sem1_dia1', 'sem1_dia2', etc." if gen_data.duration == "mes" else ""}
-{"Se duração for 'ciclo', organize por fases: dias como 'fase1_sem1_dia1', etc." if gen_data.duration == "ciclo" else ""}
+{"Retorne apenas 1 dia no array 'days'." if gen_data.duration == "dia" else ""}
+{"Retorne 5 dias (seg-sex) no array 'days'." if gen_data.duration == "semana" else ""}
+{"Organize semanas: dias como 'sem1_dia1', 'sem1_dia2', etc." if gen_data.duration == "mes" else ""}
+{"Organize por fases: dias como 'fase1_sem1_dia1', etc." if gen_data.duration == "ciclo" else ""}
 
 IMPORTANTE: 
-- Retorne APENAS o JSON, sem markdown, sem ```json, sem texto adicional.
-- Seja CONCISO nos tutoriais (2-3 frases por exercício).
-- Adapte a complexidade, volume e carga ao nível ({gen_data.level}).
-- rest_seconds deve variar: 60s para exercícios leves, 90s para moderados, 120s para compostos pesados."""
+- Retorne APENAS JSON válido, sem markdown, sem texto extra.
+- Tutorial: máximo 2 frases curtas por exercício.
+- Adapte ao nível ({gen_data.level}).
+- rest_seconds: 60s leves, 90s moderados, 120s compostos pesados."""
 
     # Helper to clean and parse JSON from AI response
     def _clean_and_parse_json(text: str) -> dict:
@@ -4086,9 +4079,67 @@ IMPORTANTE:
         # Create the plan document
         plan_id = f"plan_{uuid.uuid4().hex[:12]}"
         
-        # Flatten exercises for backward compatibility (all exercises from all days)
+        # For tipo_treino: expand splits into days on the server side
+        days = []
+        weekly_progression = plan_data.get("weekly_progression", [])
+        
+        if gen_data.generation_mode == "tipo_treino" and plan_data.get("splits"):
+            splits = plan_data["splits"]
+            split_labels_ai = [s.get("split_label", f"S{i}") for i, s in enumerate(splits)]
+            days_per_week = gen_data.training_days_per_week or 5
+            cycle_weeks_count = gen_data.cycle_weeks or 4
+            
+            # Build rotation pattern using split labels from AI response
+            # Filter out cardio splits for the main rotation
+            main_splits = [s for s in splits if s.get("split_label", "").lower() != "cardio"]
+            cardio_split = next((s for s in splits if s.get("split_label", "").lower() == "cardio"), None)
+            
+            day_counter = 0
+            for week in range(1, cycle_weeks_count + 1):
+                week_progression = next((wp for wp in weekly_progression if wp.get("week") == week), None)
+                progression_note = week_progression.get("notes", "") if week_progression else ""
+                progression_focus = week_progression.get("focus", "") if week_progression else ""
+                
+                for day_in_week in range(1, days_per_week + 1):
+                    # Determine which split to use (rotate through main splits)
+                    split_idx = day_counter % len(main_splits)
+                    split = main_splits[split_idx]
+                    
+                    # Check if this day should be cardio instead
+                    # If cardio is included and there are more days than main splits, use cardio for extras
+                    is_cardio_day = False
+                    if cardio_split and days_per_week > len(main_splits):
+                        # Intercalate: every Nth day is cardio
+                        if (day_in_week - 1) % (len(main_splits) + 1) == len(main_splits):
+                            is_cardio_day = True
+                    
+                    if is_cardio_day and cardio_split:
+                        current_split = cardio_split
+                        label = "Cardio"
+                        split_name = cardio_split.get("split_name", "Cardio")
+                    else:
+                        current_split = split
+                        label = current_split.get("split_label", "?")
+                        split_name = current_split.get("split_name", "")
+                        day_counter += 1
+                    
+                    day_label = f"Semana {week} - Dia {day_in_week}: Treino {label} - {split_name}"
+                    
+                    days.append({
+                        "day_name": f"sem{week}_dia{day_in_week}",
+                        "day_label": day_label,
+                        "split_label": label,
+                        "week": week,
+                        "exercises": current_split.get("exercises", []),
+                        "progression_focus": progression_focus,
+                        "progression_notes": progression_note,
+                    })
+        else:
+            # Period-based: days come directly from AI response
+            days = plan_data.get("days", [])
+        
+        # Flatten exercises for backward compatibility
         all_exercises = []
-        days = plan_data.get("days", [])
         for day in days:
             for ex in day.get("exercises", []):
                 all_exercises.append(ex)
@@ -4107,6 +4158,7 @@ IMPORTANTE:
             "plan_duration": plan_duration,
             "generated_by_ai": True,
             "days": days,
+            "weekly_progression": weekly_progression,
             "objective": gen_data.objective,
             "level": gen_data.level,
             "generation_mode": gen_data.generation_mode,
