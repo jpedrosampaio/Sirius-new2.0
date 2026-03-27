@@ -9202,7 +9202,7 @@ Para certo/errado: options = ["Certo", "Errado"], correct_answer = "Certo" ou "E
 Adicione o campo "type": "multipla_escolha" ou "certo_errado" em cada questão."""
         
         system_msg = f"""Você é um especialista em extrair questões de provas e concursos de documentos PDF.
-Sua tarefa é analisar o documento e extrair TODAS as questões encontradas.
+Sua tarefa é analisar o documento e extrair TODAS as questões encontradas, incluindo TEXTOS BASE / TEXTOS DE APOIO.
 {type_instruction}
 
 REGRAS:
@@ -9214,12 +9214,23 @@ REGRAS:
 - Se possível, identifique a disciplina/matéria de cada questão
 - Adicione uma breve explicação para cada resposta correta
 
+TEXTOS BASE / TEXTOS DE APOIO (MUITO IMPORTANTE):
+- Muitas questões de provas (especialmente de Língua Portuguesa, interpretação de texto, legislação, etc.) possuem um TEXTO BASE (texto de apoio, trecho, fragmento, excerto, poema, etc.) que precede as questões
+- O texto base é um trecho ou passagem que o candidato precisa ler para responder as questões relacionadas
+- Exemplos de cabeçalhos de texto base: "Texto para as questões X a Y", "Leia o texto a seguir", "Com base no texto abaixo", "Texto I", "Texto II", etc.
+- EXTRAIA INTEGRALMENTE o texto base associado a cada questão no campo "texto_base"
+- Se várias questões se referem ao MESMO texto base, REPITA o texto base completo em CADA uma dessas questões
+- Se a questão NÃO possui texto base, deixe o campo "texto_base" como null ou string vazia ""
+- O campo "texto_base" deve conter APENAS o texto de apoio, NÃO o enunciado da questão em si
+- Preserve a formatação original do texto base (parágrafos, versos de poemas, citações, etc.)
+
 Responda APENAS com um JSON válido no formato:
 {{
   "questions": [
     {{
       "question_number": 1,
-      "question_text": "Texto completo da questão",
+      "texto_base": "Texto de apoio completo que precede a questão, se houver. Null se não houver.",
+      "question_text": "Texto completo do enunciado da questão (sem o texto base)",
       "options": ["A) texto", "B) texto", "C) texto", "D) texto", "E) texto"],
       "correct_answer": "A",
       "explanation": "Breve explicação",
@@ -9233,7 +9244,7 @@ Responda APENAS com um JSON válido no formato:
     "concurso_detected": "Nome do concurso se identificado",
     "year_detected": "Ano da prova se identificado"
   }}
-}}"""
+}}}"""
 
         response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
@@ -9369,12 +9380,16 @@ REGRAS:
 - A explicação deve ser detalhada e educativa
 - Identifique a subdisciplina/tópico de cada questão
 - Questões devem cobrir diferentes tópicos dentro da disciplina
+- Para questões de interpretação de texto, inclua um "texto_base" (trecho, fragmento, artigo de lei, etc.) que o candidato deve ler para responder
+- Pelo menos 20-30% das questões devem ter texto_base quando a disciplina envolver interpretação, legislação ou jurisprudência
+- Se a questão não precisar de texto base, use null no campo texto_base
 
 Responda APENAS com JSON válido no formato:
 {{
   "questions": [
     {{
       "question_number": 1,
+      "texto_base": "Texto de apoio/trecho para leitura, se aplicável. Null se não houver.",
       "question_text": "Texto completo da questão",
       "options": ["A) texto", "B) texto", "C) texto", "D) texto", "E) texto"],
       "correct_answer": "A",

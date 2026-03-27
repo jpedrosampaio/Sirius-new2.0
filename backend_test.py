@@ -6,7 +6,7 @@ import time
 import sys
 
 # Backend URL from environment
-BACKEND_URL = "https://ai-workout-builder-3.preview.emergentagent.com/api"
+BACKEND_URL = "https://simulado-pdf-import.preview.emergentagent.com/api"
 
 def test_batch_nutrition_endpoint():
     """Test the NEW batch nutrition estimate endpoint as specified in review request"""

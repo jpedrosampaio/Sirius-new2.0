@@ -2397,6 +2397,18 @@ export default function Studies() {
                         </Button>
                       </div>
 
+                      {/* Texto Base / Texto de Apoio */}
+                      {currentSimulado.questions[simuladoCurrentQ].texto_base && (
+                        <div className="mb-5 p-4 rounded-lg bg-[#121212] border border-[#27272A] border-l-4 border-l-[#007AFF]">
+                          <p className="text-xs text-[#007AFF] font-semibold uppercase tracking-wide mb-2 flex items-center gap-1">
+                            <BookOpen className="w-3 h-3" />Texto Base
+                          </p>
+                          <p className="text-[#D4D4D8] text-sm leading-relaxed whitespace-pre-wrap">
+                            {currentSimulado.questions[simuladoCurrentQ].texto_base}
+                          </p>
+                        </div>
+                      )}
+
                       <p className="text-white text-base leading-relaxed mb-6 whitespace-pre-wrap">
                         {currentSimulado.questions[simuladoCurrentQ].question_text}
                       </p>
@@ -2501,6 +2513,14 @@ export default function Studies() {
                           </Badge>
                           {q.difficulty && <Badge variant="outline" className="text-xs border-[#27272A]">{q.difficulty}</Badge>}
                         </div>
+                        {q.texto_base && (
+                          <div className="mb-3 p-3 rounded-lg bg-[#121212] border border-[#27272A] border-l-4 border-l-[#007AFF]">
+                            <p className="text-xs text-[#007AFF] font-semibold uppercase tracking-wide mb-1 flex items-center gap-1">
+                              <BookOpen className="w-3 h-3" />Texto Base
+                            </p>
+                            <p className="text-[#D4D4D8] text-xs leading-relaxed whitespace-pre-wrap">{q.texto_base}</p>
+                          </div>
+                        )}
                         <p className="text-white text-sm leading-relaxed mb-4 whitespace-pre-wrap">{q.question_text}</p>
                         <div className="space-y-2 mb-4">
                           {(q.options || []).map((opt, optIdx) => {
@@ -2626,6 +2646,12 @@ export default function Studies() {
                             </Badge>
                             {ans.disciplina && <span className="text-xs text-[#A1A1AA]">{ans.disciplina}</span>}
                           </div>
+                          {currentSimulado?.questions?.[ans.question_idx]?.texto_base && (
+                            <div className="mb-2 p-2 rounded bg-[#121212] border border-[#27272A] border-l-2 border-l-[#007AFF]">
+                              <p className="text-[10px] text-[#007AFF] font-semibold uppercase tracking-wide mb-1">Texto Base</p>
+                              <p className="text-[#A1A1AA] text-xs leading-relaxed whitespace-pre-wrap line-clamp-4">{currentSimulado.questions[ans.question_idx].texto_base}</p>
+                            </div>
+                          )}
                           <p className="text-sm text-white mb-2 whitespace-pre-wrap line-clamp-3">
                             {currentSimulado?.questions?.[ans.question_idx]?.question_text}
                           </p>

@@ -121,7 +121,7 @@ user_problem_statement: |
       
       **Test Environment:**
       - User: testcargo@test.com / test123 (as specified in review request)
-      - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+      - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
       - Authentication: Session cookie method working correctly
       
       **✅ ALL 7 ENDPOINTS WORKING (100% SUCCESS RATE):**
@@ -919,7 +919,7 @@ frontend:
           
           **Test Environment:**
           - User: demo@test.com / Test123! (existing user with study data)
-          - URL: https://ai-workout-builder-3.preview.emergentagent.com
+          - URL: https://simulado-pdf-import.preview.emergentagent.com
           - Browser: Desktop viewport (1920x1080)
           
           **✅ WORKING FEATURES (8/8 - 100%):**
@@ -1002,7 +1002,7 @@ frontend:
           
           **Test Environment:**
           - User: testedital@test.com / Test123! (has pre-existing edital-imported programs)
-          - URL: https://ai-workout-builder-3.preview.emergentagent.com
+          - URL: https://simulado-pdf-import.preview.emergentagent.com
           - Browser: Desktop viewport (1920x1080)
           - Test Date: 2026-03-05
           
@@ -2353,7 +2353,7 @@ frontend:
       
       **Test Completed:** NEW/UPDATED backend endpoints as specified in review request
       **Test User:** testedital@test.com / Test123! (existing user with edital programs)  
-      **Backend URL:** https://ai-workout-builder-3.preview.emergentagent.com/api
+      **Backend URL:** https://simulado-pdf-import.preview.emergentagent.com/api
       **Test Date:** 2026-03-09
       
       **✅ ALL 3 ENDPOINTS WORKING (100% SUCCESS RATE):**
@@ -2390,7 +2390,7 @@ frontend:
       
       **🔗 Integration Status:**
       - Authentication system: Working with session cookies
-      - Backend URL configuration: Correct (https://ai-workout-builder-3.preview.emergentagent.com/api)  
+      - Backend URL configuration: Correct (https://simulado-pdf-import.preview.emergentagent.com/api)  
       - Database operations: All read operations working
       - Google Gemini AI: Quote generation functional
       - Edital program detection: Successfully found and processed edital programs
@@ -2415,7 +2415,7 @@ frontend:
       
       **Test Completed:** General Integrated Chat endpoint (/api/chat/general) as specified in review request
       **Test User:** testedital@test.com / Test123! (as specified in review request)
-      **Backend URL:** https://ai-workout-builder-3.preview.emergentagent.com/api
+      **Backend URL:** https://simulado-pdf-import.preview.emergentagent.com/api
       **Test Date:** 2026-03-10
       
       **✅ ALL 5 TESTS PASSED (100% SUCCESS RATE):**
@@ -2696,7 +2696,7 @@ backend:
           comment: "MAJOR FIX: Restructured AI generation for tipo_treino mode. Instead of generating all individual days (which caused JSON truncation for large plans like ABC/7days/4weeks=28 days), now generates only base splits (A, B, C) + weekly progression notes. Server expands these into full days. Removed video_url/YouTube from all prompts. Added more muscle groups to model. This dramatically reduces AI response size and prevents JSON parse failures."
         - working: true
           agent: "testing"
-          comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL CORE FUNCTIONALITY WORKING (2/2 tests passed - 100%). **Test Environment:** testworkout@test.com / Test123!, Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api. **TEST 1 - Split-based workout (ABC, 7 days, 4 weeks with cardio):** ✅ AI generation successful (18.1s), ✅ Response has success: true, ✅ Plan has correct 28 days (7×4 weeks), ✅ All required metadata present (split_type: ABC, cycle_weeks: 4, training_days_per_week: 7), ✅ Weekly progression with 4 items, ✅ All exercises have tutorial field (text only, no video_url), ✅ Sample exercise: 'Supino Reto com Barra' with detailed tutorial. **TEST 2 - Simple period-based workout (dia mode):** ✅ AI generation successful (9.3s), ✅ Generated 6 exercises targeting specified muscle groups (peito, panturrilha), ✅ All exercises have tutorial field, ✅ No video_url fields (as expected). **Minor Issue:** Cardio days (4/28) have 0 exercises due to AI generating cardio in different format than regular exercises - this is a structural issue, not a critical failure. **CONCLUSION:** The major fix for large plan generation failures is working correctly. Both split-based and period-based generation are functional. Core AI workout generation is production-ready."
+          comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL CORE FUNCTIONALITY WORKING (2/2 tests passed - 100%). **Test Environment:** testworkout@test.com / Test123!, Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api. **TEST 1 - Split-based workout (ABC, 7 days, 4 weeks with cardio):** ✅ AI generation successful (18.1s), ✅ Response has success: true, ✅ Plan has correct 28 days (7×4 weeks), ✅ All required metadata present (split_type: ABC, cycle_weeks: 4, training_days_per_week: 7), ✅ Weekly progression with 4 items, ✅ All exercises have tutorial field (text only, no video_url), ✅ Sample exercise: 'Supino Reto com Barra' with detailed tutorial. **TEST 2 - Simple period-based workout (dia mode):** ✅ AI generation successful (9.3s), ✅ Generated 6 exercises targeting specified muscle groups (peito, panturrilha), ✅ All exercises have tutorial field, ✅ No video_url fields (as expected). **Minor Issue:** Cardio days (4/28) have 0 exercises due to AI generating cardio in different format than regular exercises - this is a structural issue, not a critical failure. **CONCLUSION:** The major fix for large plan generation failures is working correctly. Both split-based and period-based generation are functional. Core AI workout generation is production-ready."
 
   - task: "Workout Session CRUD endpoints"
     implemented: true
@@ -2794,7 +2794,7 @@ frontend:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-10
         
@@ -2881,7 +2881,7 @@ frontend:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-10
         
@@ -3030,7 +3030,7 @@ agent_communication:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-10
         
@@ -3163,7 +3163,7 @@ agent_communication:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-17
         
@@ -3308,7 +3308,7 @@ agent_communication:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-17
         
@@ -3522,7 +3522,7 @@ agent_communication:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-17
         
@@ -3574,7 +3574,7 @@ agent_communication:
         
         **🔗 Integration Status:**
         - Authentication system: Working with session cookies
-        - Backend URL configuration: Correct (https://ai-workout-builder-3.preview.emergentagent.com/api)
+        - Backend URL configuration: Correct (https://simulado-pdf-import.preview.emergentagent.com/api)
         - Database operations: All read operations working (analytics data aggregation, export data retrieval, achievement progress calculation)
         - File generation: Both Excel (openpyxl) and PDF (reportlab) libraries working correctly
         - Binary file streaming: StreamingResponse working for all export endpoints
@@ -3743,7 +3743,7 @@ agent_communication:
 
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-19
 
@@ -3809,7 +3809,7 @@ agent_communication:
         
         **Test Environment:**
         - User: demo@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-17
         
@@ -3874,7 +3874,7 @@ agent_communication:
         
         **Test Completed:** POST /api/workout-plans/generate endpoint as specified in review request
         **Test User:** testworkout@test.com / Test123! (as specified in review request)
-        **Backend URL:** https://ai-workout-builder-3.preview.emergentagent.com/api
+        **Backend URL:** https://simulado-pdf-import.preview.emergentagent.com/api
         **Test Date:** 2026-03-26
         
         **✅ ALL 2 SPECIFIED TEST SCENARIOS PASSED (100% SUCCESS RATE):**
@@ -3942,7 +3942,7 @@ agent_communication:
         comment: "Implemented POST /api/nutrition/estimate-food endpoint using Google Gemini AI to estimate nutritional values for food items. Accepts food_name and quantity, returns calories, protein, carbs, fat, fiber, sodium, sugar with proper validation."
       - working: true
         agent: "testing"
-        comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL 3 TESTS PASSED (100% SUCCESS RATE). **Test Environment:** testfood@test.com / Test123!, Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api. **Test 1 - Common food (Frango grelhado, 150g):** ✅ Response time: 4.24s, ✅ Success: true, ✅ Calories: 239 kcal (reasonable for 150g chicken), ✅ Protein: 49.2g (reasonable range), ✅ All required fields present (calories, protein, carbs, fat, fiber, sodium, sugar). **Test 2 - Composite dish (Prato feito brasileiro, 1 prato médio):** ✅ Response time: 11.01s, ✅ Success: true, ✅ Calories: 613 kcal (reasonable for Brazilian plate), ✅ All nutritional values present and > 0. **Test 3 - Validation (empty food_name):** ✅ Correctly returned 400 error with message 'Nome do alimento é obrigatório'. **Google Gemini AI Integration:** Fully functional for nutrition estimation with reasonable response times (4-11 seconds). All endpoints working as designed with proper validation and error handling."
+        comment: "✅ COMPREHENSIVE TESTING COMPLETE - ALL 3 TESTS PASSED (100% SUCCESS RATE). **Test Environment:** testfood@test.com / Test123!, Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api. **Test 1 - Common food (Frango grelhado, 150g):** ✅ Response time: 4.24s, ✅ Success: true, ✅ Calories: 239 kcal (reasonable for 150g chicken), ✅ Protein: 49.2g (reasonable range), ✅ All required fields present (calories, protein, carbs, fat, fiber, sodium, sugar). **Test 2 - Composite dish (Prato feito brasileiro, 1 prato médio):** ✅ Response time: 11.01s, ✅ Success: true, ✅ Calories: 613 kcal (reasonable for Brazilian plate), ✅ All nutritional values present and > 0. **Test 3 - Validation (empty food_name):** ✅ Correctly returned 400 error with message 'Nome do alimento é obrigatório'. **Google Gemini AI Integration:** Fully functional for nutrition estimation with reasonable response times (4-11 seconds). All endpoints working as designed with proper validation and error handling."
 
     - agent: "testing"
       message: |
@@ -3950,7 +3950,7 @@ agent_communication:
         
         **Test Completed:** POST /api/nutrition/estimate-food endpoint as specified in review request
         **Test User:** testfood@test.com / Test123! (as specified in review request)
-        **Backend URL:** https://ai-workout-builder-3.preview.emergentagent.com/api
+        **Backend URL:** https://simulado-pdf-import.preview.emergentagent.com/api
         **Test Date:** 2026-03-17
         
         **✅ ALL 3 SPECIFIED TESTS PASSED (100% SUCCESS RATE):**
@@ -4068,7 +4068,7 @@ agent_communication:
         
         **Test Environment:**
         - User: testevolve@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-17
         
@@ -4229,7 +4229,7 @@ agent_communication:
         
         **Test Environment:**
         - User: testworkout@test.com / Test123! (as specified in review request)
-        - Backend URL: https://ai-workout-builder-3.preview.emergentagent.com/api
+        - Backend URL: https://simulado-pdf-import.preview.emergentagent.com/api
         - Authentication: Session cookie method working correctly
         - Test Date: 2026-03-26
         

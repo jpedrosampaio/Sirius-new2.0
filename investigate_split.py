@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 # Configuration
-BACKEND_URL = "https://ai-workout-builder-3.preview.emergentagent.com/api"
+BACKEND_URL = "https://simulado-pdf-import.preview.emergentagent.com/api"
 TEST_USER_EMAIL = "testworkout@test.com"
 TEST_USER_PASSWORD = "Test123!"
 
