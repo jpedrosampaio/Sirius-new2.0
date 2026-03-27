@@ -9244,7 +9244,7 @@ Responda APENAS com um JSON válido no formato:
     "concurso_detected": "Nome do concurso se identificado",
     "year_detected": "Ano da prova se identificado"
   }}
-}}}"""
+}}"""
 
         response = gemini_client.models.generate_content(
             model=GEMINI_MODEL,
